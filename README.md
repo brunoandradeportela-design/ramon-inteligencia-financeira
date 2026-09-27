@@ -19,7 +19,7 @@ A IA interpreta; os motores determinísticos calculam. Não é corretora nem con
 | Consentimento, Data Hub (Raw Vault → normalização → reconciliação), auditoria encadeada | `services/consent`, `services/ingestion`, `services/audit` | pronto |
 | Conectores: contrato único, importação CSV, Open Finance em **sandbox** | `connectors/` | produção depende de D-01 |
 | Schema PostgreSQL com RLS por titular + rollback | `database/migrations/` | alvo de produção (ADR-0002) |
-| Testes: golden cases tributários, guardrails de IA, segurança de upload, isolamento, E2E | `tests/` (71 testes) | passando |
+| Testes: golden cases tributários, guardrails de IA, segurança de upload, isolamento, E2E | `tests/` (67 testes) | passando |
 | CI (lint, testes, contrato OpenAPI) e deploy do site no GitHub Pages | `.github/workflows/` | pronto |
 | Análise dos documentos, decisões pendentes, ADRs, modelos CSV | `docs/` | pronto |
 
@@ -90,7 +90,7 @@ Ou com Docker: `docker compose -f infrastructure/docker/docker-compose.yml up --
 ### Testes e qualidade
 
 ```bash
-RAMON_REFERENCE_DATE=2026-09-27 pytest      # 71 testes
+RAMON_REFERENCE_DATE=2026-09-27 pytest      # 67 testes
 ruff check .
 ```
 
