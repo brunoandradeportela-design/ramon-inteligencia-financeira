@@ -1,6 +1,7 @@
 """Dados de DEMONSTRAÇÃO (fictícios) para o titular demo. Nunca usar em produção.
 
-Login demo: demo@ramon.app / demo2026ramon
+Login demo (cliente): demo@ramon.app / demo2026ramon
+Login demo (administrador/CRM): ramon@ramon.app / ramon2026crm
 """
 from __future__ import annotations
 
@@ -14,6 +15,18 @@ from services.document_engine.engine import Document
 
 DEMO_EMAIL = "demo@ramon.app"
 DEMO_PASSWORD = "demo2026ramon"
+ADMIN_EMAIL = "ramon@ramon.app"
+ADMIN_PASSWORD = "ramon2026crm"
+
+# Clientes fictícios para o CRM (nomes inventados; telefones com final 0000–0099 não pertencem a ninguém real)
+FIRST = ["Ana", "Carlos", "Juliana", "Marcos", "Patrícia", "Rafael", "Fernanda", "Eduardo", "Camila", "Lucas", "Mariana",
+         "Thiago", "Beatriz", "Gustavo", "Larissa", "Rodrigo", "Aline", "Felipe", "Vanessa", "Diego", "Renata", "Paulo"]
+LAST = ["Ferreira Lima", "Souza Costa", "Oliveira Prado", "Almeida Rocha", "Ribeiro Nunes", "Carvalho Dias", "Martins Teixeira",
+        "Barbosa Moura", "Gomes Pires", "Araújo Freitas", "Mendes Cardoso", "Castro Vieira", "Rezende Lopes", "Monteiro Farias"]
+PROFESSIONS = ["Médica", "Dentista", "Advogado", "Engenheiro civil", "Empresária", "Arquiteta", "Fisioterapeuta", "Contador",
+               "Servidor público", "Psicóloga", "Produtor rural", "Analista de sistemas", "Veterinária", "Farmacêutico"]
+DDDS = ["69", "69", "69", "11", "21", "31", "41", "61", "65", "68", "92", "48"]
+ORIGINS = ["site", "site", "instagram", "indicação", "google", "contador parceiro"]
 
 TRADES = [
     # data, ticker, lado, qtd, preço, custos, daytrade, corretora
@@ -85,7 +98,9 @@ def _tx_rows():
 def seed(c) -> None:
     if c.store.gget("users_by_email", DEMO_EMAIL):
         return
-    u = c.identity.register(email=DEMO_EMAIL, name="Bruno", password=DEMO_PASSWORD, accept_terms=True, plan="pro")
+    u = c.identity.register(email=DEMO_EMAIL, name="Bruno Almeida", password=DEMO_PASSWORD, accept_terms=True, plan="pro",
+                            phone="(69) 99300-0001", profession="Contador", origin="site")
+    u.created_at = "2026-07-02T10:15:00+00:00"
     u.profile = {"objetivos": ["entender impostos", "acompanhar investimentos"], "faixa_patrimonio": "1M-2M",
                  "renda_variavel": True, "previdencia": True, "contador": True, "demo": True}
     uid = u.id
@@ -132,3 +147,63 @@ def seed(c) -> None:
                           sync_runs=[{"id": new_id("sync"), "started_at": now, "result": "ok", "stats": {}}])
         c.store.put("connections", uid, conn.id, conn)
     c.audit.record(owner_id=uid, actor="system", resource="seed", action="demo_data_loaded", reason="ambiente de demonstração")
+    c.crm.subscription(u)
+    for per, d in (("2026-07", "2026-07-02"), ("2026-08", "2026-08-02"), ("2026-09", "2026-09-02")):
+        c.crm.record_payment(u, amount="24.90", method="cartao", status="pago", date_=d, period=per, recorded_by="seed")
+    u.last_login_at = "2026-09-27T09:40:00+00:00"
+    seed_crm(c)
+
+
+def seed_crm(c) -> None:
+    admin = c.identity.register(email=ADMIN_EMAIL, name="Ramon Administrador", password=ADMIN_PASSWORD, accept_terms=True,
+                                phone="(69) 99300-0000", profession="Gestor da plataforma", origin="interno")
+    admin.roles = ["admin"]
+    rnd = random.Random(2026)
+    from datetime import datetime, timedelta
+    ref = date(2026, 9, 27)
+    for i in range(24):
+        first, last = FIRST[i % len(FIRST)], LAST[(i * 5) % len(LAST)]
+        name = f"{first} {last}"
+        email = f"{first.lower().replace('í', 'i').replace('á', 'a')}.{last.split()[0].lower().replace('ú', 'u')}{i}@exemplo.com.br"
+        plan = rnd.choices(["free", "pro", "premium"], weights=[45, 40, 15])[0]
+        u = c.identity.register(email=email, name=name, password="clienteDemo2026", accept_terms=True, plan=plan,
+                                phone=f"({DDDS[i % len(DDDS)]}) 9{rnd.randint(8100, 9899)}-00{i:02d}",
+                                profession=PROFESSIONS[(i * 3) % len(PROFESSIONS)], origin=rnd.choice(ORIGINS))
+        created = datetime(2026, 7, 1, 9) + timedelta(days=int(88 * (i / 24) ** 0.8), hours=rnd.randint(0, 10))
+        u.created_at = created.isoformat() + "+00:00"
+        if rnd.random() < 0.75:
+            u.last_login_at = (created + timedelta(days=rnd.randint(0, max(0, (ref - created.date()).days)))).isoformat() + "+00:00"
+        c.crm.subscription(u)["started_at"] = created.date().isoformat()
+        c.crm.subscription(u)["next_due"] = None if plan == "free" else created.date().isoformat()
+        if plan == "free":
+            if rnd.random() < 0.5:   # sinal de ativação: documento enviado
+                d = Document(id=new_id("doc"), owner_id=u.id, filename="extrato.csv", mime="text/csv", size=2048, checksum="",
+                             kind="extrato", title="Extrato", status="utilizado", uploaded_at=u.created_at, storage_key="")
+                c.store.put("documents", u.id, d.id, d)
+            continue
+        price = "24.90" if plan == "pro" else "59.90"
+        fate = rnd.choices(["em_dia", "atrasado", "aguardando", "cancelado"], weights=[62, 14, 14, 10])[0]
+        if fate == "aguardando":
+            if (ref - created.date()).days <= 3:
+                continue
+            fate = "atrasado"
+        pay_day = created.date()
+        while pay_day <= ref:
+            if fate == "atrasado" and pay_day > ref - timedelta(days=30):
+                break
+            c.crm.record_payment(u, amount=price, method=rnd.choice(["pix", "cartao", "cartao", "boleto"]), status="pago",
+                                 date_=pay_day.isoformat(), period=pay_day.strftime("%Y-%m"), recorded_by="seed")
+            y, m = (pay_day.year + 1, 1) if pay_day.month == 12 else (pay_day.year, pay_day.month + 1)
+            pay_day = date(y, m, min(pay_day.day, 28))
+        if fate == "cancelado":
+            c.crm.subscription(u)["status"] = "cancelada"
+            c.crm.add_note(u, text="Cliente pediu cancelamento: vai reavaliar no próximo ano.", kind="whatsapp", author="Ramon Administrador")
+    late = c.identity.register(email="helena.duarte@exemplo.com.br", name="Helena Duarte Siqueira", password="clienteDemo2026",
+                               accept_terms=True, plan="pro", phone="(69) 99911-0098", profession="Nutricionista", origin="instagram")
+    late.created_at = "2026-09-25T14:20:00+00:00"
+    c.crm.subscription(late).update({"started_at": "2026-09-25", "next_due": "2026-09-25"})
+    notes = [("Primeiro contato feito; interessado no simulador de PGBL.", "whatsapp"),
+             ("Pediu demonstração das conexões Open Finance.", "ligacao"), ("Enviado material sobre o plano Premium.", "email")]
+    for u, (t, k) in zip(c.identity.all_customers()[1:4], notes):
+        c.crm.add_note(u, text=t, kind=k, author="Ramon Administrador")
+        c.crm.update(u, next_action="Retornar contato", next_action_date="2026-09-30", tags=["lead quente"])

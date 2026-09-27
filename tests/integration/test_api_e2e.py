@@ -55,8 +55,8 @@ def test_jornada_demo_completa():
 
 
 def test_cadastro_free_e_entitlements():
-    r = client.post("/v1/auth/register", json={"name": "Ana", "email": "ana@exemplo.com", "password": "senhaForte123",
-                                               "accept_terms": True, "plan": "free"})
+    r = client.post("/v1/auth/register", json={"name": "Ana Paula Souza", "email": "ana@exemplo.com", "password": "senhaForte123",
+                                               "accept_terms": True, "phone": "(69) 99300-1234", "profession": "Médica", "plan": "free"})
     assert r.status_code == 201
     h = {"Authorization": f"Bearer {r.json()['token']}"}
     assert client.get("/v1/dashboard", headers=h).status_code == 200
@@ -66,8 +66,8 @@ def test_cadastro_free_e_entitlements():
 
 
 def test_isolamento_entre_titulares():
-    r = client.post("/v1/auth/register", json={"name": "Caio", "email": "caio@exemplo.com", "password": "senhaForte123",
-                                               "accept_terms": True, "plan": "pro"})
+    r = client.post("/v1/auth/register", json={"name": "Caio Mendes Rocha", "email": "caio@exemplo.com", "password": "senhaForte123",
+                                               "accept_terms": True, "phone": "(69) 99300-1234", "profession": "Médica", "plan": "pro"})
     h = {"Authorization": f"Bearer {r.json()['token']}"}
     assert client.get("/v1/portfolio/consolidated", headers=h).json()["total"] == "0.00"
     demo_conns = client.get("/v1/connections", headers=login_demo()).json()["items"]
@@ -76,8 +76,8 @@ def test_isolamento_entre_titulares():
 
 
 def test_fluxo_conexao_open_finance_sandbox_e_revogacao():
-    r = client.post("/v1/auth/register", json={"name": "Duda", "email": "duda@exemplo.com", "password": "senhaForte123",
-                                               "accept_terms": True, "plan": "pro"})
+    r = client.post("/v1/auth/register", json={"name": "Eduarda Lima Castro", "email": "duda@exemplo.com", "password": "senhaForte123",
+                                               "accept_terms": True, "phone": "(69) 99300-1234", "profession": "Médica", "plan": "pro"})
     h = {"Authorization": f"Bearer {r.json()['token']}"}
     start = client.post("/v1/connections/consents", headers=h, json={"institution_id": "nubank", "scope": ["accounts", "transactions", "investments"]}).json()
     assert "sandbox" in start["redirect_url"] and "senha" not in start["redirect_url"]
@@ -93,8 +93,8 @@ def test_fluxo_conexao_open_finance_sandbox_e_revogacao():
 
 
 def test_upload_csv_importa_operacoes():
-    r = client.post("/v1/auth/register", json={"name": "Eva", "email": "eva@exemplo.com", "password": "senhaForte123",
-                                               "accept_terms": True, "plan": "pro"})
+    r = client.post("/v1/auth/register", json={"name": "Eva Martins Nunes", "email": "eva@exemplo.com", "password": "senhaForte123",
+                                               "accept_terms": True, "phone": "(69) 99300-1234", "profession": "Médica", "plan": "pro"})
     h = {"Authorization": f"Bearer {r.json()['token']}"}
     csv = "data;ticker;tipo;quantidade;preco;custos\n05/01/2026;VALE3;C;1000;10,00;0\n05/03/2026;VALE3;V;1000;25,00;0\n"
     doc = client.post("/v1/documents", headers=h, json={"filename": "nota_corretagem.csv", "mime": "text/csv",
@@ -119,9 +119,69 @@ def test_tema_nao_altera_calculo():
 
 
 def test_lgpd_exportacao_e_eliminacao():
-    r = client.post("/v1/auth/register", json={"name": "Fê", "email": "fe@exemplo.com", "password": "senhaForte123",
-                                               "accept_terms": True})
+    r = client.post("/v1/auth/register", json={"name": "Fernanda Alves Pinto", "email": "fe@exemplo.com", "password": "senhaForte123",
+                                               "accept_terms": True, "phone": "(69) 99300-1234", "profession": "Médica"})
     h = {"Authorization": f"Bearer {r.json()['token']}"}
     assert "user" in client.get("/v1/privacy/export", headers=h).json()
     assert client.delete("/v1/privacy/account", headers=h).status_code == 202
     assert client.get("/v1/me", headers=h).status_code == 401
+
+
+# ---------------------------------------------------------------- cadastro obrigatório + CRM
+BASE = {"name": "Gabriel Souza Lima", "email": "gabriel@exemplo.com", "password": "senhaForte123", "accept_terms": True,
+        "phone": "(69) 99300-5555", "profession": "Engenheiro"}
+
+
+def test_cadastro_exige_campos_obrigatorios():
+    for field, value in (("name", "Gabriel"), ("phone", "99999"), ("phone", "(00) 99999-9999"), ("profession", ""), ("email", "x@")):
+        r = client.post("/v1/auth/register", json={**BASE, field: value})
+        assert r.status_code == 422, (field, value)
+        assert any(e["field"] == field for e in r.json()["errors"])
+    for field in ("phone", "profession"):
+        body = {k: v for k, v in BASE.items() if k != field}
+        assert client.post("/v1/auth/register", json=body).status_code == 422
+
+
+def login_admin():
+    r = client.post("/v1/auth/login", json={"email": "ramon@ramon.app", "password": "ramon2026crm"})
+    return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
+def test_crm_acompanha_novo_cadastro_e_pagamento():
+    r = client.post("/v1/auth/register", json={**BASE, "email": "novo.cliente@exemplo.com", "plan": "pro"})
+    assert r.status_code == 201
+    uid = r.json()["user"]["id"]
+    h = login_admin()
+    lst = client.get("/v1/admin/crm/customers?q=novo.cliente", headers=h).json()["items"]
+    assert len(lst) == 1 and lst[0]["phone"] == "+5569993005555" and lst[0]["phone_display"] == "(69) 99300-5555"
+    assert lst[0]["profession"] == "Engenheiro" and lst[0]["stage"] == "aguardando_pagamento"
+    assert lst[0]["whatsapp_url"] == "https://wa.me/5569993005555"
+    p = client.post(f"/v1/admin/crm/customers/{uid}/payments", headers=h,
+                    json={"amount": "24.90", "method": "pix", "status": "pago", "date": "2026-09-27", "period": "2026-09"})
+    assert p.status_code == 201
+    d = client.get(f"/v1/admin/crm/customers/{uid}", headers=h).json()
+    assert d["stage"] == "pagante" and d["total_paid"] == "24.90" and d["subscription"]["next_due"] == "2026-10-27"
+    n = client.post(f"/v1/admin/crm/customers/{uid}/notes", headers=h, json={"text": "Boas-vindas enviadas", "kind": "whatsapp"})
+    assert n.status_code == 201
+    assert client.patch(f"/v1/admin/crm/customers/{uid}", headers=h, json={"stage": "cancelado"}).json()["stage"] == "cancelado"
+    m = client.get("/v1/admin/crm/metrics", headers=h).json()
+    assert m["total"] >= 25 and sum(s["count"] for s in m["stages"]) == m["total"]
+    csv = client.get("/v1/admin/crm/export.csv", headers=h)
+    assert csv.status_code == 200 and "novo.cliente@exemplo.com" in csv.text
+    # acesso do administrador fica na trilha do titular (LGPD)
+    tok = client.post("/v1/auth/login", json={"email": "novo.cliente@exemplo.com", "password": "senhaForte123"}).json()["token"]
+    aud = client.get("/v1/audit", headers={"Authorization": f"Bearer {tok}"}).json()
+    assert any(e["action"] == "acesso_administrador" for e in aud["items"]) and aud["chain_valid"]
+
+
+def test_crm_restrito_ao_administrador():
+    assert client.get("/v1/admin/crm/customers", headers=login_demo()).status_code == 403
+    assert client.get("/v1/admin/crm/metrics").status_code == 401
+
+
+def test_crm_nao_expoe_dados_financeiros_do_cliente():
+    h = login_admin()
+    demo = client.get("/v1/admin/crm/customers?q=demo@ramon.app", headers=h).json()["items"][0]
+    d = client.get(f"/v1/admin/crm/customers/{demo['id']}", headers=h).json()
+    txt = str(d)
+    assert "positions" not in txt and "PETR4" not in txt and "tax_due" not in txt

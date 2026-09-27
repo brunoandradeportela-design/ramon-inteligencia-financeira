@@ -5,7 +5,7 @@ export const brl = v => nf.format(+v || 0);
 export const pct = (v, d = 1) => `${((+v || 0) * 100).toFixed(d).replace(".", ",")}%`;
 export const num = v => new Intl.NumberFormat("pt-BR").format(+v || 0);
 export const dt = s => s ? new Date(s.length === 10 ? s + "T12:00:00" : s).toLocaleDateString("pt-BR") : "—";
-export const dtm = s => s ? new Date(s).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
+export const dtm = s => !s ? "—" : s.length === 10 ? dt(s) : new Date(s).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 export const mes = m => { const [y, mm] = m.split("-"); return ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"][+mm - 1] + (y ? "/" + y.slice(2) : ""); };
 export const sevLabel = { critico: "Crítico", alto: "Alto", atencao: "Atenção", informativo: "Informativo", oportunidade: "Oportunidade" };
 

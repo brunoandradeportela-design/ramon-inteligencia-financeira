@@ -2,6 +2,8 @@
    Em modo demo, todos os números vêm de data/demo.json, gerado pelos motores Python
    (tools/export_demo.py). O JS não recalcula imposto — só consulta a grade pré-calculada. */
 
+import { validateSignup, localCustomer, metricsFrom, addMonth, formatPhone, PRICE, PLAN_NAME } from "./crm_rules.js";
+
 const BASE = (window.RAMON_API_BASE || "").replace(/\/$/, "");
 export const DEMO = !BASE;
 const TOKEN_KEY = "ramon.token";
@@ -60,18 +62,35 @@ async function demoCall(method, path, body) {
   const mapConn = c => revoked.includes(c.id) ? { ...c, status: "revogado", consent: { ...c.consent, status: "revogado" } } : c;
   const R = {
     "POST /v1/auth/login": () => {
-      if (norm(body.email) !== "demo@ramon.app" || body.password !== "demo2026ramon")
-        throw problem(401, "Não autenticado", "No modo demonstração use demo@ramon.app / demo2026ramon.");
+      const email = norm(body.email || "");
+      if (email === "ramon@ramon.app" && body.password === "ramon2026crm") { LS.set("role", "admin"); return { token: "demo-admin", user: d.admin_me }; }
+      if (email !== "demo@ramon.app" || body.password !== "demo2026ramon")
+        throw problem(401, "Não autenticado", "Modo demonstração: cliente demo@ramon.app / demo2026ramon · administrador ramon@ramon.app / ramon2026crm.");
+      LS.set("role", "client"); LS.set("name", null);
       return { token: "demo-token", user: d.me };
     },
     "POST /v1/auth/register": () => {
-      if (!body.accept_terms) throw problem(422, "Dados inválidos", "É necessário aceitar os termos e a política de privacidade.");
-      if ((body.password || "").length < 10) throw problem(422, "Dados inválidos", "Senha com 10+ caracteres, letras e números.");
-      LS.set("name", body.name);
-      return { token: "demo-token", user: { ...d.me, name: body.name, email: body.email } };
+      const errors = validateSignup(body);
+      if (errors.length) throw new ApiError({ status: 422, title: "Dados inválidos", detail: "Cadastro inválido", errors });
+      const all = [...LS.get("crm_local", []), ...d.crm.customers.items];
+      if (all.some(c => c.email === body.email.trim().toLowerCase())) throw problem(409, "Conflito", "Já existe uma conta com este e-mail.");
+      LS.set("crm_local", [localCustomer(body), ...LS.get("crm_local", [])]);
+      LS.set("name", body.name.trim()); LS.set("role", "client");
+      return { token: "demo-token", user: { ...d.me, name: body.name, email: body.email, profession: body.profession, phone: body.phone } };
     },
-    "POST /v1/auth/logout": () => null,
-    "GET /v1/me": () => ({ ...d.me, name: LS.get("name", d.me.name), theme: LS.get("theme", d.me.theme) }),
+    "POST /v1/auth/logout": () => { LS.set("role", null); return null; },
+    "GET /v1/me": () => LS.get("role", "client") === "admin" ? { ...d.admin_me, theme: LS.get("theme", "system") }
+      : { ...d.me, name: LS.get("name", null) || d.me.name, theme: LS.get("theme", d.me.theme) },
+    "GET /v1/admin/crm/metrics": () => metricsFrom(crmItems()),
+    "GET /v1/admin/crm/customers": () => {
+      const q = new URLSearchParams(qs || ""), term = norm(q.get("q") || ""), digits = term.replace(/\D/g, "");
+      let items = crmItems().map(({ payments, notes, timeline, ...rest }) => rest);
+      if (term) items = items.filter(i => norm(i.name).includes(term) || i.email.includes(term) || norm(i.profession).includes(term) || (digits && i.phone.includes(digits)));
+      if (q.get("stage")) items = items.filter(i => i.stage === q.get("stage"));
+      if (q.get("plan")) items = items.filter(i => i.plan === q.get("plan"));
+      items.sort((a, b) => b.created_at.localeCompare(a.created_at));
+      return { total: items.length, items };
+    },
     "GET /v1/dashboard": () => {
       const al = R["GET /v1/alerts"]().items.filter(a => a.status !== "resolvido");
       return { ...d.dashboard, greeting: LS.get("name", d.dashboard.greeting).split(" ")[0],
@@ -172,9 +191,53 @@ async function demoCall(method, path, body) {
     "GET /v1/theme-preference": () => ({ theme: LS.get("theme", "system") }),
     "PUT /v1/theme-preference": () => { LS.set("theme", body.theme); return { theme: body.theme }; },
   };
+  function crmItems() {
+    const over = LS.get("crm_over", {});
+    return [...LS.get("crm_local", []), ...d.crm.customers.items.map(c => d.crm.details[c.id])].map(c => over[c.id] || c);
+  }
+  function crmSave(c) {
+    if (c.id.startsWith("usr_local_")) LS.set("crm_local", LS.get("crm_local", []).map(x => x.id === c.id ? c : x));
+    else { const o = LS.get("crm_over", {}); o[c.id] = c; LS.set("crm_over", o); }
+    return c;
+  }
+  function crmGet(id) { const c = crmItems().find(x => x.id === id); if (!c) throw problem(404, "Recurso não encontrado", "Cliente"); return structuredClone(c); }
   let m = R[`${method} ${p}`];
   if (!m) {
     let mm;
+    const cm = p.match(/^\/v1\/admin\/crm\/customers\/([^/]+)(?:\/(notes|payments))?$/);
+    if (cm && !cm[2] && method === "GET") m = () => crmGet(cm[1]);
+    else if (cm && !cm[2] && method === "PATCH") m = () => {
+      const c = crmGet(cm[1]);
+      if (body.plan && body.plan !== c.plan) { c.plan = body.plan; c.plan_name = PLAN_NAME[body.plan]; c.subscription.plan = body.plan; c.subscription.price_month = PRICE[body.plan]; }
+      if (body.stage) { c.stage = body.stage; c.stage_overridden = true; }
+      if (body.clear_override) { c.stage = c.stage_auto; c.stage_overridden = false; }
+      if (body.tags) c.tags = body.tags;
+      if (body.next_action !== undefined) c.next_action = body.next_action;
+      if (body.next_action_date !== undefined) c.next_action_date = body.next_action_date || null;
+      return crmSave(c);
+    };
+    else if (cm && cm[2] === "notes") m = () => {
+      const c = crmGet(cm[1]);
+      if (!String(body.text || "").trim()) throw problem(422, "Dados inválidos", "Escreva a anotação.");
+      const n = { id: "nte_" + Date.now(), at: new Date().toISOString(), kind: body.kind, text: body.text.trim(), author: "Ramon Administrador" };
+      c.notes = [n, ...(c.notes || [])]; c.timeline = [{ at: n.at, kind: n.kind, text: n.text, author: n.author }, ...(c.timeline || [])];
+      crmSave(c); return n;
+    };
+    else if (cm && cm[2] === "payments") m = () => {
+      const c = crmGet(cm[1]), amt = +String(body.amount).replace(",", ".");
+      if (!(amt > 0)) throw problem(422, "Dados inválidos", "Valor deve ser positivo.");
+      const pay = { id: "pay_" + Date.now(), date: body.date, amount: amt.toFixed(2), method: body.method, status: body.status, period: body.period,
+                    reference: body.reference || "", recorded_by: "Ramon Administrador", origin: "manual", recorded_at: new Date().toISOString() };
+      c.payments = [pay, ...(c.payments || [])]; c.last_payment = pay;
+      c.timeline = [{ at: pay.date, kind: "pagamento", text: `Pagamento ${pay.status}: R$ ${pay.amount} via ${pay.method} (${pay.period})` }, ...(c.timeline || [])];
+      if (pay.status === "pago") {
+        c.total_paid = (+c.total_paid + amt).toFixed(2); c.subscription.status = "ativa";
+        c.subscription.next_due = addMonth(c.subscription.next_due || body.date);
+        c.stage_auto = "pagante"; if (!c.stage_overridden) c.stage = "pagante";
+      } else if (pay.status === "atrasado") { c.subscription.status = "inadimplente"; c.stage_auto = "inadimplente"; if (!c.stage_overridden) c.stage = "inadimplente"; }
+      crmSave(c); return pay;
+    };
+    if (!m) {
     if ((mm = p.match(/^\/v1\/alerts\/(.+)$/)) && method === "PATCH") m = () => { alertStatus[mm[1]] = body.status; LS.set("alerts", alertStatus); return { id: mm[1], status: body.status }; };
     else if ((mm = p.match(/^\/v1\/connections\/(.+)\/revoke$/))) m = () => { LS.set("revoked", [...new Set([...revoked, mm[1]])]); return mapConn({ ...[...d.connections.items, ...extraConns].find(c => c.id === mm[1]) }); };
     else if ((mm = p.match(/^\/v1\/connections\/(.+)\/refresh$/))) m = () => {
@@ -182,6 +245,7 @@ async function demoCall(method, path, body) {
       const c = [...d.connections.items, ...extraConns].find(c => c.id === mm[1]);
       return { connection: { ...c, last_sync_at: new Date().toISOString() }, stats: { replayed: 1, note: "sandbox: sem dados novos" } };
     };
+  }
   }
   if (!m) throw problem(404, "Não encontrado", `${method} ${p}`);
   await new Promise(r => setTimeout(r, 120));   // latência simulada p/ estados de carregamento

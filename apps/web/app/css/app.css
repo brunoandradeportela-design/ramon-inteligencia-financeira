@@ -224,3 +224,32 @@ details summary{cursor:pointer;color:var(--brand-2);font-size:12.5px;font-weight
   .top .chip.hide-m,.theme-switch .lbl{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+
+/* ---------- CRM ---------- */
+.input[aria-invalid="true"]{border-color:var(--neg);box-shadow:0 0 0 3px color-mix(in srgb,var(--neg) 18%,transparent)}
+.crm-kpis{grid-template-columns:repeat(6,minmax(0,1fr))}
+.crm-kpis .kpi{font-size:21px}
+.funnel{display:flex;flex-direction:column;gap:6px}
+.funnel button{width:100%;display:grid;grid-template-columns:170px 1fr 40px;gap:10px;align-items:center;background:none;border:1px solid transparent;border-radius:8px;padding:6px 8px;cursor:pointer;color:var(--ink-2);font-size:13px;text-align:left}
+.funnel button:hover{background:var(--surface-2)}
+.funnel button[aria-pressed="true"]{border-color:var(--brand-2);background:var(--brand-soft);color:var(--ink)}
+.funnel__bar{height:10px;border-radius:6px;background:var(--surface-3);overflow:hidden}
+.funnel__bar i{display:block;height:100%;border-radius:6px}
+.funnel b{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink)}
+.st-novo_cadastro{color:var(--info)}.st-ativado{color:var(--c2)}.st-aguardando_pagamento{color:var(--warn)}
+.st-pagante{color:var(--pos)}.st-inadimplente{color:var(--neg)}.st-cancelado{color:var(--ink-4)}
+.st-bg-novo_cadastro{background:var(--info)}.st-bg-ativado{background:var(--c2)}.st-bg-aguardando_pagamento{background:var(--warn)}
+.st-bg-pagante{background:var(--pos)}.st-bg-inadimplente{background:var(--neg)}.st-bg-cancelado{background:var(--ink-4)}
+.crm-table tbody tr{cursor:pointer}
+.crm-table tr.is-sel td{background:var(--brand-soft)}
+.crm-box{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--surface-2);min-width:0}
+.crm-box h4{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
+.crm-box p{font-size:13.5px;overflow-wrap:anywhere}
+.sel{user-select:all}
+.timeline{list-style:none;margin-top:12px;display:flex;flex-direction:column;gap:10px;max-height:360px;overflow:auto;padding-right:4px}
+.timeline li{border-left:2px solid var(--line-strong);padding-left:10px}
+.timeline li.tl-pagamento{border-left-color:var(--pos)}.timeline li.tl-cadastro{border-left-color:var(--info)}
+.timeline li.tl-whatsapp,.timeline li.tl-ligacao,.timeline li.tl-email,.timeline li.tl-reuniao,.timeline li.tl-nota{border-left-color:var(--warn)}
+.timeline p{font-size:13px;margin-top:2px;color:var(--ink-2)}
+@media (max-width:1100px){.crm-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:860px){.crm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.funnel button{grid-template-columns:120px 1fr 32px}}

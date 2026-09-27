@@ -12,15 +12,32 @@ A IA interpreta; os motores determinísticos calculam. Não é corretora nem con
 | Parte | Caminho | Estado |
 |---|---|---|
 | Landing page fiel à arte aprovada (1024 px escalado, responsiva abaixo de 760 px) | `apps/web/index.html` | pronto |
+| CRM de clientes para o administrador (funil, pagamentos, anotações, CSV) · cadastro com e-mail, nome completo, profissão e telefone obrigatórios | `apps/web/app/js/views_crm.js`, `services/crm/` | pronto |
 | App web: Início, Patrimônio, Finanças, Tributação, Simulador, Alertas, Documentos, Conexões, Assistente IA, Planos, Privacidade, Configurações · temas Claro/Escuro/Sistema | `apps/web/app/` | pronto (modo demo ou API) |
-| API v1 FastAPI (31 rotas, Problem Details, Correlation-ID, Idempotency-Key) | `apps/api/` | pronto |
+| API v1 FastAPI (37 rotas, Problem Details, Correlation-ID, Idempotency-Key) | `apps/api/` | pronto |
 | Motores: Financial, Portfolio, Tax (regras versionadas), Simulation, Alert, Document, AI Orchestrator, Notification | `services/` | pronto |
 | Consentimento, Data Hub (Raw Vault → normalização → reconciliação), auditoria encadeada | `services/consent`, `services/ingestion`, `services/audit` | pronto |
 | Conectores: contrato único, importação CSV, Open Finance em **sandbox** | `connectors/` | produção depende de D-01 |
 | Schema PostgreSQL com RLS por titular + rollback | `database/migrations/` | alvo de produção (ADR-0002) |
-| Testes: golden cases tributários, guardrails de IA, segurança de upload, isolamento, E2E | `tests/` (63 testes) | passando |
+| Testes: golden cases tributários, guardrails de IA, segurança de upload, isolamento, E2E | `tests/` (71 testes) | passando |
 | CI (lint, testes, contrato OpenAPI) e deploy do site no GitHub Pages | `.github/workflows/` | pronto |
 | Análise dos documentos, decisões pendentes, ADRs, modelos CSV | `docs/` | pronto |
+
+## CRM de clientes (área do administrador)
+
+Acesse `app/#/crm` com um usuário de papel `admin` (demo: `ramon@ramon.app` / `ramon2026crm`).
+
+* **Cadastro obrigatório:** e-mail, nome completo (nome e sobrenome), profissão e telefone com DDD — validados no navegador e na API (`422` com o campo que faltou). Telefone é normalizado para `+55DDNNNNNNNNN` e vira link de WhatsApp.
+* **Funil automático:** Novo cadastro → Ativado (enviou documento/conectou instituição) → Aguardando pagamento → Pagante → Inadimplente → Cancelado. A etapa pode ser ajustada manualmente e volta ao automático com um clique.
+* **Indicadores:** clientes, novos em 7/30 dias, ativação, pagantes, conversão, MRR/ARR, recebido no mês, inadimplência, cadastros por semana, profissões e planos.
+* **Ficha do cliente:** contato, assinatura (próximo vencimento, total pago), uso da plataforma, registro de pagamentos (Pix, cartão, boleto, transferência), anotações (WhatsApp, ligação, e-mail, reunião), próxima ação, etiquetas e linha do tempo.
+* **Exportação CSV** para planilha.
+* **LGPD:** o CRM não mostra patrimônio, transações nem impostos do cliente; cada acesso do administrador a uma ficha fica registrado na trilha de auditoria do próprio cliente.
+* Pagamentos são registrados manualmente até a escolha do gateway (D-06); o webhook do gateway chamará `CRMService.record_payment`.
+
+API: `GET /v1/admin/crm/metrics` · `GET /v1/admin/crm/customers?q=&stage=&plan=` · `GET|PATCH /v1/admin/crm/customers/{id}` · `POST …/{id}/notes` · `POST …/{id}/payments` · `GET /v1/admin/crm/export.csv`.
+
+> Para receber cadastros reais de clientes de qualquer lugar, a API precisa estar hospedada (ex.: Render, Railway, Fly.io ou VPS) e o `config.js` do site apontando para ela. No modo demonstração (página estática), um cadastro feito aparece no CRM **apenas no mesmo navegador**.
 
 ## Arquitetura
 
@@ -73,7 +90,7 @@ Ou com Docker: `docker compose -f infrastructure/docker/docker-compose.yml up --
 ### Testes e qualidade
 
 ```bash
-RAMON_REFERENCE_DATE=2026-09-27 pytest      # 63 testes
+RAMON_REFERENCE_DATE=2026-09-27 pytest      # 71 testes
 ruff check .
 ```
 

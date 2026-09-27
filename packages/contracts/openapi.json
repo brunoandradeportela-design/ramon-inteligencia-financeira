@@ -1605,6 +1605,454 @@
      }
     }
    }
+  },
+  "/v1/admin/crm/metrics": {
+   "get": {
+    "summary": "Crm Metrics",
+    "operationId": "crm_metrics_v1_admin_crm_metrics_get",
+    "parameters": [
+     {
+      "name": "authorization",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Authorization"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/admin/crm/customers": {
+   "get": {
+    "summary": "Crm Customers",
+    "operationId": "crm_customers_v1_admin_crm_customers_get",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Q"
+      }
+     },
+     {
+      "name": "stage",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Stage"
+      }
+     },
+     {
+      "name": "plan",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Plan"
+      }
+     },
+     {
+      "name": "authorization",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Authorization"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/admin/crm/customers/{customer_id}": {
+   "get": {
+    "summary": "Crm Customer",
+    "operationId": "crm_customer_v1_admin_crm_customers__customer_id__get",
+    "parameters": [
+     {
+      "name": "customer_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Customer Id"
+      }
+     },
+     {
+      "name": "authorization",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Authorization"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "patch": {
+    "summary": "Crm Update",
+    "operationId": "crm_update_v1_admin_crm_customers__customer_id__patch",
+    "parameters": [
+     {
+      "name": "customer_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Customer Id"
+      }
+     },
+     {
+      "name": "authorization",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Authorization"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CrmUpdateIn"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/admin/crm/customers/{customer_id}/notes": {
+   "post": {
+    "summary": "Crm Note",
+    "operationId": "crm_note_v1_admin_crm_customers__customer_id__notes_post",
+    "parameters": [
+     {
+      "name": "customer_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Customer Id"
+      }
+     },
+     {
+      "name": "authorization",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Authorization"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CrmNoteIn"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/admin/crm/customers/{customer_id}/payments": {
+   "post": {
+    "summary": "Crm Payment",
+    "operationId": "crm_payment_v1_admin_crm_customers__customer_id__payments_post",
+    "parameters": [
+     {
+      "name": "customer_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Customer Id"
+      }
+     },
+     {
+      "name": "idempotency-key",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Idempotency-Key"
+      }
+     },
+     {
+      "name": "authorization",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Authorization"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CrmPaymentIn"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/admin/crm/export.csv": {
+   "get": {
+    "summary": "Crm Export",
+    "operationId": "crm_export_v1_admin_crm_export_csv_get",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Q"
+      }
+     },
+     {
+      "name": "stage",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Stage"
+      }
+     },
+     {
+      "name": "plan",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Plan"
+      }
+     },
+     {
+      "name": "authorization",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Authorization"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {
@@ -1682,6 +2130,142 @@
     ],
     "title": "ConsentIn"
    },
+   "CrmNoteIn": {
+    "properties": {
+     "text": {
+      "type": "string",
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Text"
+     },
+     "kind": {
+      "type": "string",
+      "title": "Kind",
+      "default": "nota"
+     }
+    },
+    "type": "object",
+    "required": [
+     "text"
+    ],
+    "title": "CrmNoteIn"
+   },
+   "CrmPaymentIn": {
+    "properties": {
+     "amount": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "string",
+        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+       }
+      ],
+      "title": "Amount"
+     },
+     "method": {
+      "type": "string",
+      "title": "Method",
+      "default": "pix"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status",
+      "default": "pago"
+     },
+     "date": {
+      "type": "string",
+      "format": "date",
+      "title": "Date"
+     },
+     "period": {
+      "type": "string",
+      "title": "Period"
+     },
+     "reference": {
+      "type": "string",
+      "title": "Reference",
+      "default": ""
+     }
+    },
+    "type": "object",
+    "required": [
+     "amount",
+     "date",
+     "period"
+    ],
+    "title": "CrmPaymentIn"
+   },
+   "CrmUpdateIn": {
+    "properties": {
+     "stage": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stage"
+     },
+     "clear_override": {
+      "type": "boolean",
+      "title": "Clear Override",
+      "default": false
+     },
+     "tags": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tags"
+     },
+     "next_action": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Next Action"
+     },
+     "next_action_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Next Action Date"
+     },
+     "plan": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Plan"
+     }
+    },
+    "type": "object",
+    "title": "CrmUpdateIn"
+   },
    "DocumentIn": {
     "properties": {
      "filename": {
@@ -1740,11 +2324,23 @@
     "properties": {
      "name": {
       "type": "string",
-      "title": "Name"
+      "title": "Name",
+      "description": "Nome completo (obrigatório)"
      },
      "email": {
       "type": "string",
-      "title": "Email"
+      "title": "Email",
+      "description": "E-mail (obrigatório)"
+     },
+     "profession": {
+      "type": "string",
+      "title": "Profession",
+      "description": "Profissão (obrigatório)"
+     },
+     "phone": {
+      "type": "string",
+      "title": "Phone",
+      "description": "Telefone com DDD (obrigatório)"
      },
      "password": {
       "type": "string",
@@ -1758,12 +2354,19 @@
       "type": "string",
       "title": "Plan",
       "default": "free"
+     },
+     "origin": {
+      "type": "string",
+      "title": "Origin",
+      "default": "site"
      }
     },
     "type": "object",
     "required": [
      "name",
      "email",
+     "profession",
+     "phone",
      "password",
      "accept_terms"
     ],

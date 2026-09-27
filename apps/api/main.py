@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from apps.api.container import Container, reference_date
 from database.seeds.demo import seed
 from services.billing import plans
-from services.common.core import DomainError, ValidationFailed
+from services.common.core import DomainError, Forbidden, NotFound, ValidationFailed
 from services.identity.service import User
 
 log = logging.getLogger("ramon.api")
@@ -89,11 +89,14 @@ def idempotent(request: Request, key: str | None, user: User, compute):
 
 # ------------------------------------------------------------------ schemas
 class RegisterIn(BaseModel):
-    name: str
-    email: str
+    name: str = Field(description="Nome completo (obrigatório)")
+    email: str = Field(description="E-mail (obrigatório)")
+    profession: str = Field(description="Profissão (obrigatório)")
+    phone: str = Field(description="Telefone com DDD (obrigatório)")
     password: str
     accept_terms: bool
     plan: str = "free"
+    origin: str = "site"
 
 
 class LoginIn(BaseModel):
@@ -158,6 +161,29 @@ class TaxPrefsIn(BaseModel):
     paid_darfs: dict[str, Decimal] = Field(default_factory=dict)
 
 
+class CrmUpdateIn(BaseModel):
+    stage: str | None = None
+    clear_override: bool = False
+    tags: list[str] | None = None
+    next_action: str | None = None
+    next_action_date: str | None = None
+    plan: str | None = None
+
+
+class CrmNoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    kind: str = "nota"
+
+
+class CrmPaymentIn(BaseModel):
+    amount: Decimal
+    method: str = "pix"
+    status: str = "pago"
+    date: Date
+    period: str
+    reference: str = ""
+
+
 class TradeIn(BaseModel):
     date: Date
     ticker: str
@@ -178,9 +204,11 @@ def health():
 
 @app.post("/v1/auth/register", status_code=201)
 def register(body: RegisterIn, request: Request):
-    u = C.identity.register(email=body.email, name=body.name, password=body.password, accept_terms=body.accept_terms, plan=body.plan)
-    C.audit.record(owner_id=u.id, actor=u.id, resource="user", action="cadastro", after={"email": u.email, "plan": u.plan},
-                   correlation_id=cid(request))
+    u = C.identity.register(email=body.email, name=body.name, password=body.password, accept_terms=body.accept_terms,
+                            phone=body.phone, profession=body.profession, plan=body.plan, origin=body.origin)
+    C.crm.subscription(u)
+    C.audit.record(owner_id=u.id, actor=u.id, resource="user", action="cadastro",
+                   after={"email": u.email, "plan": u.plan, "profession": u.profession}, correlation_id=cid(request))
     token, _ = C.identity.login(email=body.email, password=body.password)
     return {"token": token, "user": u.public()}
 
@@ -409,3 +437,81 @@ def delete_account(request: Request, user: User = Depends(current_user)):
     C.store.gdelete("users_by_email", user.email)
     C.store.gdelete("users", user.id)
     return {"status": "eliminado", "retained": ["audit"]}
+
+
+# ------------------------------------------------------------------ CRM (somente administradores)
+def admin_user(user: User = Depends(current_user)) -> User:
+    if "admin" not in user.roles:
+        raise Forbidden("Área restrita ao administrador da plataforma.")
+    return user
+
+
+def _customer(cid_: str) -> User:
+    u = C.identity.get(cid_)
+    if not u or "admin" in u.roles:
+        raise NotFound("Cliente")
+    return u
+
+
+@app.get("/v1/admin/crm/metrics")
+def crm_metrics(admin: User = Depends(admin_user)):
+    return C.crm.metrics(C.identity.all_customers(), reference_date())
+
+
+@app.get("/v1/admin/crm/customers")
+def crm_customers(q: str = "", stage: str = "", plan: str = "", admin: User = Depends(admin_user)):
+    items = C.crm.list(C.identity.all_customers(), reference_date(), q=q, stage=stage, plan=plan)
+    return {"total": len(items), "items": items}
+
+
+@app.get("/v1/admin/crm/customers/{customer_id}")
+def crm_customer(customer_id: str, request: Request, admin: User = Depends(admin_user)):
+    u = _customer(customer_id)
+    C.audit.record(owner_id=u.id, actor=admin.id, resource="crm", action="acesso_administrador",
+                   reason="acompanhamento comercial", correlation_id=cid(request))
+    return C.crm.detail(u, reference_date(), C.audit.list(u.id))
+
+
+@app.patch("/v1/admin/crm/customers/{customer_id}")
+def crm_update(customer_id: str, body: CrmUpdateIn, request: Request, admin: User = Depends(admin_user)):
+    u = _customer(customer_id)
+    before = {**C.crm.meta(u), "plan": u.plan}
+    if body.plan:
+        C.crm.set_plan(u, body.plan)
+    m = C.crm.update(u, stage=body.stage, tags=body.tags, next_action=body.next_action,
+                     next_action_date=body.next_action_date, clear_override=body.clear_override)
+    C.audit.record(owner_id=u.id, actor=admin.id, resource="crm", action="atualizado", before=before,
+                   after={**m, "plan": u.plan}, correlation_id=cid(request))
+    return C.crm.summary(u, reference_date())
+
+
+@app.post("/v1/admin/crm/customers/{customer_id}/notes", status_code=201)
+def crm_note(customer_id: str, body: CrmNoteIn, request: Request, admin: User = Depends(admin_user)):
+    u = _customer(customer_id)
+    n = C.crm.add_note(u, text=body.text, kind=body.kind, author=admin.name)
+    C.audit.record(owner_id=u.id, actor=admin.id, resource="crm", action="anotacao", after={"kind": n["kind"]}, correlation_id=cid(request))
+    return n
+
+
+@app.post("/v1/admin/crm/customers/{customer_id}/payments", status_code=201)
+def crm_payment(customer_id: str, body: CrmPaymentIn, request: Request, admin: User = Depends(admin_user),
+                idempotency_key: str | None = Header(default=None)):
+    u = _customer(customer_id)
+
+    def run():
+        p = C.crm.record_payment(u, amount=body.amount, method=body.method, status=body.status, date_=body.date.isoformat(),
+                                 period=body.period, reference=body.reference, recorded_by=admin.name)
+        C.audit.record(owner_id=u.id, actor=admin.id, resource=f"payment:{p['id']}", action="pagamento_registrado",
+                       after=p, correlation_id=cid(request))
+        return p
+    return idempotent(request, idempotency_key, admin, run)
+
+
+@app.get("/v1/admin/crm/export.csv")
+def crm_export(q: str = "", stage: str = "", plan: str = "", request: Request = None, admin: User = Depends(admin_user)):
+    from fastapi.responses import Response
+    items = C.crm.list(C.identity.all_customers(), reference_date(), q=q, stage=stage, plan=plan)
+    C.audit.record(owner_id=admin.id, actor=admin.id, resource="crm", action="exportacao", after={"linhas": len(items)},
+                   correlation_id=cid(request))
+    return Response("\ufeff" + C.crm.export_csv(items), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=clientes.csv"})

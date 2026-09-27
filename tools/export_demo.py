@@ -66,6 +66,13 @@ def main() -> None:
                 grid[f"{p['asset_id']}|{frac}|{d}"] = r.json()
     data["simulation_grid"] = grid
     data["simulations"] = {"items": []}
+    # CRM (visão do administrador) — clientes fictícios
+    ta = c.post("/v1/auth/login", json={"email": "ramon@ramon.app", "password": "ramon2026crm"}).json()["token"]
+    ha = {"Authorization": f"Bearer {ta}"}
+    customers = c.get("/v1/admin/crm/customers", headers=ha).json()
+    data["admin_me"] = c.get("/v1/me", headers=ha).json()
+    data["crm"] = {"customers": customers, "metrics": c.get("/v1/admin/crm/metrics", headers=ha).json(),
+                   "details": {i["id"]: c.get(f"/v1/admin/crm/customers/{i['id']}", headers=ha).json() for i in customers["items"]}}
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"ok: {OUT} ({OUT.stat().st_size // 1024} KB, {len(grid)} simulações)")

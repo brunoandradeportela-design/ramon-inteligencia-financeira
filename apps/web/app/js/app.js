@@ -2,6 +2,7 @@
 import { api, DEMO, session, ApiError } from "./api.js";
 import { esc, icon, errorBox, loading } from "./ui.js";
 import * as V from "./views.js";
+import { crm } from "./views_crm.js";
 
 const NAV = [
   ["dashboard", "Início", "home"], ["patrimonio", "Patrimônio", "wealth"], ["financas", "Finanças", "finance"],
@@ -9,8 +10,9 @@ const NAV = [
   ["documentos", "Documentos", "doc"], ["conexoes", "Conexões", "link"], ["assistente", "Assistente IA", "ai"],
 ];
 const TITLES = Object.fromEntries(NAV.map(([k, t]) => [k, t]));
-Object.assign(TITLES, { planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
+Object.assign(TITLES, { crm: "CRM · Clientes", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
 const PUBLIC = { entrar: V.login, cadastro: V.register };
+const ADMIN_ROUTES = { crm, configuracoes: V.settings };
 const ROUTES = {
   dashboard: V.dashboard, patrimonio: V.portfolio, financas: V.finance, tributacao: V.tax, simulador: V.simulator,
   alertas: V.alerts, documentos: V.documents, conexoes: V.connections, assistente: V.assistant, planos: V.plans,
@@ -41,7 +43,7 @@ document.addEventListener("click", e => {
   if (b) theme.set(b.dataset.themeBtn);
   if (e.target.closest("[data-burger]")) document.body.classList.toggle("nav-open");
   if (e.target.closest(".navi")) document.body.classList.remove("nav-open");
-  if (e.target.closest("[data-logout]")) { api.post("/v1/auth/logout").catch(() => {}); session.set(null); location.hash = "#/entrar"; }
+  if (e.target.closest("[data-logout]")) { api.post("/v1/auth/logout").catch(() => {}); session.set(null); me = null; location.hash = "#/entrar"; }
 });
 
 /* ------------------------------------------------------------ roteador */
@@ -58,11 +60,15 @@ async function render() {
   const root = document.getElementById("root");
   if (PUBLIC[r.name]) { root.innerHTML = ""; await PUBLIC[r.name](root, r); document.title = `Fintechs — ${r.name === "entrar" ? "Entrar" : "Cadastro"}`; return; }
   if (!session.token) { location.hash = `#/entrar?next=${encodeURIComponent(r.name)}`; return; }
-  const view = ROUTES[r.name] || ROUTES.dashboard;
   try {
     if (!me) me = await api.get("/v1/me");
-    if (!document.querySelector(".shell")) root.innerHTML = shell();
-    alertsOpen = (await api.get("/v1/alerts").catch(() => ({ items: [] }))).items.filter(a => a.status === "novo").length;
+    const admin = me.roles?.includes("admin");
+    if (admin && !ADMIN_ROUTES[r.name]) { location.hash = "#/crm"; return; }
+    if (!admin && r.name === "crm") { location.hash = "#/dashboard"; return; }
+    const view = admin ? ADMIN_ROUTES[r.name] : (ROUTES[r.name] || ROUTES.dashboard);
+    const sh = document.querySelector(".shell");
+    if (!sh || sh.dataset.role !== (admin ? "admin" : "client")) root.innerHTML = shell(admin);
+    alertsOpen = admin ? 0 : (await api.get("/v1/alerts").catch(() => ({ items: [] }))).items.filter(a => a.status === "novo").length;
     updateShell(r.name);
     const main = document.getElementById("view");
     main.innerHTML = loading();
@@ -77,15 +83,17 @@ async function render() {
   }
 }
 
-function shell() {
-  return `<div class="shell">
+function shell(admin = false) {
+  const nav = admin ? `<p class="eyebrow" style="padding:0 12px 8px">Administração</p><a class="navi" href="#/crm" data-nav="crm">${icon("wealth")}<span>CRM · Clientes</span></a>`
+    : NAV.map(([k, t, ic]) => `<a class="navi" href="#/${k}" data-nav="${k}">${icon(ic)}<span>${t}</span>${k === "alertas" ? '<span class="count" data-alert-count hidden></span>' : ""}</a>`).join("");
+  return `<div class="shell" data-role="${admin ? "admin" : "client"}">
     <aside class="side" aria-label="Navegação">
       <a class="side__logo" href="../index.html" title="Página inicial">Fintechs</a>
-      <nav>${NAV.map(([k, t, ic]) => `<a class="navi" href="#/${k}" data-nav="${k}">${icon(ic)}<span>${t}</span>${k === "alertas" ? '<span class="count" data-alert-count hidden></span>' : ""}</a>`).join("")}</nav>
+      <nav>${nav}</nav>
       <div class="side__bottom">
         <div class="side__sep"></div>
-        <a class="navi" href="#/planos" data-nav="planos">${icon("plan")}<span>Planos</span></a>
-        <a class="navi" href="#/privacidade" data-nav="privacidade">${icon("shield")}<span>Privacidade</span></a>
+        ${admin ? "" : `<a class="navi" href="#/planos" data-nav="planos">${icon("plan")}<span>Planos</span></a>
+        <a class="navi" href="#/privacidade" data-nav="privacidade">${icon("shield")}<span>Privacidade</span></a>`}
         <a class="navi" href="#/configuracoes" data-nav="configuracoes">${icon("gear")}<span>Configurações</span></a>
       </div>
     </aside>
@@ -113,7 +121,7 @@ function updateShell(name) {
   theme.apply();
 }
 
-export function onLogin(token, user) { session.set(token); me = user; }
+export function onLogin(token, user) { session.set(token); me = user; document.querySelector(".shell")?.remove(); }
 window.addEventListener("hashchange", render);
 theme.apply();
 render();

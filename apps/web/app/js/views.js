@@ -1,6 +1,7 @@
 /* Telas do MVP (Dossiê §9 e §47; Plano técnico §12). Toda saída tributária é rotulada como estimativa. */
 import { api, DEMO, ApiError } from "./api.js";
 import { onLogin, themeSwitch, theme } from "./app.js";
+import { validateSignup, maskPhone, STAGES } from "./crm_rules.js";
 import { areaChart, barChart, brl, confidence, donut, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
 
 const trust = txt => `<p class="trust-line">${icon("info")}<span>${txt}</span></p>`;
@@ -20,7 +21,7 @@ export async function login(root, r) {
   root.innerHTML = authLayout(`
     <a href="../index.html" class="muted small">← Voltar ao site</a>
     <h1>Entrar</h1>
-    ${DEMO ? trust("Modo demonstração: use <b>demo@ramon.app</b> e a senha <b>demo2026ramon</b> (já preenchidos).") : ""}
+    ${DEMO ? trust("Modo demonstração — cliente: <b>demo@ramon.app</b> / <b>demo2026ramon</b> (já preenchido) · administrador (CRM): <b>ramon@ramon.app</b> / <b>ramon2026crm</b>.") : ""}
     <form id="f" class="stack" novalidate>
       <div class="field"><label for="email">E-mail</label><input class="input" id="email" type="email" autocomplete="username" required value="${DEMO ? "demo@ramon.app" : ""}"></div>
       <div class="field"><label for="pw">Senha</label><input class="input" id="pw" type="password" autocomplete="current-password" required value="${DEMO ? "demo2026ramon" : ""}"></div>
@@ -36,7 +37,7 @@ export async function login(root, r) {
     try {
       const res = await api.post("/v1/auth/login", { email: root.querySelector("#email").value, password: root.querySelector("#pw").value });
       onLogin(res.token, res.user);
-      go("#/" + (r.params.get("next") || "dashboard"));
+      go("#/" + (res.user.roles?.includes("admin") ? "crm" : (r.params.get("next") || "dashboard")));
     } catch (err) { root.querySelector("#err").textContent = problemMsg(err); btn.disabled = false; }
   });
 }
@@ -57,16 +58,22 @@ export async function register(root, r) {
       </form>
       <p class="small muted">Já tem conta? <a href="#/entrar">Entrar</a> · Plano escolhido: <b>${esc(plan.toUpperCase())}</b>${DEMO ? " (demo usa Pro)" : ""}</p>`);
     root.querySelector("#back")?.addEventListener("click", () => { state.step--; draw(); });
+    root.querySelector("#phone")?.addEventListener("input", e => { e.target.value = maskPhone(e.target.value); });
     root.querySelector("#f").addEventListener("submit", submit);
   };
   const d = state.data;
   const step1 = () => `
-    <div class="field"><label for="name">Nome</label><input class="input" id="name" autocomplete="name" required value="${esc(d.name || "")}"></div>
-    <div class="field"><label for="email">E-mail</label><input class="input" id="email" type="email" autocomplete="email" required value="${esc(d.email || "")}"></div>
-    <div class="field"><label for="phone">Celular (opcional)</label><input class="input" id="phone" autocomplete="tel" inputmode="tel" value="${esc(d.phone || "")}"></div>
-    <div class="field"><label for="pw">Senha</label><input class="input" id="pw" type="password" autocomplete="new-password" minlength="10" required>
+    <p class="small muted">Todos os campos são obrigatórios.</p>
+    <div class="field"><label for="name">Nome completo *</label><input class="input" id="name" autocomplete="name" required value="${esc(d.name || "")}" placeholder="Nome e sobrenome"></div>
+    <div class="field"><label for="email">E-mail *</label><input class="input" id="email" type="email" autocomplete="email" required value="${esc(d.email || "")}"></div>
+    <div class="form-grid">
+      <div class="field"><label for="profession">Profissão *</label><input class="input" id="profession" list="profs" required maxlength="80" value="${esc(d.profession || "")}" placeholder="Ex.: Médico, Advogada">
+        <datalist id="profs">${["Médico(a)", "Dentista", "Advogado(a)", "Engenheiro(a)", "Empresário(a)", "Arquiteto(a)", "Contador(a)", "Servidor(a) público(a)", "Psicólogo(a)", "Fisioterapeuta", "Produtor(a) rural", "Analista de sistemas"].map(p => `<option value="${p}">`).join("")}</datalist></div>
+      <div class="field"><label for="phone">Telefone (WhatsApp) *</label><input class="input" id="phone" type="tel" autocomplete="tel-national" inputmode="numeric" required value="${esc(d.phone || "")}" placeholder="(69) 99999-9999"></div>
+    </div>
+    <div class="field"><label for="pw">Senha *</label><input class="input" id="pw" type="password" autocomplete="new-password" minlength="10" required>
       <span class="small muted">10+ caracteres, com letras e números.</span></div>
-    <label class="check"><input type="checkbox" id="terms" ${d.accept_terms ? "checked" : ""}> Li e aceito os Termos de Uso e a Política de Privacidade (LGPD).</label>`;
+    <label class="check"><input type="checkbox" id="terms" ${d.accept_terms ? "checked" : ""}> Li e aceito os Termos de Uso e a Política de Privacidade (LGPD). Meus dados de contato serão usados para atendimento e acompanhamento da assinatura.</label>`;
   const step2 = () => `<p class="muted small">Selecione o que é mais importante para você.</p><div class="opt-grid">
     ${["Organizar finanças", "Acompanhar investimentos", "Entender impostos", "Planejar patrimônio"].map(o =>
       `<label class="opt"><input type="checkbox" name="obj" value="${o}" ${d.objetivos.includes(o) ? "checked" : ""}> ${o}</label>`).join("")}</div>`;
@@ -82,18 +89,20 @@ export async function register(root, r) {
     const err = root.querySelector("#err"); err.textContent = "";
     if (state.step === 1) {
       Object.assign(d, { name: root.querySelector("#name").value.trim(), email: root.querySelector("#email").value.trim(),
-        phone: root.querySelector("#phone").value, password: root.querySelector("#pw").value, accept_terms: root.querySelector("#terms").checked });
-      if (d.name.length < 2) return err.textContent = "Informe seu nome.";
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)) return err.textContent = "E-mail inválido.";
-      if (d.password.length < 10 || !/\d/.test(d.password) || !/[a-z]/i.test(d.password)) return err.textContent = "Senha com 10+ caracteres, letras e números.";
-      if (!d.accept_terms) return err.textContent = "É necessário aceitar os termos e a política de privacidade.";
+        profession: root.querySelector("#profession").value.trim(), phone: root.querySelector("#phone").value,
+        password: root.querySelector("#pw").value, accept_terms: root.querySelector("#terms").checked });
+      const errs = validateSignup(d);
+      root.querySelectorAll(".input").forEach(i => i.removeAttribute("aria-invalid"));
+      errs.forEach(x => root.querySelector("#" + ({ password: "pw", accept_terms: "terms" }[x.field] || x.field))?.setAttribute("aria-invalid", "true"));
+      if (errs.length) return err.textContent = errs.map(x => x.msg).join(" · ");
       state.step = 2; return draw();
     }
     if (state.step === 2) { d.objetivos = [...root.querySelectorAll("[name=obj]:checked")].map(i => i.value); state.step = 3; return draw(); }
     ["renda", "patrimonio", "rv", "prev", "ir", "contador"].forEach(k => d.perfil[k] = root.querySelector("#" + k).value);
     const btn = e.target.querySelector(".btn--primary"); btn.disabled = true; btn.textContent = "Criando conta…";
     try {
-      const res = await api.post("/v1/auth/register", { name: d.name, email: d.email, password: d.password, accept_terms: d.accept_terms, plan: d.plan });
+      const res = await api.post("/v1/auth/register", { name: d.name, email: d.email, profession: d.profession, phone: d.phone,
+        password: d.password, accept_terms: d.accept_terms, plan: d.plan, origin: "site" });
       onLogin(res.token, res.user);
       toast("Conta criada. Este é o seu primeiro diagnóstico.");
       go("#/dashboard?primeiro=1");
@@ -503,7 +512,7 @@ export async function settings(el, r, { me }) {
   el.innerHTML = `<div class="grid g-2">
     <section class="card"><h3>Aparência</h3><p class="small muted" style="margin-top:6px">Claro, Escuro ou seguir o sistema operacional. A preferência fica salva neste dispositivo e no seu perfil. Trocar o tema nunca altera dados ou cálculos.</p>
       <div style="margin-top:14px">${themeSwitch()}</div></section>
-    <section class="card"><h3>Perfil</h3><ul class="stack small" style="margin-top:10px"><li><b>Nome:</b> ${esc(me.name)}</li><li><b>E-mail:</b> ${esc(me.email)}</li><li><b>Plano:</b> ${esc(me.plan)}</li>
+    <section class="card"><h3>Perfil</h3><ul class="stack small" style="margin-top:10px"><li><b>Nome:</b> ${esc(me.name)}</li><li><b>E-mail:</b> ${esc(me.email)}</li><li><b>Profissão:</b> ${esc(me.profession || "—")}</li><li><b>Telefone:</b> ${esc(me.phone || "—")}</li><li><b>Plano:</b> ${esc(me.plan)}</li>
       <li><b>Objetivos:</b> ${esc((me.profile?.objetivos || []).join(", ") || "—")}</li></ul></section>
     <section class="card"><h3>Notificações</h3><label class="check" style="margin-top:10px"><input type="checkbox" checked> Alertas no aplicativo</label>
       <label class="check" style="margin-top:8px"><input type="checkbox"> Resumo semanal por e-mail</label><p class="note">Apenas alertas de severidade “atenção” ou maior; alertas repetidos não são reenviados.</p></section>

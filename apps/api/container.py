@@ -15,6 +15,7 @@ from services.billing import plans
 from services.common.core import D, DomainError, NotFound, money, new_id, utcnow
 from services.common.store import Store
 from services.consent.service import Connection, ConsentService, connection_status
+from services.crm.service import CRMService
 from services.document_engine.engine import DocumentEngine
 from services.financial_engine.engine import FinancialEngine
 from services.identity.service import IdentityService, User
@@ -47,6 +48,7 @@ class Container:
         self.documents_engine = DocumentEngine()
         self.notifications = NotificationService(self.store)
         self.of_adapter = OpenFinanceSandboxAdapter()
+        self.crm = CRMService(self.store)
 
     # ------------------------------------------------------------------ leituras de domínio
     def _trades(self, uid):
