@@ -1,0 +1,7 @@
+{
+  "_aviso": "DADOS FICTÍCIOS DE SANDBOX — não representam nenhuma pessoa real",
+  "accounts": [{"accountId": "itau-001", "type": "CONTA_DEPOSITO_A_VISTA", "name": "Conta Itaú Personnalité", "availableAmount": "8210.00", "currency": "BRL"}],
+  "investments": [
+    {"investmentId": "itau-inv-1", "productName": "Itaú Previdência PGBL RF", "type": "PENSION", "grossAmount": "38950.00", "investedAmount": "34000.00", "liquidityDays": 30}
+  ]
+}

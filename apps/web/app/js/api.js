@@ -1,0 +1,198 @@
+/* Cliente da API v1 + backend de demonstração (sem servidor).
+   Em modo demo, todos os números vêm de data/demo.json, gerado pelos motores Python
+   (tools/export_demo.py). O JS não recalcula imposto — só consulta a grade pré-calculada. */
+
+const BASE = (window.RAMON_API_BASE || "").replace(/\/$/, "");
+export const DEMO = !BASE;
+const TOKEN_KEY = "ramon.token";
+let demoData = null;
+
+export class ApiError extends Error {
+  constructor(problem) { super(problem.detail || problem.title); this.problem = problem; this.status = problem.status; }
+}
+
+function cid() { return (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)).replace(/-/g, ""); }
+export const session = {
+  get token() { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } },
+  set(t) { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {} },
+};
+
+async function http(method, path, body, headers = {}) {
+  const res = await fetch(BASE + path, {
+    method, body: body !== undefined ? JSON.stringify(body) : undefined,
+    headers: { "Content-Type": "application/json", "X-Correlation-ID": cid(),
+               ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}), ...headers },
+  });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({ title: "Erro", detail: res.statusText, status: res.status }));
+  if (!res.ok) throw new ApiError(data);
+  return data;
+}
+
+/* ---------------------------------------------------------------- demo backend */
+const LS = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem("ramon.demo." + k)) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("ramon.demo." + k, JSON.stringify(v)); } catch {} },
+};
+async function demo() {
+  if (!demoData) demoData = await (await fetch(new URL("../data/demo.json", import.meta.url))).json();
+  return demoData;
+}
+const norm = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+function classify(q, pats) {
+  const t = norm(q);
+  const any = list => list.some(p => new RegExp(p.replace(/\\b/g, "\\b")).test(t));
+  if (any(pats.injection) || any(pats.credential)) return any(pats.injection) ? "bloqueado" : "credencial";
+  if (any(pats.advice)) return "investimento_individual";
+  const order = ["simulacao", "tributaria", "alertas", "patrimonio", "financeira", "documento"];
+  let best = "geral", score = 0;
+  for (const k of order) { const n = pats.intents[k].filter(p => new RegExp(p).test(t)).length; if (n > score) { best = k; score = n; } }
+  return best;
+}
+function problem(status, title, detail) { return new ApiError({ status, title, detail }); }
+
+async function demoCall(method, path, body) {
+  const d = await demo();
+  const [p, qs] = path.split("?");
+  const alertStatus = LS.get("alerts", {});
+  const revoked = LS.get("revoked", []);
+  const extraConns = LS.get("conns", []);
+  const mapConn = c => revoked.includes(c.id) ? { ...c, status: "revogado", consent: { ...c.consent, status: "revogado" } } : c;
+  const R = {
+    "POST /v1/auth/login": () => {
+      if (norm(body.email) !== "demo@ramon.app" || body.password !== "demo2026ramon")
+        throw problem(401, "Não autenticado", "No modo demonstração use demo@ramon.app / demo2026ramon.");
+      return { token: "demo-token", user: d.me };
+    },
+    "POST /v1/auth/register": () => {
+      if (!body.accept_terms) throw problem(422, "Dados inválidos", "É necessário aceitar os termos e a política de privacidade.");
+      if ((body.password || "").length < 10) throw problem(422, "Dados inválidos", "Senha com 10+ caracteres, letras e números.");
+      LS.set("name", body.name);
+      return { token: "demo-token", user: { ...d.me, name: body.name, email: body.email } };
+    },
+    "POST /v1/auth/logout": () => null,
+    "GET /v1/me": () => ({ ...d.me, name: LS.get("name", d.me.name), theme: LS.get("theme", d.me.theme) }),
+    "GET /v1/dashboard": () => {
+      const al = R["GET /v1/alerts"]().items.filter(a => a.status !== "resolvido");
+      return { ...d.dashboard, greeting: LS.get("name", d.dashboard.greeting).split(" ")[0],
+               alerts: { open: al.length, critical: al.filter(a => ["critico", "alto"].includes(a.severity)).length },
+               next_actions: al.slice(0, 3).map(a => ({ title: a.title, detail: a.detail, severity: a.severity, action: a.action })) };
+    },
+    "GET /v1/finance/summary": () => d.finance,
+    "GET /v1/finance/transactions": () => d.transactions,
+    "GET /v1/portfolio/consolidated": () => d.portfolio,
+    "GET /v1/tax/summary": () => d.tax,
+    "GET /v1/tax/events": () => d.tax_events,
+    "GET /v1/tax/rules": () => d.tax_rules,
+    "GET /v1/plans": () => d.plans,
+    "GET /v1/institutions": () => d.institutions,
+    "GET /v1/audit": () => d.audit,
+    "GET /v1/consents": () => d.consents,
+    "GET /v1/alerts": () => ({ ...d.alerts, items: d.alerts.items.map(a => ({ ...a, status: alertStatus[a.id] || a.status })) }),
+    "GET /v1/documents": () => ({ items: [...LS.get("docs", []), ...d.documents.items] }),
+    "POST /v1/documents": () => {
+      const ext = body.filename.split(".").pop().toLowerCase();
+      if (!["pdf", "png", "jpg", "jpeg", "csv"].includes(ext)) throw problem(422, "Dados inválidos", "Extensão não permitida. Aceitos: PDF, PNG, JPG e CSV.");
+      const kinds = [[/informe|rendimento/, "informe_rendimentos", "Informe de rendimentos"], [/corretagem|nota/, "nota_corretagem", "Nota de corretagem"],
+                     [/darf/, "darf", "DARF"], [/extrato/, "extrato", "Extrato"], [/previd|pgbl|vgbl/, "previdencia", "Previdência"]];
+      const k = kinds.find(([re]) => re.test(norm(body.filename))) || [0, "outro", "Documento"];
+      const doc = { id: "doc_demo_" + Date.now(), filename: body.filename, mime: body.mime, size: body.size || 0, kind: k[1], title: k[2],
+                    status: "classificado", uploaded_at: new Date().toISOString(), extraction: {}, links: [],
+                    detail: "Modo demonstração: arquivo classificado localmente; nada é enviado a servidores." };
+      LS.set("docs", [doc, ...LS.get("docs", [])]);
+      return doc;
+    },
+    "GET /v1/connections": () => ({ ...d.connections, items: [...d.connections.items, ...extraConns].map(mapConn) }),
+    "POST /v1/connections/consents": () => {
+      const inst = d.institutions.institutions.find(i => i.id === body.institution_id);
+      if (!body.scope?.length) throw problem(422, "Dados inválidos", "Selecione ao menos um tipo de dado para compartilhar.");
+      const id = "con_demo_" + Date.now(), consent = "cns_demo_" + Date.now();
+      LS.set("pending", { id, consent, inst, scope: body.scope });
+      return { connection_id: id, consent_id: consent, mode: "sandbox",
+               redirect_url: `#/conexoes/retorno?consent=${consent}&institution=${inst.id}&sandbox=1` };
+    },
+    "POST /v1/connections/consents/confirm": () => {
+      const pend = LS.get("pending", null);
+      if (!pend || pend.consent !== body.consent_id) throw problem(409, "Consentimento em estado inválido", "Consentimento não encontrado.");
+      const now = new Date().toISOString(), exp = new Date(Date.now() + 360 * 864e5).toISOString();
+      const conn = { id: pend.id, institution_id: pend.inst.id, institution: pend.inst.name, institution_type: pend.inst.type,
+                     consent_id: pend.consent, scope: pend.scope, status: "ativo", mode: "sandbox", last_sync_at: now,
+                     data_quality_score: 1, created_at: now, updated_at: now,
+                     sync_runs: [{ id: "sync_demo", started_at: now, result: "ok", stats: {} }],
+                     consent: { id: pend.consent, status: "ativo", expires_at: exp,
+                                purpose: "Consolidar contas e investimentos para diagnóstico financeiro e tributário",
+                                scope_labels: pend.scope } };
+      LS.set("conns", [...extraConns.filter(c => c.institution_id !== conn.institution_id), conn]);
+      LS.set("pending", null);
+      return { connection: conn, stats: { note: "sandbox: dados fictícios" } };
+    },
+    "GET /v1/simulations": () => ({ items: LS.get("sims", []) }),
+    "POST /v1/simulations": () => {
+      let res;
+      if (body.kind === "pgbl") {
+        const rule = d.tax_rules.items.find(r => r.code === "BR-IRPF-PGBL-DEDUCAO");
+        const lim = +body.taxable_income * +rule.parameters.limite_percentual;
+        const eligible = body.full_model && body.contributes_social_security;
+        const cur = +body.current_contributions, ext = +body.extra_contribution, rate = +body.marginal_rate;
+        const now = eligible ? Math.min(cur, lim) : 0, after = eligible ? Math.min(cur + ext, lim) : 0;
+        const eff = (after - now) * rate, f = v => v.toFixed(2);
+        const notes = [];
+        if (!body.full_model) notes.push("No modelo simplificado a contribuição ao PGBL não é dedutível.");
+        if (!body.contributes_social_security) notes.push("A dedução exige contribuição ao regime geral ou próprio de previdência.");
+        if (cur + ext > lim) notes.push(`Contribuições acima de 12% (${f(lim)}) não geram dedução adicional.`);
+        res = { kind: "pgbl", id: "sim_demo_" + Date.now(), created_at: new Date().toISOString(), kind_label: "estimativa",
+                limit_12pct: f(lim), remaining_room: eligible ? f(Math.max(0, lim - cur)) : "0.00", difference: f(eff),
+                results: [{ name: "Cenário atual", contributions: f(cur), deductible: f(now), tax_effect_estimate: "0.00", liquidity_committed: f(cur) },
+                          { name: "Cenário com aporte adicional", contributions: f(cur + ext), deductible: f(after), tax_effect_estimate: f(eff), liquidity_committed: f(cur + ext) }],
+                premises: [`Alíquota marginal informada pelo titular: ${(rate * 100).toFixed(1).replace(".", ",")}%`,
+                           "Efeito é diferimento: o valor deduzido será tributado no resgate/benefício conforme regime escolhido.",
+                           "Tabela progressiva anual não é recalculada (regra BR-IRPF-TABELA-ANUAL pendente).", ...notes],
+                rule: { code: rule.code, version: rule.version, title: rule.title, sources: rule.sources.map(s => s.id) },
+                confidence: eligible ? 0.8 : 0.5,
+                disclaimer: "Simulação informativa. Mostra consequências estimadas de cenários; não é recomendação de investimento nem substitui a análise de um contador." };
+      } else {
+        const op = body.scenarios?.[0]?.operations?.[0];
+        const key = op && `${op.ticker}|${op.fraction}|${op.date}`;
+        res = key && d.simulation_grid[key];
+        if (!res) throw problem(422, "Cenário indisponível no modo demonstração",
+                                "No modo demonstração use as frações pré-calculadas (25/50/75/100%). Com a API conectada, qualquer quantidade é aceita.");
+        res = { ...res, id: "sim_demo_" + Date.now(), created_at: new Date().toISOString() };
+      }
+      LS.set("sims", [res, ...LS.get("sims", [])].slice(0, 10));
+      return res;
+    },
+    "POST /v1/assistant/query": () => {
+      const intent = classify(body.question, d.assistant_patterns);
+      const tpl = intent === "credencial" ? { ...d.assistant.bloqueado, guardrail: "credencial",
+        answer: "Nunca informe senhas ou tokens de banco aqui. A conexão com instituições acontece pelo Open Finance, com autenticação feita diretamente no ambiente da instituição. Veja em Conexões." }
+        : d.assistant[intent] || d.assistant.geral;
+      return { ...tpl, question: body.question, id: "ans_demo_" + Date.now(), created_at: new Date().toISOString(),
+               provider: tpl.provider + " (snapshot demo)" };
+    },
+    "GET /v1/theme-preference": () => ({ theme: LS.get("theme", "system") }),
+    "PUT /v1/theme-preference": () => { LS.set("theme", body.theme); return { theme: body.theme }; },
+  };
+  let m = R[`${method} ${p}`];
+  if (!m) {
+    let mm;
+    if ((mm = p.match(/^\/v1\/alerts\/(.+)$/)) && method === "PATCH") m = () => { alertStatus[mm[1]] = body.status; LS.set("alerts", alertStatus); return { id: mm[1], status: body.status }; };
+    else if ((mm = p.match(/^\/v1\/connections\/(.+)\/revoke$/))) m = () => { LS.set("revoked", [...new Set([...revoked, mm[1]])]); return mapConn({ ...[...d.connections.items, ...extraConns].find(c => c.id === mm[1]) }); };
+    else if ((mm = p.match(/^\/v1\/connections\/(.+)\/refresh$/))) m = () => {
+      if (revoked.includes(mm[1])) throw problem(409, "Conexão inativa", "Status: revogado");
+      const c = [...d.connections.items, ...extraConns].find(c => c.id === mm[1]);
+      return { connection: { ...c, last_sync_at: new Date().toISOString() }, stats: { replayed: 1, note: "sandbox: sem dados novos" } };
+    };
+  }
+  if (!m) throw problem(404, "Não encontrado", `${method} ${p}`);
+  await new Promise(r => setTimeout(r, 120));   // latência simulada p/ estados de carregamento
+  return structuredClone(m());
+}
+
+export const api = {
+  get: p => DEMO ? demoCall("GET", p) : http("GET", p),
+  post: (p, b, h) => DEMO ? demoCall("POST", p, b) : http("POST", p, b, h),
+  put: (p, b) => DEMO ? demoCall("PUT", p, b) : http("PUT", p, b),
+  patch: (p, b) => DEMO ? demoCall("PATCH", p, b) : http("PATCH", p, b),
+  del: p => DEMO ? Promise.reject(new ApiError({ status: 409, title: "Indisponível", detail: "Disponível com a API conectada." })) : http("DELETE", p),
+  demoGrid: async () => DEMO ? (await demo()).simulation_grid : null,
+};

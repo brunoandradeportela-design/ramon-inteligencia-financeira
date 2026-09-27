@@ -1,0 +1,12 @@
+{
+  "_aviso": "DADOS FICTÍCIOS DE SANDBOX — não representam nenhuma pessoa real",
+  "accounts": [{"accountId": "nu-001", "type": "CONTA_DEPOSITO_A_VISTA", "name": "Conta Nubank", "availableAmount": "12480.35", "currency": "BRL"}],
+  "transactions": [
+    {"transactionId": "nu-t-9001", "accountId": "nu-001", "bookingDate": "2026-09-22", "transactionName": "Supermercado Pague Menos", "amount": "-612.40", "creditDebitType": "DEBITO"},
+    {"transactionId": "nu-t-9002", "accountId": "nu-001", "bookingDate": "2026-09-24", "transactionName": "Uber viagem", "amount": "-38.90", "creditDebitType": "DEBITO"},
+    {"transactionId": "nu-t-9003", "accountId": "nu-001", "bookingDate": "2026-09-25", "transactionName": "Farmácia Drogasil", "amount": "-146.20", "creditDebitType": "DEBITO"}
+  ],
+  "investments": [
+    {"investmentId": "nu-inv-1", "productName": "CDB Nubank 102% CDI", "type": "BANK_FIXED_INCOMES", "grossAmount": "45310.22", "investedAmount": "41000.00", "liquidityDays": 1, "dueDate": "2028-06-30"}
+  ]
+}

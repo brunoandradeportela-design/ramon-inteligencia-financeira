@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - name: Lint
+        run: ruff check .
+      - name: Testes (unit, golden tax, IA/guardrails, segurança, E2E API)
+        env:
+          RAMON_REFERENCE_DATE: "2026-09-27"
+        run: pytest
+      - name: Contrato OpenAPI atualizado
+        env:
+          RAMON_REFERENCE_DATE: "2026-09-27"
+        run: |
+          python -c "import json; from apps.api.main import app; json.dump(app.openapi(), open('/tmp/openapi.json','w'), ensure_ascii=False, indent=1)"
+          diff -q /tmp/openapi.json packages/contracts/openapi.json
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Sintaxe dos módulos JS
+        run: for f in apps/web/js/*.js apps/web/app/js/*.js; do node --check "$f"; done

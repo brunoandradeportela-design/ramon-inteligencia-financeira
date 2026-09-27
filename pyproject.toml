@@ -1,0 +1,13 @@
+[project]
+name = "ramon-inteligencia-financeira"
+version = "1.0.0"
+description = "Sistema de Inteligência Financeira e Tributária — consolidar, analisar, simular, alertar e explicar."
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "E731", "I001"]

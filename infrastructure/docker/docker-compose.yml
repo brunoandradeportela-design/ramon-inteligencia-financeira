@@ -1,0 +1,32 @@
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/api.Dockerfile
+    environment:
+      RAMON_REFERENCE_DATE: "2026-09-27"
+      RAMON_SEED_DEMO: "1"
+      RAMON_CORS: "http://localhost:8080"
+    ports: ["8000:8000"]
+
+  web:
+    image: nginx:1.27-alpine
+    volumes:
+      - ../../apps/web:/usr/share/nginx/html:ro
+      - ./web-config.js:/usr/share/nginx/html/app/js/config.js:ro
+    ports: ["8080:80"]
+
+  # Alvo de produção (a API atual usa o Store em memória; ver ADR-0002)
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: dev-only
+      POSTGRES_DB: ramon
+    volumes:
+      - ../../database/migrations/0001_init.sql:/docker-entrypoint-initdb.d/0001_init.sql:ro
+    ports: ["5432:5432"]
+    profiles: ["db"]
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["db"]
