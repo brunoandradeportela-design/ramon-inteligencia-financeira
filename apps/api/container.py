@@ -12,6 +12,8 @@ from services.ai_orchestrator.orchestrator import AIOrchestrator
 from services.alert_engine.engine import AlertEngine
 from services.audit.log import AuditLog
 from services.billing import plans
+from services.billing.asaas import AsaasConfig
+from services.billing.gateway import BillingService
 from services.common.core import D, DomainError, NotFound, money, new_id, utcnow
 from services.common.store import Store
 from services.consent.service import Connection, ConsentService, connection_status
@@ -33,7 +35,7 @@ def reference_date() -> date:
 
 
 class Container:
-    def __init__(self, store: Store | None = None) -> None:
+    def __init__(self, store: Store | None = None, asaas_config: AsaasConfig | None = None, asaas_transport=None) -> None:
         self.store = store or Store()
         self.audit = AuditLog(self.store)
         self.identity = IdentityService(self.store)
@@ -49,6 +51,8 @@ class Container:
         self.notifications = NotificationService(self.store)
         self.of_adapter = OpenFinanceSandboxAdapter()
         self.crm = CRMService(self.store)
+        self.billing = BillingService(self.store, self.crm, self.identity,
+                                      asaas_config if asaas_config is not None else AsaasConfig.from_env(), transport=asaas_transport)
 
     # ------------------------------------------------------------------ leituras de domínio
     def _trades(self, uid):

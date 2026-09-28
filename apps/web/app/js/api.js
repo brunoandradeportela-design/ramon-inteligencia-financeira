@@ -2,7 +2,7 @@
    Em modo demo, todos os números vêm de data/demo.json, gerado pelos motores Python
    (tools/export_demo.py). O JS não recalcula imposto — só consulta a grade pré-calculada. */
 
-import { validateSignup, localCustomer, metricsFrom, addMonth, formatPhone, PRICE, PLAN_NAME } from "./crm_rules.js";
+import { validateSignup, localCustomer, metricsFrom, addMonth, formatPhone, PRICE, PLAN_NAME, paymentsFrom, docValid } from "./crm_rules.js";
 
 const BASE = (window.RAMON_API_BASE || "").replace(/\/$/, "");
 export const DEMO = !BASE;
@@ -82,6 +82,13 @@ async function demoCall(method, path, body) {
     "GET /v1/me": () => LS.get("role", "client") === "admin" ? { ...d.admin_me, theme: LS.get("theme", "system") }
       : { ...d.me, name: LS.get("name", null) || d.me.name, theme: LS.get("theme", d.me.theme) },
     "GET /v1/admin/crm/metrics": () => metricsFrom(crmItems()),
+    "GET /v1/admin/payments": () => paymentsFrom(crmItems(), d.gateway_payments || [], Object.fromEntries(new URLSearchParams(qs || ""))),
+    "GET /v1/admin/payments/gateway": () => ({ provider: "Asaas", demo: true, configured: false, env: null, webhooks: 0, last_webhook_at: null, last_sync_at: null }),
+    "POST /v1/admin/payments/sync": () => { throw problem(409, "Indisponível na demonstração", "A sincronização com o Asaas funciona com a API hospedada e a chave configurada no servidor."); },
+    "POST /v1/billing/checkout": () => {
+      if (!docValid(body.cpf_cnpj)) throw problem(422, "Dados inválidos", "CPF ou CNPJ inválido.");
+      return { invoice_url: null, demo: true, subscription_id: null };
+    },
     "GET /v1/admin/team": () => ({ items: [{ id: d.admin_me.id, name: d.admin_me.name, email: d.admin_me.email, roles: d.admin_me.roles }] }),
     "GET /v1/admin/crm/customers": () => {
       const q = new URLSearchParams(qs || ""), term = norm(q.get("q") || ""), dg = term.includes("@") ? "" : term.replace(/\D/g, ""), digits = dg.length >= 4 ? dg : "";

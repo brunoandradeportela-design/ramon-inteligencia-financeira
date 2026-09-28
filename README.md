@@ -19,7 +19,7 @@ A IA interpreta; os motores determinísticos calculam. Não é corretora nem con
 | Consentimento, Data Hub (Raw Vault → normalização → reconciliação), auditoria encadeada | `services/consent`, `services/ingestion`, `services/audit` | pronto |
 | Conectores: contrato único, importação CSV, Open Finance em **sandbox** | `connectors/` | produção depende de D-01 |
 | Schema PostgreSQL com RLS por titular + rollback | `database/migrations/` | alvo de produção (ADR-0002) |
-| Testes: golden cases tributários, guardrails de IA, segurança de upload, isolamento, E2E | `tests/` (73 testes) | passando |
+| Testes: golden cases tributários, guardrails de IA, segurança de upload, isolamento, E2E | `tests/` (85 testes) | passando |
 | CI (lint, testes, contrato OpenAPI) e deploy do site no GitHub Pages | `.github/workflows/` | pronto |
 | Análise dos documentos, decisões pendentes, ADRs, modelos CSV | `docs/` | pronto |
 
@@ -43,9 +43,9 @@ Free R$ 0 · **Pro R$ 89,90** · **Premium R$ 149,90** por mês. Como o menor pl
 * **Ficha do cliente:** contato, assinatura (próximo vencimento, total pago), uso da plataforma, registro de pagamentos (Pix, cartão, boleto, transferência), anotações (WhatsApp, ligação, e-mail, reunião), próxima ação, etiquetas e linha do tempo.
 * **Exportação CSV** para planilha.
 * **LGPD:** o CRM não mostra patrimônio, transações nem impostos do cliente; cada acesso do administrador a uma ficha fica registrado na trilha de auditoria do próprio cliente.
-* Pagamentos são registrados manualmente até a escolha do gateway (D-06); o webhook do gateway chamará `CRMService.record_payment`.
+* **Pagamentos (Asaas):** checkout com Pix/boleto/cartão, webhook em tempo real, sincronização automática de todas as cobranças e a tela **Pagamentos** com tudo o que entrou, está pendente, atrasado ou estornado — ver [docs/PAGAMENTOS-ASAAS.md](docs/PAGAMENTOS-ASAAS.md). Pagamentos fora do Asaas podem ser registrados manualmente.
 
-API: `GET /v1/admin/crm/metrics` · `GET /v1/admin/crm/customers?q=&stage=&plan=` · `GET|PATCH /v1/admin/crm/customers/{id}` · `POST …/{id}/notes` · `POST …/{id}/payments` · `GET /v1/admin/crm/export.csv`.
+API: `GET /v1/admin/payments` · `GET /v1/admin/payments/gateway?live=true` · `POST /v1/admin/payments/sync` · `POST /v1/billing/checkout` · `POST /v1/webhooks/asaas` · `GET /v1/admin/crm/metrics` · `GET /v1/admin/crm/customers?q=&stage=&plan=` · `GET|PATCH /v1/admin/crm/customers/{id}` · `POST …/{id}/notes` · `POST …/{id}/payments` · `GET /v1/admin/crm/export.csv`.
 
 > Para receber cadastros reais de clientes de qualquer lugar, a API precisa estar hospedada (ex.: Render, Railway, Fly.io ou VPS) e o `config.js` do site apontando para ela. No modo demonstração (página estática), um cadastro feito aparece no CRM **apenas no mesmo navegador**.
 
@@ -100,7 +100,7 @@ Ou com Docker: `docker compose -f infrastructure/docker/docker-compose.yml up --
 ### Testes e qualidade
 
 ```bash
-RAMON_REFERENCE_DATE=2026-09-27 pytest      # 73 testes
+RAMON_REFERENCE_DATE=2026-09-27 pytest      # 85 testes
 ruff check .
 ```
 

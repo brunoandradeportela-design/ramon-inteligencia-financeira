@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import threading
 import time
 import uuid
 from dataclasses import asdict
@@ -38,6 +39,22 @@ C = Container()
 if os.environ.get("RAMON_SEED_DEMO", "1") == "1":
     seed(C)
 OWNER = ensure_owner(C.identity)
+
+
+def _asaas_background_sync() -> None:
+    """Sincronização periódica com o Asaas (rede de segurança caso algum webhook se perca)."""
+    minutes = max(5, int(os.environ.get("RAMON_ASAAS_SYNC_MINUTES", "15")))
+    while True:
+        try:
+            r = C.billing.sync()
+            log.info("asaas sync ok: %s cobranças (%s vinculadas)", r["fetched"], r["matched"])
+        except Exception as e:  # noqa: BLE001 — nunca derruba a API
+            log.warning("asaas sync falhou: %s", getattr(e, "detail", type(e).__name__))
+        time.sleep(minutes * 60)
+
+
+if C.billing.enabled and os.environ.get("RAMON_ASAAS_SYNC", "1") == "1":
+    threading.Thread(target=_asaas_background_sync, name="asaas-sync", daemon=True).start()
 IDEMPOTENCY: dict[tuple[str, str], dict] = {}
 
 
@@ -517,6 +534,68 @@ def crm_export(q: str = "", stage: str = "", plan: str = "", request: Request = 
                    correlation_id=cid(request))
     return Response("\ufeff" + C.crm.export_csv(items), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=clientes.csv"})
+
+
+# ------------------------------------------------------------------ Pagamentos (Asaas)
+class CheckoutIn(BaseModel):
+    plan: str = Field(description="pro | premium")
+    cpf_cnpj: str = Field(description="CPF ou CNPJ do pagador (exigido pelo Asaas; enviado ao gateway e guardado só mascarado)")
+
+
+@app.post("/v1/billing/checkout")
+def billing_checkout(body: CheckoutIn, request: Request, user: User = Depends(current_user),
+                     idempotency_key: str | None = Header(default=None)):
+    def run():
+        r = C.billing.checkout(user, body.plan, body.cpf_cnpj, reference_date())
+        C.audit.record(owner_id=user.id, actor=user.id, resource="billing", action="checkout",
+                       after={"plan": body.plan, "subscription_id": r["subscription_id"]}, correlation_id=cid(request))
+        return r
+    return idempotent(request, idempotency_key, user, run)
+
+
+@app.get("/v1/billing/subscription")
+def billing_subscription(user: User = Depends(current_user)):
+    link = C.billing.link(user)
+    return {"gateway": "asaas" if C.billing.enabled else None, "plan": user.plan, "subscription": C.crm.subscription(user),
+            "payer_doc": link.get("doc_masked"), "payments": C.crm.payments(user)}
+
+
+@app.post("/v1/webhooks/asaas")
+def asaas_webhook(body: dict, asaas_access_token: str | None = Header(default=None)):
+    """Endpoint configurado no painel do Asaas (Integrações → Webhooks). Sempre responde 200 a eventos válidos."""
+    return C.billing.handle_webhook(asaas_access_token, body)
+
+
+@app.get("/v1/admin/payments")
+def admin_payments(status: str = "", method: str = "", origin: str = "", q: str = "", date_from: str = "", date_to: str = "",
+                   admin: User = Depends(admin_user)):
+    return C.billing.all_payments(C.identity.all_customers(), status=status, method=method, origin=origin, q=q,
+                                  date_from=date_from, date_to=date_to)
+
+
+@app.get("/v1/admin/payments/export.csv")
+def admin_payments_export(status: str = "", method: str = "", origin: str = "", q: str = "", date_from: str = "", date_to: str = "",
+                          request: Request = None, admin: User = Depends(admin_user)):
+    from fastapi.responses import Response
+    data = C.billing.all_payments(C.identity.all_customers(), status=status, method=method, origin=origin, q=q,
+                                  date_from=date_from, date_to=date_to)
+    C.audit.record(owner_id=admin.id, actor=admin.id, resource="payments", action="exportacao",
+                   after={"linhas": data["total"]}, correlation_id=cid(request))
+    return Response("\ufeff" + C.billing.export_csv(data["items"]), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=pagamentos.csv"})
+
+
+@app.get("/v1/admin/payments/gateway")
+def admin_gateway(live: bool = False, admin: User = Depends(admin_user)):
+    return C.billing.status(live=live)
+
+
+@app.post("/v1/admin/payments/sync")
+def admin_sync(request: Request, admin: User = Depends(admin_user)):
+    r = C.billing.sync()
+    C.audit.record(owner_id=admin.id, actor=admin.id, resource="payments", action="sincronizacao_asaas", after=r,
+                   correlation_id=cid(request))
+    return r
 
 
 class OwnerSetupIn(BaseModel):

@@ -3,6 +3,7 @@ import { api, DEMO, session, ApiError } from "./api.js";
 import { esc, icon, errorBox, loading } from "./ui.js";
 import * as V from "./views.js";
 import { crm } from "./views_crm.js";
+import { payments } from "./views_payments.js";
 
 const NAV = [
   ["dashboard", "Início", "home"], ["patrimonio", "Patrimônio", "wealth"], ["financas", "Finanças", "finance"],
@@ -10,14 +11,14 @@ const NAV = [
   ["documentos", "Documentos", "doc"], ["conexoes", "Conexões", "link"], ["assistente", "Assistente IA", "ai"],
 ];
 const TITLES = Object.fromEntries(NAV.map(([k, t]) => [k, t]));
-Object.assign(TITLES, { crm: "CRM · Clientes", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
+Object.assign(TITLES, { crm: "CRM · Clientes", pagamentos: "Pagamentos", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
 const PUBLIC = { entrar: V.login, cadastro: V.register };
 const ROUTES = {
   dashboard: V.dashboard, patrimonio: V.portfolio, financas: V.finance, tributacao: V.tax, simulador: V.simulator,
   alertas: V.alerts, documentos: V.documents, conexoes: V.connections, assistente: V.assistant, planos: V.plans,
   configuracoes: V.settings, privacidade: V.privacy,
 };
-const ADMIN_ROUTES = { ...ROUTES, crm };
+const ADMIN_ROUTES = { ...ROUTES, crm, pagamentos: payments };
 
 /* ------------------------------------------------------------ tema */
 const mq = matchMedia("(prefers-color-scheme: light)");
@@ -64,7 +65,7 @@ async function render() {
     if (!me) me = await api.get("/v1/me");
     const admin = me.roles?.includes("admin");
     if (admin && !ADMIN_ROUTES[r.name]) { location.hash = "#/crm"; return; }
-    if (!admin && r.name === "crm") { location.hash = "#/dashboard"; return; }
+    if (!admin && (r.name === "crm" || r.name === "pagamentos")) { location.hash = "#/dashboard"; return; }
     const view = admin ? ADMIN_ROUTES[r.name] : (ROUTES[r.name] || ROUTES.dashboard);
     const sh = document.querySelector(".shell");
     if (!sh || sh.dataset.role !== (admin ? "admin" : "client")) root.innerHTML = shell(admin);
@@ -85,7 +86,7 @@ async function render() {
 
 function shell(admin = false) {
   const items = NAV.map(([k, t, ic]) => `<a class="navi" href="#/${k}" data-nav="${k}">${icon(ic)}<span>${t}</span>${k === "alertas" ? '<span class="count" data-alert-count hidden></span>' : ""}</a>`).join("");
-  const nav = admin ? `<p class="eyebrow" style="padding:0 12px 8px">Administração</p><a class="navi" href="#/crm" data-nav="crm">${icon("wealth")}<span>CRM · Clientes</span></a>
+  const nav = admin ? `<p class="eyebrow" style="padding:0 12px 8px">Administração</p><a class="navi" href="#/crm" data-nav="crm">${icon("wealth")}<span>CRM · Clientes</span></a><a class="navi" href="#/pagamentos" data-nav="pagamentos">${icon("finance")}<span>Pagamentos</span></a>
       <p class="eyebrow" style="padding:14px 12px 8px">Plataforma</p>${items}`
     : NAV.map(([k, t, ic]) => `<a class="navi" href="#/${k}" data-nav="${k}">${icon(ic)}<span>${t}</span>${k === "alertas" ? '<span class="count" data-alert-count hidden></span>' : ""}</a>`).join("");
   return `<div class="shell" data-role="${admin ? "admin" : "client"}">

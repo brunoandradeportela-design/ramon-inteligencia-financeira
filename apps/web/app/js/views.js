@@ -1,7 +1,7 @@
 /* Telas do MVP (Dossiê §9 e §47; Plano técnico §12). Toda saída tributária é rotulada como estimativa. */
 import { api, DEMO, ApiError } from "./api.js";
 import { onLogin, themeSwitch, theme } from "./app.js";
-import { validateSignup, maskPhone, STAGES } from "./crm_rules.js";
+import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
 import { areaChart, barChart, brl, confidence, donut, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
 
 const trust = txt => `<p class="trust-line">${icon("info")}<span>${txt}</span></p>`;
@@ -504,8 +504,34 @@ export async function plans(el, r, { me }) {
   el.innerHTML = `<div class="grid g-3">${res.items.map(p => `<article class="plan ${p.code === "pro" ? "is-pro" : ""}"><h3>${esc(p.name)} ${me.plan === p.code ? badge("ativo", "seu plano") : ""}</h3>
     <p class="price">${+p.price_month ? brl(p.price_month) + " <small>/mês</small>" : "R$ 0"}</p><ul>${p.features.map(f => `<li>${esc(nice[f] || f)}</li>`).join("")}</ul>
     <button class="btn ${p.code === "pro" ? "btn--primary" : "btn--ghost"}" style="margin-top:14px;width:100%" ${me.plan === p.code ? "disabled" : ""} data-plan="${p.code}">${me.plan === p.code ? "Plano atual" : "Assinar"}</button></article>`).join("")}</div>
-    ${trust("Preços em teste comercial (hipóteses do Dossiê §4.1). A cobrança depende do gateway ainda não definido (decisão pendente D-06).")}`;
-  el.querySelectorAll("[data-plan]").forEach(b => b.onclick = () => toast("Checkout indisponível nesta versão: gateway de cobrança pendente de definição."));
+    <div id="checkout"></div>
+    ${trust("Pagamento seguro processado pelo Asaas: Pix, boleto ou cartão. Assinatura mensal, cancele quando quiser. O CPF/CNPJ é enviado apenas ao Asaas para emissão da cobrança.")}`;
+  el.querySelectorAll("[data-plan]").forEach(b => b.onclick = () => {
+    const plan = b.dataset.plan, p = res.items.find(x => x.code === plan);
+    if (plan === "free") { toast("Para voltar ao Free, fale com o suporte — sua assinatura é cancelada sem multa."); return; }
+    const box = el.querySelector("#checkout");
+    box.innerHTML = `<section class="card section" aria-label="Assinatura"><h3>Assinar o plano ${esc(p.name)} · ${brl(p.price_month)}/mês</h3>
+      <form id="co" class="row wrap" style="gap:10px;margin-top:12px;align-items:flex-end">
+        <div class="field" style="min-width:240px"><label for="co-doc">CPF ou CNPJ do pagador</label><input class="input" id="co-doc" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" required></div>
+        <button class="btn btn--primary" id="co-go">Ir para o pagamento</button><button type="button" class="btn btn--ghost" id="co-x">Cancelar</button></form>
+      <p class="err" id="co-err" role="alert"></p>
+      <p class="note">Você será levado à fatura do Asaas para escolher Pix, boleto ou cartão. O acesso Premium/Pro é confirmado automaticamente após o pagamento.</p></section>`;
+    box.querySelector("#co-x").onclick = () => box.innerHTML = "";
+    box.querySelector("#co-doc").focus();
+    box.querySelector("#co").onsubmit = async e => {
+      e.preventDefault();
+      const err = box.querySelector("#co-err"), doc = box.querySelector("#co-doc").value, go = box.querySelector("#co-go");
+      err.textContent = "";
+      if (!docValid(doc)) { err.textContent = "CPF ou CNPJ inválido."; return; }
+      go.disabled = true; go.textContent = "Gerando cobrança…";
+      try {
+        const r = await api.post("/v1/billing/checkout", { plan, cpf_cnpj: doc }, { "Idempotency-Key": crypto.randomUUID?.() || String(Date.now()) });
+        if (r.invoice_url) { window.location.href = r.invoice_url; return; }
+        err.textContent = r.demo ? "Modo demonstração: nenhuma cobrança real é gerada. Com a API conectada, você seria levado à fatura do Asaas." : "Cobrança criada. A fatura chegará por e-mail.";
+      } catch (x) { err.textContent = x?.problem?.detail || x.message; }
+      go.disabled = false; go.textContent = "Ir para o pagamento";
+    };
+  });
 }
 
 export async function settings(el, r, { me }) {

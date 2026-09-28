@@ -89,3 +89,46 @@ export function addMonth(iso) {
   return d.toISOString().slice(0, 10);
 }
 export { PRICE, PLAN_NAME };
+
+/* ------------------------------------------------------------------ pagamentos (visão geral do dono) */
+export const PAY_STATUS = [["pago", "Pago"], ["pendente", "Pendente"], ["atrasado", "Atrasado"], ["estornado", "Estornado"]];
+export const PAY_METHOD = { pix: "Pix", boleto: "Boleto", cartao: "Cartão", transferencia: "Transferência", a_definir: "A definir" };
+
+export function paymentsFrom(items, gatewayRows, f = {}) {
+  const map = new Map();
+  (gatewayRows || []).forEach(r => { if (r.status !== "cancelado") map.set(r.id, { ...r }); });
+  items.forEach(c => (c.payments || []).forEach(p => {
+    if (map.has(p.id)) return;
+    map.set(p.id, { id: p.id, user_id: c.id, customer_name: c.name, customer_email: c.email, value: p.amount, net_value: p.amount,
+      method: p.method, status: p.status, status_gateway: null, due_date: p.due_date || p.date, paid_date: p.status === "pago" ? p.date : null,
+      invoice_url: p.invoice_url || null, description: `Período ${p.period}`, origin: p.origin || "manual", created_at: p.recorded_at || p.date });
+  }));
+  const ref = r => (r.paid_date || r.due_date || "").slice(0, 10);
+  let rows = [...map.values()];
+  if (f.status) rows = rows.filter(r => r.status === f.status);
+  if (f.method) rows = rows.filter(r => r.method === f.method);
+  if (f.origin) rows = rows.filter(r => r.origin === f.origin || (f.origin === "sem_vinculo" && !r.user_id));
+  if (f.q) { const q = f.q.toLowerCase(); rows = rows.filter(r => (r.customer_name || "").toLowerCase().includes(q) || (r.customer_email || "").toLowerCase().includes(q) || r.id.toLowerCase().includes(q)); }
+  if (f.date_from) rows = rows.filter(r => ref(r) >= f.date_from);
+  if (f.date_to) rows = rows.filter(r => ref(r) <= f.date_to);
+  rows.sort((a, b) => ref(b).localeCompare(ref(a)));
+  const sum = (st, k = "value") => rows.filter(r => r.status === st).reduce((s, r) => s + +r[k], 0).toFixed(2);
+  return { total: rows.length, items: rows, totals: { recebido: sum("pago"), recebido_liquido: sum("pago", "net_value"), pendente: sum("pendente"),
+    atrasado: sum("atrasado"), estornado: sum("estornado"), sem_vinculo: rows.filter(r => !r.user_id).length,
+    count: Object.fromEntries(PAY_STATUS.map(([k]) => [k, rows.filter(r => r.status === k).length])) } };
+}
+
+export function docValid(v) {
+  const d = String(v || "").replace(/\D/g, "");
+  if (d.length === 11 && !/^(\d)\1+$/.test(d)) {
+    const n = [...d].map(Number);
+    for (const k of [9, 10]) { const s = n.slice(0, k).reduce((a, x, i) => a + x * (k + 1 - i), 0); if ((s * 10) % 11 % 10 !== n[k]) return false; }
+    return true;
+  }
+  if (d.length === 14 && !/^(\d)\1+$/.test(d)) {
+    const n = [...d].map(Number), w1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2], w2 = [6, ...w1];
+    const dv = (w, k) => { const r = w.reduce((a, x, i) => a + x * n[i], 0) % 11; return r < 2 ? 0 : 11 - r; };
+    return dv(w1, 12) === n[12] && dv(w2, 13) === n[13];
+  }
+  return false;
+}

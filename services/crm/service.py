@@ -2,8 +2,8 @@
 
 Princípio de minimização (LGPD): o CRM mostra dados cadastrais, comerciais e sinais de uso
 (contagens), nunca o patrimônio, transações ou impostos do cliente.
-Pagamentos são registrados manualmente até a definição do gateway (DECISÃO PENDENTE D-06);
-um webhook do gateway deverá chamar `record_payment` com origin="gateway".
+Pagamentos chegam do gateway Asaas (webhook + sincronização, ver services/billing/gateway.py) e
+também podem ser registrados manualmente (Pix direto, dinheiro, transferência).
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ STAGES = [
     ("cancelado", "Cancelado"),
 ]
 STAGE_KEYS = [k for k, _ in STAGES]
-PAYMENT_METHODS = {"pix", "cartao", "boleto", "transferencia"}
+PAYMENT_METHODS = {"pix", "cartao", "boleto", "transferencia", "a_definir"}
 PAYMENT_STATUS = {"pago", "pendente", "atrasado", "estornado"}
 NOTE_KINDS = {"nota", "ligacao", "whatsapp", "email", "reuniao"}
 GRACE_DAYS = 3          # tolerância após o vencimento de uma renovação
@@ -177,7 +177,7 @@ class CRMService:
             "signups_by_week": weeks,
             "by_profession": [{"profession": p, "count": c} for p, c in Counter(i["profession"] for i in items).most_common(8)],
             "by_plan": [{"plan": PLANS[p]["name"], "count": sum(1 for i in items if i["plan"] == p)} for p in PLANS],
-            "pricing_note": "Preços: Pro R$ 89,90 e Premium R$ 149,90 (ticket médio acima de R$ 80); pagamentos registrados manualmente até o gateway (D-06).",
+            "pricing_note": "Preços: Pro R$ 89,90 e Premium R$ 149,90 (ticket médio acima de R$ 80). Pagamentos via Asaas (webhook + sincronização) e registros manuais.",
         }
 
     # ------------------------------------------------------------------ escrita
@@ -233,6 +233,26 @@ class CRMService:
                 base = pay_date
             sub["next_due"] = _add_month(base).isoformat()
         elif status == "atrasado":
+            sub["status"] = "inadimplente"
+        return p
+
+    def upsert_gateway_payment(self, u: User, gid: str, *, amount, method: str, status: str, date_: str, due_date: str,
+                               period: str, reference: str, invoice_url: str | None) -> dict:
+        """Cobrança vinda do gateway: cria ou atualiza pelo id do Asaas (idempotente)."""
+        prev = self.store.get("payments", u.id, gid)
+        p = {"id": gid, "date": (date_ or due_date)[:10], "due_date": due_date[:10], "amount": str(money(amount)),
+             "method": method if method in PAYMENT_METHODS else "a_definir", "status": status if status in PAYMENT_STATUS else "pendente",
+             "period": period[:20], "reference": reference[:80], "recorded_by": "Asaas", "origin": "asaas",
+             "invoice_url": invoice_url, "recorded_at": (prev or {}).get("recorded_at") or utcnow().isoformat(),
+             "updated_at": utcnow().isoformat()}
+        self.store.put("payments", u.id, gid, p)
+        sub = self.subscription(u)
+        if p["status"] == "pago":
+            sub["status"] = "ativa"
+            nxt = _add_month(date.fromisoformat(p["due_date"])).isoformat()
+            if not sub.get("next_due") or nxt > sub["next_due"] or sub["next_due"] <= p["due_date"]:
+                sub["next_due"] = nxt
+        elif p["status"] == "atrasado":
             sub["status"] = "inadimplente"
         return p
 

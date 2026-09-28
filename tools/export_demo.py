@@ -75,6 +75,23 @@ def main() -> None:
     data["admin_me"] = c.get("/v1/me", headers=ha).json()
     data["crm"] = {"customers": customers, "metrics": c.get("/v1/admin/crm/metrics", headers=ha).json(),
                    "details": {i["id"]: c.get(f"/v1/admin/crm/customers/{i['id']}", headers=ha).json() for i in customers["items"]}}
+    # Pagamentos: exemplos fictícios de cobranças feitas direto no Asaas por quem não tem conta (sem vínculo),
+    # processados pelo mesmo BillingService (simulador da API do Asaas — nenhuma chamada real).
+    from apps.api import main as api_main
+    from services.billing.asaas import AsaasConfig
+    from services.billing.gateway import BillingService
+    from tests.fake_asaas import TEST_KEY, FakeAsaas
+    fa = FakeAsaas()
+    fa.customers["cus_demo1"] = {"id": "cus_demo1", "name": "Cliente avulso (exemplo)", "email": "avulso@exemplo.com"}
+    fa.add_payment(customer="cus_demo1", value=149.9, status="RECEIVED", billing="PIX", due="2026-09-18", paid="2026-09-18")
+    fa.add_payment(customer="cus_demo1", value=149.9, status="PENDING", billing="UNDEFINED", due="2026-10-18")
+    old_billing = api_main.C.billing
+    api_main.C.billing = BillingService(api_main.C.store, api_main.C.crm, api_main.C.identity,
+                                        AsaasConfig(TEST_KEY, "sandbox", ""), transport=fa.transport())
+    api_main.C.billing.sync()
+    data["gateway_payments"] = [{**r, "invoice_url": None} for r in c.get("/v1/admin/payments", headers=ha).json()["items"]
+                                if r["origin"] == "asaas"]
+    api_main.C.billing = old_billing
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"ok: {OUT} ({OUT.stat().st_size // 1024} KB, {len(grid)} simulações)")
