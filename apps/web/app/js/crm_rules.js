@@ -38,7 +38,7 @@ export function validateSignup(d) {
 /* ------------------------------------------------------------------ CRM demo (estado local deste navegador) */
 export const STAGES = [["novo_cadastro", "Novo cadastro"], ["ativado", "Ativado"], ["aguardando_pagamento", "Aguardando pagamento"],
   ["pagante", "Pagante"], ["inadimplente", "Inadimplente"], ["cancelado", "Cancelado"]];
-const PRICE = { free: "0.00", pro: "24.90", premium: "59.90" }, PLAN_NAME = { free: "Free", pro: "Pro", premium: "Premium" };
+const PRICE = { free: "0.00", pro: "89.90", premium: "149.90" }, PLAN_NAME = { free: "Free", pro: "Pro", premium: "Premium" };
 const REF = new Date("2026-09-27T12:00:00");
 
 export function metricsFrom(items) {
@@ -59,6 +59,7 @@ export function metricsFrom(items) {
   const total = items.length;
   return {
     total, new_7d: days(7), new_30d: days(30), paying: paying.length, mrr: mrr.toFixed(2), arr: (mrr * 12).toFixed(2),
+    ticket_medio: paying.length ? (mrr / paying.length).toFixed(2) : "0.00", ticket_target: "80.00", ticket_ok: paying.length > 0 && mrr / paying.length > 80,
     revenue_month: revenue.toFixed(2), overdue: count("inadimplente"),
     overdue_value: items.filter(i => i.stage === "inadimplente").reduce((s, i) => s + +i.subscription.price_month, 0).toFixed(2),
     conversion: total ? paying.length / total : 0, activation: total ? items.filter(i => i.stage !== "novo_cadastro").length / total : 0,

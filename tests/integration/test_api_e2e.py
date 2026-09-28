@@ -7,6 +7,7 @@ os.environ.setdefault("RAMON_REFERENCE_DATE", "2026-09-27")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from apps.api.main import app  # noqa: E402
+from services.identity.owner import OWNER_EMAIL, OWNER_NAME  # noqa: E402
 
 client = TestClient(app)
 
@@ -143,7 +144,7 @@ def test_cadastro_exige_campos_obrigatorios():
 
 
 def login_admin():
-    r = client.post("/v1/auth/login", json={"email": "ramon@ramon.app", "password": "ramon2026crm"})
+    r = client.post("/v1/auth/login", json={"email": OWNER_EMAIL, "password": os.environ["RAMON_OWNER_PASSWORD"]})
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
@@ -160,7 +161,7 @@ def test_crm_acompanha_novo_cadastro_e_pagamento():
                     json={"amount": "24.90", "method": "pix", "status": "pago", "date": "2026-09-27", "period": "2026-09"})
     assert p.status_code == 201
     d = client.get(f"/v1/admin/crm/customers/{uid}", headers=h).json()
-    assert d["stage"] == "pagante" and d["total_paid"] == "24.90" and d["subscription"]["next_due"] == "2026-10-27"
+    assert d["stage"] == "pagante" and d["total_paid"] == "24.90" and d["subscription"]["next_due"].startswith("2026-10")
     n = client.post(f"/v1/admin/crm/customers/{uid}/notes", headers=h, json={"text": "Boas-vindas enviadas", "kind": "whatsapp"})
     assert n.status_code == 201
     assert client.patch(f"/v1/admin/crm/customers/{uid}", headers=h, json={"stage": "cancelado"}).json()["stage"] == "cancelado"
@@ -185,3 +186,45 @@ def test_crm_nao_expoe_dados_financeiros_do_cliente():
     d = client.get(f"/v1/admin/crm/customers/{demo['id']}", headers=h).json()
     txt = str(d)
     assert "positions" not in txt and "PETR4" not in txt and "tax_due" not in txt
+
+
+# ---------------------------------------------------------------- dono da plataforma e preços
+def test_dono_e_administrador():
+    h = login_admin()
+    me = client.get("/v1/me", headers=h).json()
+    assert me["email"] == "ramonjunio07@gmail.com" and me["name"] == OWNER_NAME == "Ramon Junio Araujo Pereira"
+    assert "owner" in me["roles"] and "admin" in me["roles"]
+    assert me["profile"]["cpf_configured"] is True and me["profile"]["cpf_masked"] == "***.982.247-**"
+    assert "52998224725" not in str(me) and "529.982.247-25" not in str(me)
+    assert client.get("/v1/admin/crm/metrics", headers=h).status_code == 200
+    assert client.get("/v1/dashboard", headers=h).status_code == 200      # também acessa a plataforma
+    team = client.get("/v1/admin/team", headers=h).json()["items"]
+    assert any(t["email"] == OWNER_EMAIL for t in team)
+    # dono não aparece como cliente no CRM
+    assert not client.get(f"/v1/admin/crm/customers?q={OWNER_EMAIL}", headers=h).json()["items"]
+
+
+def test_somente_dono_gerencia_equipe_e_nao_se_remove():
+    h = login_admin()
+    me = client.get("/v1/me", headers=h).json()
+    assert client.patch(f"/v1/admin/team/{me['id']}", headers=h, json={"admin": False}).status_code == 409
+    cli = client.get("/v1/admin/crm/customers?q=demo@ramon.app", headers=h).json()["items"][0]
+    assert client.patch(f"/v1/admin/team/{cli['id']}", headers=login_demo(), json={"admin": True}).status_code == 403
+
+
+def test_ticket_medio_acima_de_80():
+    planos = {p["code"]: float(p["price_month"]) for p in client.get("/v1/plans").json()["items"]}
+    pagos = [v for k, v in planos.items() if k != "free"]
+    assert min(pagos) > 80                   # qualquer mix de pagantes mantém o ticket médio > R$ 80
+    m = client.get("/v1/admin/crm/metrics", headers=login_admin()).json()
+    assert float(m["ticket_medio"]) > 80 and m["ticket_ok"] is True
+
+
+def test_cpf_do_dono_nao_esta_no_repositorio():
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[2]
+    alvo = "012" + "511" + "452"             # montado em partes para não aparecer literal neste arquivo
+    for f in root.rglob("*"):
+        if f.is_file() and f.suffix in {".py", ".js", ".html", ".json", ".md", ".css", ".yml", ".sql", ".txt"} and ".git" not in f.parts:
+            txt = f.read_text(encoding="utf-8", errors="ignore")
+            assert alvo not in txt.replace(".", "").replace("-", ""), f

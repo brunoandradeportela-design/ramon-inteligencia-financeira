@@ -14,10 +14,10 @@ export async function crm(el, r) {
   const [m] = await Promise.all([api.get("/v1/admin/crm/metrics")]);
   el.innerHTML = `
     <div class="grid crm-kpis">
-      ${kpi("Clientes cadastrados", m.total, `+${m.new_7d} nos últimos 7 dias`)}
-      ${kpi("Novos em 30 dias", m.new_30d, `ativação ${pct(m.activation, 0)}`)}
-      ${kpi("Pagantes", m.paying, `conversão ${pct(m.conversion, 0)}`)}
+      ${kpi("Clientes cadastrados", m.total, `+${m.new_7d} em 7 dias · +${m.new_30d} em 30 dias`)}
+      ${kpi("Pagantes", m.paying, `conversão ${pct(m.conversion, 0)} · ativação ${pct(m.activation, 0)}`)}
       ${kpi("Receita recorrente (MRR)", brl(m.mrr), `ARR ${brl(m.arr)}`)}
+      ${kpi("Ticket médio mensal", brl(m.ticket_medio), `${m.ticket_ok ? "✓ acima" : "✗ abaixo"} da meta de ${brl(m.ticket_target)}`, m.ticket_ok ? "pos" : "neg")}
       ${kpi("Recebido no mês", brl(m.revenue_month), "pagamentos registrados")}
       ${kpi("Inadimplentes", m.overdue, `${brl(m.overdue_value)}/mês em aberto`, m.overdue ? "neg" : "")}
     </div>
@@ -40,6 +40,7 @@ export async function crm(el, r) {
       <div id="list" style="margin-top:12px"></div>
     </section>
     <div id="detail"></div>
+    <section class="card section" id="team"></section>
     <p class="note">${esc(m.pricing_note)} O CRM mostra dados de cadastro, assinatura e sinais de uso — nunca patrimônio, transações ou impostos do cliente (minimização LGPD). Todo acesso a um cliente fica registrado na trilha de auditoria dele.</p>`;
 
   async function loadList() {
@@ -144,7 +145,7 @@ export async function crm(el, r) {
 
   async function refreshKpis() {
     const m2 = await api.get("/v1/admin/crm/metrics");
-    const vals = [m2.total, m2.new_30d, m2.paying, brl(m2.mrr), brl(m2.revenue_month), m2.overdue];
+    const vals = [m2.total, m2.paying, brl(m2.mrr), brl(m2.ticket_medio), brl(m2.revenue_month), m2.overdue];
     el.querySelectorAll(".crm-kpis .kpi").forEach((k, i) => k.textContent = vals[i]);
     m2.stages.forEach(s => { const b = el.querySelector(`[data-stage="${s.key}"] b`); if (b) b.textContent = s.count; });
   }
@@ -167,6 +168,13 @@ export async function crm(el, r) {
   };
   await loadList();
   if (selected) loadDetail();
+  const teamBox = el.querySelector("#team");
+  try {
+    const tm = await api.get("/v1/admin/team");
+    teamBox.innerHTML = `<h3>Dono e administradores</h3><ul class="stack small" style="margin-top:10px">${tm.items.map(a => `<li class="row between wrap"><span><b>${esc(a.name)}</b> · ${esc(a.email)}</span>
+      <span>${a.roles.includes("owner") ? '<span class="badge b-ativo">Dono</span> ' : ""}<span class="badge b-classificado">Administrador</span></span></li>`).join("")}</ul>
+      <p class="note">O dono tem acesso total: CRM geral, todas as telas da plataforma e gestão de administradores.</p>`;
+  } catch { teamBox.remove(); }
 }
 
 function kpi(label, value, sub, cls = "") {

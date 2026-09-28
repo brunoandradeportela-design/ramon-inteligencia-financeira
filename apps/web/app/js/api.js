@@ -63,9 +63,9 @@ async function demoCall(method, path, body) {
   const R = {
     "POST /v1/auth/login": () => {
       const email = norm(body.email || "");
-      if (email === "ramon@ramon.app" && body.password === "ramon2026crm") { LS.set("role", "admin"); return { token: "demo-admin", user: d.admin_me }; }
+      if (email === d.admin_me.email && body.password === "ramon2026crm") { LS.set("role", "admin"); return { token: "demo-admin", user: d.admin_me }; }
       if (email !== "demo@ramon.app" || body.password !== "demo2026ramon")
-        throw problem(401, "Não autenticado", "Modo demonstração: cliente demo@ramon.app / demo2026ramon · administrador ramon@ramon.app / ramon2026crm.");
+        throw problem(401, "Não autenticado", "E-mail ou senha incorretos.");
       LS.set("role", "client"); LS.set("name", null);
       return { token: "demo-token", user: d.me };
     },
@@ -82,8 +82,9 @@ async function demoCall(method, path, body) {
     "GET /v1/me": () => LS.get("role", "client") === "admin" ? { ...d.admin_me, theme: LS.get("theme", "system") }
       : { ...d.me, name: LS.get("name", null) || d.me.name, theme: LS.get("theme", d.me.theme) },
     "GET /v1/admin/crm/metrics": () => metricsFrom(crmItems()),
+    "GET /v1/admin/team": () => ({ items: [{ id: d.admin_me.id, name: d.admin_me.name, email: d.admin_me.email, roles: d.admin_me.roles }] }),
     "GET /v1/admin/crm/customers": () => {
-      const q = new URLSearchParams(qs || ""), term = norm(q.get("q") || ""), digits = term.replace(/\D/g, "");
+      const q = new URLSearchParams(qs || ""), term = norm(q.get("q") || ""), dg = term.includes("@") ? "" : term.replace(/\D/g, ""), digits = dg.length >= 4 ? dg : "";
       let items = crmItems().map(({ payments, notes, timeline, ...rest }) => rest);
       if (term) items = items.filter(i => norm(i.name).includes(term) || i.email.includes(term) || norm(i.profession).includes(term) || (digits && i.phone.includes(digits)));
       if (q.get("stage")) items = items.filter(i => i.stage === q.get("stage"));

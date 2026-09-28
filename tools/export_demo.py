@@ -12,6 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 
 os.environ.setdefault("RAMON_REFERENCE_DATE", "2026-09-27")
+os.environ.setdefault("RAMON_OWNER_PASSWORD", "exportacaoDemo2026")   # só para o processo de exportação
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -67,7 +68,8 @@ def main() -> None:
     data["simulation_grid"] = grid
     data["simulations"] = {"items": []}
     # CRM (visão do administrador) — clientes fictícios
-    ta = c.post("/v1/auth/login", json={"email": "ramon@ramon.app", "password": "ramon2026crm"}).json()["token"]
+    from services.identity.owner import OWNER_EMAIL
+    ta = c.post("/v1/auth/login", json={"email": OWNER_EMAIL, "password": os.environ["RAMON_OWNER_PASSWORD"]}).json()["token"]
     ha = {"Authorization": f"Bearer {ta}"}
     customers = c.get("/v1/admin/crm/customers", headers=ha).json()
     data["admin_me"] = c.get("/v1/me", headers=ha).json()

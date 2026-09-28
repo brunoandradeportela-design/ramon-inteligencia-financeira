@@ -12,12 +12,12 @@ const NAV = [
 const TITLES = Object.fromEntries(NAV.map(([k, t]) => [k, t]));
 Object.assign(TITLES, { crm: "CRM · Clientes", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
 const PUBLIC = { entrar: V.login, cadastro: V.register };
-const ADMIN_ROUTES = { crm, configuracoes: V.settings };
 const ROUTES = {
   dashboard: V.dashboard, patrimonio: V.portfolio, financas: V.finance, tributacao: V.tax, simulador: V.simulator,
   alertas: V.alerts, documentos: V.documents, conexoes: V.connections, assistente: V.assistant, planos: V.plans,
   configuracoes: V.settings, privacidade: V.privacy,
 };
+const ADMIN_ROUTES = { ...ROUTES, crm };
 
 /* ------------------------------------------------------------ tema */
 const mq = matchMedia("(prefers-color-scheme: light)");
@@ -68,7 +68,7 @@ async function render() {
     const view = admin ? ADMIN_ROUTES[r.name] : (ROUTES[r.name] || ROUTES.dashboard);
     const sh = document.querySelector(".shell");
     if (!sh || sh.dataset.role !== (admin ? "admin" : "client")) root.innerHTML = shell(admin);
-    alertsOpen = admin ? 0 : (await api.get("/v1/alerts").catch(() => ({ items: [] }))).items.filter(a => a.status === "novo").length;
+    alertsOpen = (await api.get("/v1/alerts").catch(() => ({ items: [] }))).items.filter(a => a.status === "novo").length;
     updateShell(r.name);
     const main = document.getElementById("view");
     main.innerHTML = loading();
@@ -84,7 +84,9 @@ async function render() {
 }
 
 function shell(admin = false) {
-  const nav = admin ? `<p class="eyebrow" style="padding:0 12px 8px">Administração</p><a class="navi" href="#/crm" data-nav="crm">${icon("wealth")}<span>CRM · Clientes</span></a>`
+  const items = NAV.map(([k, t, ic]) => `<a class="navi" href="#/${k}" data-nav="${k}">${icon(ic)}<span>${t}</span>${k === "alertas" ? '<span class="count" data-alert-count hidden></span>' : ""}</a>`).join("");
+  const nav = admin ? `<p class="eyebrow" style="padding:0 12px 8px">Administração</p><a class="navi" href="#/crm" data-nav="crm">${icon("wealth")}<span>CRM · Clientes</span></a>
+      <p class="eyebrow" style="padding:14px 12px 8px">Plataforma</p>${items}`
     : NAV.map(([k, t, ic]) => `<a class="navi" href="#/${k}" data-nav="${k}">${icon(ic)}<span>${t}</span>${k === "alertas" ? '<span class="count" data-alert-count hidden></span>' : ""}</a>`).join("");
   return `<div class="shell" data-role="${admin ? "admin" : "client"}">
     <aside class="side" aria-label="Navegação">
@@ -92,7 +94,7 @@ function shell(admin = false) {
       <nav>${nav}</nav>
       <div class="side__bottom">
         <div class="side__sep"></div>
-        ${admin ? "" : `<a class="navi" href="#/planos" data-nav="planos">${icon("plan")}<span>Planos</span></a>
+        ${`<a class="navi" href="#/planos" data-nav="planos">${icon("plan")}<span>Planos</span></a>
         <a class="navi" href="#/privacidade" data-nav="privacidade">${icon("shield")}<span>Privacidade</span></a>`}
         <a class="navi" href="#/configuracoes" data-nav="configuracoes">${icon("gear")}<span>Configurações</span></a>
       </div>

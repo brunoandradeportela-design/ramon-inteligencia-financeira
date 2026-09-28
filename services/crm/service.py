@@ -13,7 +13,7 @@ from collections import Counter
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from services.billing.plans import PLANS
+from services.billing.plans import PLANS, TICKET_TARGET
 from services.common.core import D, ValidationFailed, money, new_id, utcnow
 from services.common.store import Store
 from services.identity.service import User, format_phone
@@ -113,7 +113,8 @@ class CRMService:
         items = [self.summary(u, today) for u in users]
         if q:
             ql = q.lower().strip()
-            digits = "".join(c for c in ql if c.isdigit())
+            digits = "".join(c for c in ql if c.isdigit()) if "@" not in ql else ""
+            digits = digits if len(digits) >= 4 else ""
             items = [i for i in items if ql in i["name"].lower() or ql in i["email"] or ql in i["profession"].lower()
                      or (digits and digits in i["phone"])]
         if stage:
@@ -167,6 +168,8 @@ class CRMService:
             "new_7d": sum(1 for c in created if c and c > today - timedelta(days=7)),
             "new_30d": sum(1 for c in created if c and c > today - timedelta(days=30)),
             "paying": len(paying), "mrr": str(money(mrr)), "arr": str(money(mrr * 12)),
+            "ticket_medio": str(money(mrr / len(paying))) if paying else "0.00", "ticket_target": TICKET_TARGET,
+            "ticket_ok": bool(paying) and mrr / len(paying) > D(TICKET_TARGET),
             "revenue_month": str(money(revenue_month)), "overdue": by_stage.get("inadimplente", 0), "overdue_value": str(money(overdue_value)),
             "conversion": (len(paying) / total) if total else 0.0,
             "activation": (sum(1 for i in items if i["stage"] != "novo_cadastro") / total) if total else 0.0,
@@ -174,7 +177,7 @@ class CRMService:
             "signups_by_week": weeks,
             "by_profession": [{"profession": p, "count": c} for p, c in Counter(i["profession"] for i in items).most_common(8)],
             "by_plan": [{"plan": PLANS[p]["name"], "count": sum(1 for i in items if i["plan"] == p)} for p in PLANS],
-            "pricing_note": "Preços em teste (hipóteses do Dossiê §4.1); pagamentos registrados manualmente até o gateway (D-06).",
+            "pricing_note": "Preços: Pro R$ 89,90 e Premium R$ 149,90 (ticket médio acima de R$ 80); pagamentos registrados manualmente até o gateway (D-06).",
         }
 
     # ------------------------------------------------------------------ escrita

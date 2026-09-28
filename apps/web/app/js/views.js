@@ -21,7 +21,7 @@ export async function login(root, r) {
   root.innerHTML = authLayout(`
     <a href="../index.html" class="muted small">← Voltar ao site</a>
     <h1>Entrar</h1>
-    ${DEMO ? trust("Modo demonstração — cliente: <b>demo@ramon.app</b> / <b>demo2026ramon</b> (já preenchido) · administrador (CRM): <b>ramon@ramon.app</b> / <b>ramon2026crm</b>.") : ""}
+    ${DEMO ? trust("Modo demonstração: a conta de cliente <b>demo@ramon.app</b> já vem preenchida. O dono da plataforma entra com o próprio e-mail.") : ""}
     <form id="f" class="stack" novalidate>
       <div class="field"><label for="email">E-mail</label><input class="input" id="email" type="email" autocomplete="username" required value="${DEMO ? "demo@ramon.app" : ""}"></div>
       <div class="field"><label for="pw">Senha</label><input class="input" id="pw" type="password" autocomplete="current-password" required value="${DEMO ? "demo2026ramon" : ""}"></div>
@@ -512,7 +512,7 @@ export async function settings(el, r, { me }) {
   el.innerHTML = `<div class="grid g-2">
     <section class="card"><h3>Aparência</h3><p class="small muted" style="margin-top:6px">Claro, Escuro ou seguir o sistema operacional. A preferência fica salva neste dispositivo e no seu perfil. Trocar o tema nunca altera dados ou cálculos.</p>
       <div style="margin-top:14px">${themeSwitch()}</div></section>
-    <section class="card"><h3>Perfil</h3><ul class="stack small" style="margin-top:10px"><li><b>Nome:</b> ${esc(me.name)}</li><li><b>E-mail:</b> ${esc(me.email)}</li><li><b>Profissão:</b> ${esc(me.profession || "—")}</li><li><b>Telefone:</b> ${esc(me.phone || "—")}</li><li><b>Plano:</b> ${esc(me.plan)}</li>
+    <section class="card"><h3>Perfil</h3><ul class="stack small" style="margin-top:10px"><li><b>Nome:</b> ${esc(me.name)}</li><li><b>E-mail:</b> ${esc(me.email)}</li><li><b>Profissão:</b> ${esc(me.profession || "—")}</li>${me.roles?.includes("owner") ? `<li><b>Papel:</b> dono e administrador</li><li><b>CPF:</b> ${me.profile?.cpf_configured ? esc(me.profile.cpf_masked) + " (configurado no servidor)" : "configurado apenas no servidor (variável RAMON_OWNER_CPF)"}</li>` : ""}<li><b>Telefone:</b> ${esc(me.phone || "—")}</li><li><b>Plano:</b> ${esc(me.plan)}</li>
       <li><b>Objetivos:</b> ${esc((me.profile?.objetivos || []).join(", ") || "—")}</li></ul></section>
     <section class="card"><h3>Notificações</h3><label class="check" style="margin-top:10px"><input type="checkbox" checked> Alertas no aplicativo</label>
       <label class="check" style="margin-top:8px"><input type="checkbox"> Resumo semanal por e-mail</label><p class="note">Apenas alertas de severidade “atenção” ou maior; alertas repetidos não são reenviados.</p></section>

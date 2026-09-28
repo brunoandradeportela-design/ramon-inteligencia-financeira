@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from apps.api.container import Container, reference_date
 from database.seeds.demo import seed
+from services.identity.owner import complete_setup, ensure_owner
 from services.billing import plans
 from services.common.core import DomainError, Forbidden, NotFound, ValidationFailed
 from services.identity.service import User
@@ -36,6 +37,7 @@ app.add_middleware(CORSMiddleware, allow_origins=os.environ.get("RAMON_CORS", "*
 C = Container()
 if os.environ.get("RAMON_SEED_DEMO", "1") == "1":
     seed(C)
+OWNER = ensure_owner(C.identity)
 IDEMPOTENCY: dict[tuple[str, str], dict] = {}
 
 
@@ -515,3 +517,47 @@ def crm_export(q: str = "", stage: str = "", plan: str = "", request: Request = 
                    correlation_id=cid(request))
     return Response("\ufeff" + C.crm.export_csv(items), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=clientes.csv"})
+
+
+class OwnerSetupIn(BaseModel):
+    token: str
+    password: str
+
+
+@app.post("/v1/auth/owner/setup")
+def owner_setup(body: OwnerSetupIn, request: Request):
+    """Define a senha do dono na primeira inicialização (token exibido no log do servidor)."""
+    u = complete_setup(C.identity, body.token, body.password)
+    C.audit.record(owner_id=u.id, actor=u.id, resource="owner", action="senha_definida", correlation_id=cid(request))
+    return {"status": "ok"}
+
+
+# ------------------------------------------------------------------ equipe (somente o dono)
+def owner_user(user: User = Depends(current_user)) -> User:
+    if "owner" not in user.roles:
+        raise Forbidden("Somente o dono da plataforma gerencia administradores.")
+    return user
+
+
+class TeamIn(BaseModel):
+    admin: bool
+
+
+@app.get("/v1/admin/team")
+def team(owner: User = Depends(owner_user)):
+    admins = [u for u in C.store.glist("users") if "admin" in u.roles]
+    return {"items": [{"id": u.id, "name": u.name, "email": u.email, "roles": u.roles} for u in admins]}
+
+
+@app.patch("/v1/admin/team/{user_id}")
+def team_update(user_id: str, body: TeamIn, request: Request, owner: User = Depends(owner_user)):
+    u = C.identity.get(user_id)
+    if not u:
+        raise NotFound("Usuário")
+    if "owner" in u.roles:
+        raise DomainError(409, "Operação inválida", "O dono não pode perder o acesso de administrador.")
+    before = list(u.roles)
+    u.roles = sorted(set(u.roles) | {"admin"}) if body.admin else [r for r in u.roles if r != "admin"] or ["titular"]
+    C.audit.record(owner_id=u.id, actor=owner.id, resource="roles", action="alterado", before=before, after=u.roles,
+                   correlation_id=cid(request))
+    return {"id": u.id, "roles": u.roles}

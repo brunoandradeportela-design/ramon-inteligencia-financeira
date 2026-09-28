@@ -1,7 +1,7 @@
 """Dados de DEMONSTRAÇÃO (fictícios) para o titular demo. Nunca usar em produção.
 
 Login demo (cliente): demo@ramon.app / demo2026ramon
-Login demo (administrador/CRM): ramon@ramon.app / ramon2026crm
+Dono/administrador: definido em services/identity/owner.py (senha só por variável de ambiente).
 """
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ from decimal import Decimal
 
 from services.common.core import new_id, utcnow
 from services.consent.service import Connection
+from services.billing.plans import PLANS
 from services.document_engine.engine import Document
+from services.identity.owner import OWNER_NAME
 
 DEMO_EMAIL = "demo@ramon.app"
 DEMO_PASSWORD = "demo2026ramon"
-ADMIN_EMAIL = "ramon@ramon.app"
-ADMIN_PASSWORD = "ramon2026crm"
 
 # Clientes fictícios para o CRM (nomes inventados; telefones com final 0000–0099 não pertencem a ninguém real)
 FIRST = ["Ana", "Carlos", "Juliana", "Marcos", "Patrícia", "Rafael", "Fernanda", "Eduardo", "Camila", "Lucas", "Mariana",
@@ -149,15 +149,12 @@ def seed(c) -> None:
     c.audit.record(owner_id=uid, actor="system", resource="seed", action="demo_data_loaded", reason="ambiente de demonstração")
     c.crm.subscription(u)
     for per, d in (("2026-07", "2026-07-02"), ("2026-08", "2026-08-02"), ("2026-09", "2026-09-02")):
-        c.crm.record_payment(u, amount="24.90", method="cartao", status="pago", date_=d, period=per, recorded_by="seed")
+        c.crm.record_payment(u, amount=PLANS["pro"]["price_month"], method="cartao", status="pago", date_=d, period=per, recorded_by="seed")
     u.last_login_at = "2026-09-27T09:40:00+00:00"
     seed_crm(c)
 
 
 def seed_crm(c) -> None:
-    admin = c.identity.register(email=ADMIN_EMAIL, name="Ramon Administrador", password=ADMIN_PASSWORD, accept_terms=True,
-                                phone="(69) 99300-0000", profession="Gestor da plataforma", origin="interno")
-    admin.roles = ["admin"]
     rnd = random.Random(2026)
     from datetime import datetime, timedelta
     ref = date(2026, 9, 27)
@@ -181,7 +178,7 @@ def seed_crm(c) -> None:
                              kind="extrato", title="Extrato", status="utilizado", uploaded_at=u.created_at, storage_key="")
                 c.store.put("documents", u.id, d.id, d)
             continue
-        price = "24.90" if plan == "pro" else "59.90"
+        price = PLANS[plan]["price_month"]
         fate = rnd.choices(["em_dia", "atrasado", "aguardando", "cancelado"], weights=[62, 14, 14, 10])[0]
         if fate == "aguardando":
             if (ref - created.date()).days <= 3:
@@ -197,7 +194,7 @@ def seed_crm(c) -> None:
             pay_day = date(y, m, min(pay_day.day, 28))
         if fate == "cancelado":
             c.crm.subscription(u)["status"] = "cancelada"
-            c.crm.add_note(u, text="Cliente pediu cancelamento: vai reavaliar no próximo ano.", kind="whatsapp", author="Ramon Administrador")
+            c.crm.add_note(u, text="Cliente pediu cancelamento: vai reavaliar no próximo ano.", kind="whatsapp", author=OWNER_NAME)
     late = c.identity.register(email="helena.duarte@exemplo.com.br", name="Helena Duarte Siqueira", password="clienteDemo2026",
                                accept_terms=True, plan="pro", phone="(69) 99911-0098", profession="Nutricionista", origin="instagram")
     late.created_at = "2026-09-25T14:20:00+00:00"
@@ -205,5 +202,5 @@ def seed_crm(c) -> None:
     notes = [("Primeiro contato feito; interessado no simulador de PGBL.", "whatsapp"),
              ("Pediu demonstração das conexões Open Finance.", "ligacao"), ("Enviado material sobre o plano Premium.", "email")]
     for u, (t, k) in zip(c.identity.all_customers()[1:4], notes):
-        c.crm.add_note(u, text=t, kind=k, author="Ramon Administrador")
+        c.crm.add_note(u, text=t, kind=k, author=OWNER_NAME)
         c.crm.update(u, next_action="Retornar contato", next_action_date="2026-09-30", tags=["lead quente"])

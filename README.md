@@ -19,13 +19,23 @@ A IA interpreta; os motores determinísticos calculam. Não é corretora nem con
 | Consentimento, Data Hub (Raw Vault → normalização → reconciliação), auditoria encadeada | `services/consent`, `services/ingestion`, `services/audit` | pronto |
 | Conectores: contrato único, importação CSV, Open Finance em **sandbox** | `connectors/` | produção depende de D-01 |
 | Schema PostgreSQL com RLS por titular + rollback | `database/migrations/` | alvo de produção (ADR-0002) |
-| Testes: golden cases tributários, guardrails de IA, segurança de upload, isolamento, E2E | `tests/` (67 testes) | passando |
+| Testes: golden cases tributários, guardrails de IA, segurança de upload, isolamento, E2E | `tests/` (73 testes) | passando |
 | CI (lint, testes, contrato OpenAPI) e deploy do site no GitHub Pages | `.github/workflows/` | pronto |
 | Análise dos documentos, decisões pendentes, ADRs, modelos CSV | `docs/` | pronto |
 
 ## CRM de clientes (área do administrador)
 
-Acesse `app/#/crm` com um usuário de papel `admin` (demo: `ramon@ramon.app` / `ramon2026crm`).
+Acesse `app/#/crm` com o dono da plataforma (demo: `ramonjunio07@gmail.com` / `ramon2026crm` — senha válida **só** no modo demonstração).
+
+### Dono e administrador
+
+* **Ramon Junio Araujo Pereira** (`ramonjunio07@gmail.com`) é criado automaticamente na inicialização da API com os papéis `owner` + `admin` e plano Premium (`services/identity/owner.py`). Tem acesso ao CRM geral e a todas as telas da plataforma; só o dono gerencia administradores (`GET|PATCH /v1/admin/team`) e ele não pode remover o próprio acesso.
+* **CPF:** por ser dado de identificação e o repositório ser público, o CPF **não fica no código**. Configure-o como secret `RAMON_OWNER_CPF` no servidor; ele é validado (dígitos verificadores) e exibido apenas mascarado (`***.xxx.xxx-**`). Um teste garante que o CPF não aparece em nenhum arquivo do repositório.
+* **Senha:** secret `RAMON_OWNER_PASSWORD` ou, sem ela, um token de uso único impresso no log na primeira inicialização → `POST /v1/auth/owner/setup {token, password}`.
+
+### Preço e ticket médio
+
+Free R$ 0 · **Pro R$ 89,90** · **Premium R$ 149,90** por mês. Como o menor plano pago custa R$ 89,90, o **ticket médio mensal dos pagantes (MRR ÷ pagantes) fica sempre acima de R$ 80** — meta exibida no CRM (`ticket_medio`, `ticket_target`). Esses preços estão acima das faixas de teste do Dossiê §4.1 e devem ser validados com teste de conversão.
 
 * **Cadastro obrigatório:** e-mail, nome completo (nome e sobrenome), profissão e telefone com DDD — validados no navegador e na API (`422` com o campo que faltou). Telefone é normalizado para `+55DDNNNNNNNNN` e vira link de WhatsApp.
 * **Funil automático:** Novo cadastro → Ativado (enviou documento/conectou instituição) → Aguardando pagamento → Pagante → Inadimplente → Cancelado. A etapa pode ser ajustada manualmente e volta ao automático com um clique.
@@ -90,7 +100,7 @@ Ou com Docker: `docker compose -f infrastructure/docker/docker-compose.yml up --
 ### Testes e qualidade
 
 ```bash
-RAMON_REFERENCE_DATE=2026-09-27 pytest      # 67 testes
+RAMON_REFERENCE_DATE=2026-09-27 pytest      # 73 testes
 ruff check .
 ```
 
