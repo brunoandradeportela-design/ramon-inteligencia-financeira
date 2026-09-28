@@ -1,5 +1,5 @@
 /* Telas do MVP (Dossiê §9 e §47; Plano técnico §12). Toda saída tributária é rotulada como estimativa. */
-import { api, DEMO, ApiError } from "./api.js";
+import { api, DEMO, ANALYTICS_DEMO, ApiError } from "./api.js";
 import { onLogin, themeSwitch, theme } from "./app.js";
 import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
 import { areaChart, barChart, brl, confidence, donut, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
@@ -291,7 +291,7 @@ export async function simulator(el) {
       <div class="field"><label for="tk">Ativo</label><select class="input" id="tk">${rv.map(p => `<option value="${esc(p.asset_id)}" data-q="${p.quantity}">${esc(p.name)} · ${num(p.quantity)} un.</option>`).join("")}</select></div>
       <div class="field"><label for="fr">Quantidade</label><select class="input" id="fr">${[25, 50, 75, 100].map(f => `<option value="${f}">${f}% da posição</option>`).join("")}</select><span class="small muted" id="qh"></span></div>
       <div class="field"><label for="dd">Data da venda</label><select class="input" id="dd"><option value="2026-09-29">29/09/2026 (mês atual)</option><option value="2026-10-15">15/10/2026 (próximo mês)</option></select></div>
-      ${DEMO ? "" : `<div class="field"><label for="pr">Preço (opcional)</label><input class="input" id="pr" inputmode="decimal" placeholder="última cotação"></div>`}
+      ${ANALYTICS_DEMO ? "" : `<div class="field"><label for="pr">Preço (opcional)</label><input class="input" id="pr" inputmode="decimal" placeholder="última cotação"></div>`}
     </div><button class="btn btn--primary">Simular impacto</button></form>`;
   const pgblForm = () => `<h3>Cenário: aporte adicional em PGBL</h3>
     <form id="pf" class="stack" style="margin-top:12px"><div class="form-grid">
@@ -475,7 +475,7 @@ export async function assistant(el, r) {
       <li>• Checagem de consistência: nenhum número sem evidência é exibido.</li>
       <li>• Pedidos de recomendação de compra/venda são bloqueados (regulação CVM).</li>
       <li>• Cada resposta é auditada com correlation_id e ferramentas usadas.</li></ul>
-      ${DEMO ? trust("Modo demonstração: respostas geradas pelo orquestrador real sobre o snapshot demo.") : ""}</section></div>`;
+      ${ANALYTICS_DEMO ? trust("Modo demonstração: respostas geradas pelo orquestrador real sobre o snapshot demo.") : ""}</section></div>`;
   const chat = el.querySelector("#chat");
   const ask = async q => {
     if (!q.trim()) return;
@@ -550,8 +550,8 @@ export async function privacy(el) {
   const [c, a] = await Promise.all([api.get("/v1/consents"), api.get("/v1/audit")]);
   el.innerHTML = `<div class="grid g-2">
     <section class="card"><h3>Seus direitos (LGPD)</h3><ul class="stack small" style="margin-top:10px"><li>• Confirmação e acesso aos dados</li><li>• Correção</li><li>• Portabilidade (exportação)</li><li>• Eliminação, quando aplicável</li><li>• Informação sobre compartilhamento e revogação do consentimento</li></ul>
-      <div class="row wrap" style="gap:8px;margin-top:14px"><button class="btn btn--ghost btn--sm" id="exp" ${DEMO ? "disabled title='Disponível com a API conectada'" : ""}>Exportar meus dados</button>
-      <button class="btn btn--danger btn--sm" id="del" ${DEMO ? "disabled title='Disponível com a API conectada'" : ""}>Excluir minha conta</button></div>
+      <div class="row wrap" style="gap:8px;margin-top:14px"><button class="btn btn--ghost btn--sm" id="exp" ${ANALYTICS_DEMO ? "disabled title='Solicite pelo suporte'" : ""}>Exportar meus dados</button>
+      <button class="btn btn--danger btn--sm" id="del" ${ANALYTICS_DEMO ? "disabled title='Solicite pelo suporte'" : ""}>Excluir minha conta</button></div>
       <p class="note">Base legal, retenção e prazos finais dependem de revisão jurídica (decisão pendente D-03).</p></section>
     <section class="card"><h3>Consentimentos</h3><ul class="stack small" style="margin-top:10px">${c.items.map(x => `<li class="row between"><span>${esc(x.institution)} · ${esc(x.scope.join(", "))}</span>${badge(x.status)}</li>`).join("")}</ul></section></div>
     <section class="card section"><h3>Trilha de auditoria <span class="right">${a.chain_valid ? badge("ativo", "cadeia íntegra") : badge("erro", "cadeia inválida")}</span></h3>

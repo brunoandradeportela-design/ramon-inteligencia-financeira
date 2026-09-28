@@ -1,5 +1,5 @@
 /* Shell da aplicação: roteamento por hash, sessão, tema (Claro/Escuro/Sistema) e navegação. */
-import { api, DEMO, session, ApiError } from "./api.js";
+import { api, DEMO, ANALYTICS_DEMO, session, ApiError } from "./api.js";
 import { esc, icon, errorBox, loading } from "./ui.js";
 import * as V from "./views.js";
 import { crm } from "./views_crm.js";
@@ -101,7 +101,7 @@ function shell(admin = false) {
       </div>
     </aside>
     <div class="main">
-      ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ""}
+      ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note"><b>Painéis de análise com dados de exemplo</b> — sua conta e assinatura são reais; os números se tornam seus quando as conexões Open Finance forem ativadas.</div>` : ""}
       <header class="top">
         <button class="icon-btn burger" data-burger aria-label="Abrir menu">${icon("menu")}</button>
         <h1 data-title>Início</h1>

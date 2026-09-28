@@ -39,9 +39,9 @@ export function validateSignup(d) {
 export const STAGES = [["novo_cadastro", "Novo cadastro"], ["ativado", "Ativado"], ["aguardando_pagamento", "Aguardando pagamento"],
   ["pagante", "Pagante"], ["inadimplente", "Inadimplente"], ["cancelado", "Cancelado"]];
 const PRICE = { free: "0.00", pro: "89.90", premium: "149.90" }, PLAN_NAME = { free: "Free", pro: "Pro", premium: "Premium" };
-const REF = new Date("2026-09-27T12:00:00");
+const DEMO_REF = new Date("2026-09-27T12:00:00");
 
-export function metricsFrom(items) {
+export function metricsFrom(items, REF = DEMO_REF, note = "Modo demonstração: alterações ficam só neste navegador.") {
   const count = k => items.filter(i => i.stage === k).length;
   const paying = items.filter(i => i.stage === "pagante");
   const mrr = paying.reduce((s, i) => s + +i.subscription.price_month, 0);
@@ -53,7 +53,7 @@ export function metricsFrom(items) {
     const s = new Date(monday - w * 7 * 864e5), e = new Date(+s + 7 * 864e5);
     weeks.push({ week_start: s.toISOString().slice(0, 10), signups: created.filter(c => c >= s && c < e).length });
   }
-  const month = "2026-09";
+  const month = REF.toISOString().slice(0, 7);
   const revenue = items.flatMap(i => i.payments || []).filter(p => p.status === "pago" && p.date.startsWith(month)).reduce((s, p) => s + +p.amount, 0);
   const prof = {}; items.forEach(i => prof[i.profession] = (prof[i.profession] || 0) + 1);
   const total = items.length;
@@ -66,7 +66,7 @@ export function metricsFrom(items) {
     stages: STAGES.map(([key, label]) => ({ key, label, count: count(key) })), signups_by_week: weeks,
     by_profession: Object.entries(prof).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([profession, count]) => ({ profession, count })),
     by_plan: ["free", "pro", "premium"].map(p => ({ plan: PLAN_NAME[p], count: items.filter(i => i.plan === p).length })),
-    pricing_note: "Modo demonstração: alterações ficam só neste navegador.",
+    pricing_note: note,
   };
 }
 

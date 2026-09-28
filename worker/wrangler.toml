@@ -1,0 +1,20 @@
+name = "aurion-api"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[vars]
+OWNER_EMAIL = "ramonjunio07@gmail.com"
+OWNER_NAME = "Ramon Junio Araujo Pereira"
+ALLOWED_ORIGINS = "https://aurionfinance.com.br,https://www.aurionfinance.com.br"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "aurion-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[observability]
+enabled = true
