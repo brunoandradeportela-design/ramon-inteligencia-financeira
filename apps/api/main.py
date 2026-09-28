@@ -16,6 +16,7 @@ from datetime import date as Date
 from decimal import Decimal
 
 from fastapi import Depends, FastAPI, Header, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -35,10 +36,21 @@ app = FastAPI(title="Ramon Inteligência Financeira — API", version="1.0.0",
 app.add_middleware(CORSMiddleware, allow_origins=os.environ.get("RAMON_CORS", "*").split(","), allow_methods=["*"],
                    allow_headers=["*"], expose_headers=["X-Correlation-ID"])
 
-C = Container()
+def _make_store():
+    """PostgreSQL quando DATABASE_URL existe (produção); memória no desenvolvimento/testes."""
+    dsn = os.environ.get("DATABASE_URL", "").strip()
+    if not dsn:
+        return None
+    from services.common.pg_store import PostgresStore
+    return PostgresStore(dsn)
+
+
+C = Container(store=_make_store())
 if os.environ.get("RAMON_SEED_DEMO", "1") == "1":
     seed(C)
 OWNER = ensure_owner(C.identity)
+if hasattr(C.store, "flush"):
+    C.store.flush()
 
 
 def _asaas_background_sync() -> None:
@@ -65,6 +77,11 @@ async def correlation(request: Request, call_next):
     request.state.cid = cid
     t0 = time.perf_counter()
     resp = await call_next(request)
+    if request.method not in ("GET", "HEAD", "OPTIONS") and hasattr(C.store, "flush"):
+        try:
+            await run_in_threadpool(C.store.flush)
+        except Exception:  # noqa: BLE001 — o ciclo em segundo plano tenta de novo
+            log.exception("cid=%s falha ao persistir alterações", cid)
     resp.headers["X-Correlation-ID"] = cid
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Cache-Control"] = "no-store"

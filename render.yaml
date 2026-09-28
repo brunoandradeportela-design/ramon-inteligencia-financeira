@@ -1,0 +1,48 @@
+# Blueprint do Render — API + banco PostgreSQL da Aurion / Ramon Inteligência Financeira.
+# Render → New → Blueprint → selecionar este repositório. Os valores marcados com `sync: false`
+# são SECRETS: o Render pede no painel na criação e eles NUNCA ficam no repositório.
+services:
+  - type: web
+    name: aurion-api
+    runtime: python
+    plan: starter            # sempre ligado (o plano free hiberna e interromperia webhooks do Asaas)
+    region: virginia
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    # 1 worker: o estado em memória é sincronizado com o Postgres por este processo
+    startCommand: uvicorn apps.api.main:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aurion-db
+          property: connectionString
+      - key: RAMON_SEED_DEMO
+        value: "0"
+      - key: RAMON_CORS
+        value: https://aurionfinance.com.br,https://www.aurionfinance.com.br
+      - key: RAMON_LLM_ENABLED
+        value: "0"
+      - key: RAMON_OWNER_EMAIL
+        value: ramonjunio07@gmail.com
+      - key: RAMON_OWNER_PASSWORD        # senha do Ramon (10+ caracteres, letras e números)
+        sync: false
+      - key: RAMON_OWNER_CPF             # CPF do Ramon — exibido apenas mascarado
+        sync: false
+      - key: RAMON_ASAAS_API_KEY         # chave NOVA (a anterior deve ser revogada no Asaas)
+        sync: false
+      - key: RAMON_ASAAS_WEBHOOK_TOKEN   # gerado pelo Render; copiar para o cadastro do webhook no Asaas
+        generateValue: true
+      - key: RAMON_ASAAS_SYNC_MINUTES
+        value: "15"
+
+databases:
+  - name: aurion-db
+    plan: basic-256mb
+    region: virginia
+    databaseName: aurion
+    user: aurion
+    ipAllowList: []          # acessível só pela rede interna do Render
