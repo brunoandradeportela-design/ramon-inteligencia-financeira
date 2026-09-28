@@ -11,7 +11,7 @@ ALLOWED_ORIGINS = "https://aurionfinance.com.br,https://www.aurionfinance.com.br
 [[d1_databases]]
 binding = "DB"
 database_name = "aurion-db"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "2f6f2dff-8a1c-4daa-9263-586e1efc1b38"
 
 [triggers]
 crons = ["*/15 * * * *"]
