@@ -297,7 +297,7 @@ async function route(req, env, db, url) {
     const email = String(body.email || "").trim().toLowerCase(), pw = String(body.password || "");
     await throttle(db, email);
     if (email === ownerEmail(env)) {
-      if (!env.OWNER_PASSWORD) throw new Problem(503, "Conta do administrador não configurada", "Defina o secret OWNER_PASSWORD no Worker.");
+      if (!env.OWNER_PASSWORD) { console.error("OWNER_PASSWORD ausente: defina o secret no Worker (Settings → Variables and Secrets)"); throw new Problem(503, "Acesso do administrador ainda não ativado", "O acesso do administrador ainda não foi ativado no servidor. Tente novamente em alguns minutos."); }
       if (!safeEqual(pw, env.OWNER_PASSWORD)) { await loginFailed(db, email); throw new Problem(401, "Não autenticado", "E-mail ou senha incorretos."); }
       return { token: await newSession(db, OWNER_ID), user: ownerMe(env, await kvGet(db, "owner_theme", "system")) };
     }
