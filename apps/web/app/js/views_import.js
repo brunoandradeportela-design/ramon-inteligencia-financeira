@@ -64,7 +64,7 @@ export async function importData(el) {
         <div class="grid g-4" style="margin-top:14px">
           ${[["Extrato da conta ou do cartão", "OFX ou CSV — no app ou internet banking: Extrato › Exportar."],
              ["Posição na B3", "investidor.b3.com.br › Extratos › Posição › baixar em Excel."],
-             ["Negociações na B3", "investidor.b3.com.br › Extratos › Negociação › baixar em Excel (calcula o custo médio)."],
+             ["Negociações na B3", "investidor.b3.com.br › Extratos › Negociação › baixar em Excel, desde a primeira compra (custo médio e imposto mensal)."],
              ["Nota de corretagem", "PDF da corretora no padrão SINACOR (beta)."]].map(([t, d]) => `<div class="card" style="box-shadow:none"><b class="small">${t}</b><p class="small muted" style="margin-top:4px">${d}</p></div>`).join("")}
         </div>
         <form id="imp" class="row wrap" style="gap:10px;margin-top:16px;align-items:flex-end">
@@ -81,7 +81,7 @@ export async function importData(el) {
             <td class="num">${i.counts?.transactions || 0}</td><td class="num">${i.counts?.holdings || 0}</td><td class="num">${i.counts?.trades || 0}</td>
             <td><button class="btn btn--ghost btn--sm" data-del="${esc(i.id)}">Apagar</button></td></tr>`).join("")}</tbody></table></div>
           <p class="note">Ao importar uma nova posição da B3, a anterior é substituída. Lançamentos repetidos são reconhecidos e não se duplicam.</p>`
-          : `<p class="small muted" style="margin-top:8px">Nenhuma importação ainda. Enquanto isso, Início, Patrimônio e Finanças mostram dados de exemplo.</p>`}
+          : `<p class="small muted" style="margin-top:8px">Nenhuma importação ainda. Enquanto isso, Início, Patrimônio, Finanças e Tributação mostram dados de exemplo.</p>`}
       </section>`;
     el.querySelector("#imp").onsubmit = read;
     el.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {

@@ -1,5 +1,5 @@
 /* Telas do MVP (Dossiê §9 e §47; Plano técnico §12). Toda saída tributária é rotulada como estimativa. */
-import { api, DEMO, ANALYTICS_DEMO, ApiError } from "./api.js";
+import { api, DEMO, ANALYTICS_DEMO, ApiError, HAS_API } from "./api.js";
 import { onLogin, themeSwitch, theme } from "./app.js";
 import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
 import { areaChart, barChart, brl, confidence, donut, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
@@ -201,6 +201,7 @@ export async function portfolio(el) {
       <div class="card"><h3>Resultado</h3><div class="kpi ${+p.result < 0 ? "neg" : "pos"}">${brl(p.result)}</div><span class="delta ${p.result_pct >= 0 ? "delta--up" : "delta--down"}">${pct(p.result_pct)}</span></div>
       <div class="card"><h3>Liquidez em até D+2</h3><div class="kpi">${pct(p.liquidity.share, 0)}</div><p class="small muted">${brl(p.liquidity.d2_or_less)}</p></div>
     </div>
+    ${marketCard(p)}
     <div class="grid g-dash2 section">
       <section class="card"><h3>Composição</h3><div class="row wrap" style="gap:24px;margin-top:14px">${donut(p.allocation, { size: 170, label: "Composição por classe" })}
         <ul class="legend" style="flex:1;min-width:200px">${p.allocation.map((a, i) => `<li><i style="background:${PALETTE[i]}"></i><span>${esc(a.group)} · ${brl(a.value)}</span><b>${pct(a.weight)}</b></li>`).join("")}</ul></div></section>
@@ -216,6 +217,21 @@ export async function portfolio(el) {
         <td class="num">${money(x.invested)}</td><td class="num">${brl(x.value)}</td><td class="num ${+x.result < 0 ? "neg" : "pos"}">${money(x.result)}</td><td class="num">${pct(x.weight)}</td>
         <td class="small muted">${esc(x.price_source)}${x.as_of ? " · " + dt(x.as_of) : ""}</td></tr>`).join("")}</tbody></table></div>
       ${trust("Informação descritiva. A plataforma não recomenda compra ou venda de ativos (fora do escopo do MVP e sujeita à regulação da CVM).")}</section>`;
+}
+
+function marketCard(p) {
+  const mk = p.market;
+  if (!mk && !p.quotes_as_of) return "";
+  const cell = (label, x, sub) => `<div><span class="small muted">${label}</span><div style="font-size:20px;font-weight:600;margin-top:2px">${x ? pct(x.value) : "—"}</div><span class="small muted">${sub || ""}</span></div>`;
+  return `<section class="card section"><h3>Referências de mercado <span class="right small muted">${p.quotes_as_of ? "cotações de fechamento até " + dt(p.quotes_as_of) : ""}</span></h3>
+    ${mk ? `<div class="grid g-4" style="margin-top:12px">
+      ${cell("Selic (meta)", mk.selic_meta, mk.selic_meta ? "ao ano · " + dt(mk.selic_meta.date) : "")}
+      ${cell("CDI em 12 meses", mk.cdi_12m, mk.cdi_aa ? "hoje " + pct(mk.cdi_aa.value) + " ao ano" : "")}
+      ${cell("CDI no ano", mk.cdi_ytd, mk.cdi_ytd ? "até " + dt(mk.cdi_ytd.to) : "")}
+      ${cell("IPCA em 12 meses", mk.ipca_12m, mk.ipca_month ? `${mes(mk.ipca_month.month)}: ${pct(mk.ipca_month.value)}` : "")}
+    </div>
+    <p class="note">${p.invested && +p.invested > 0 && p.result_coverage > 0.5 ? `Resultado da carteira sobre o custo conhecido: <b>${pct(p.result_pct)}</b> (acumulado desde as compras; compare com o CDI e o IPCA do mesmo período). ` : ""}Fonte: ${esc(mk.source)}.</p>` : ""}
+  </section>`;
 }
 
 /* ================================================================ FINANÇAS */
@@ -254,8 +270,13 @@ export async function tax(el, r) {
   try { [t, ev, rules] = await Promise.all([api.get("/v1/tax/summary"), api.get("/v1/tax/events"), api.get("/v1/tax/rules")]); }
   catch (e) { if (e.status === 402) { el.innerHTML = upsell("Inteligência tributária", e); return; } throw e; }
   const losses = Object.entries(t.losses_available).filter(([, v]) => +v > 0);
+  const real = HAS_API && !t.sample;
+  let prefs = { prior_losses: {}, paid_darfs: {} };
+  if (real) try { prefs = await api.get("/v1/tax/settings"); } catch (e) { /* segue com o padrão */ }
+  const reload = () => tax(el, { params: new URLSearchParams(`tab=${tab}`) });
   const draw = () => {
-    el.innerHTML = `
+    el.innerHTML = `${sampleNote(t)}
+      ${real && t.limitations[0]?.startsWith("Há vendas sem") ? `<div class="card" style="margin-bottom:16px;border-color:var(--warn, #c98a00)"><p class="small"><b>Faltam compras no histórico.</b> ${esc(t.limitations[0])} <a href="#/importar">Importar negociações</a></p></div>` : ""}
       <div class="grid g-4">
         <div class="card"><h3>Imposto estimado ${t.year}</h3><div class="kpi">${brl(t.total_tax_due)}</div><p class="note">renda variável · estimativa</p></div>
         <div class="card"><h3>IRRF (dedo-duro)</h3><div class="kpi">${brl(t.total_irrf)}</div><p class="note">compensado na apuração</p></div>
@@ -270,15 +291,37 @@ export async function tax(el, r) {
         <section class="card"><h3>Premissas</h3><ul class="stack small" style="margin-top:10px">${t.premises.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul></section>
         <section class="card"><h3>Limitações</h3><ul class="stack small" style="margin-top:10px">${t.limitations.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul>
           <p class="note">Snapshot ${esc(t.snapshot_hash.slice(0, 16))}… · mesmo snapshot + mesma versão de regra = mesmo resultado.</p></section>
-      </div>`;
+      </div>
+      ${real ? `<section class="card section"><h3>Ajustes da apuração</h3>
+        <p class="small muted" style="margin-top:6px">Prejuízos acumulados até 31/12 do ano anterior (veja na sua declaração, ficha Renda Variável, ou no controle do seu contador). Eles abatem os ganhos da mesma modalidade.</p>
+        <form id="prior" class="row wrap" style="gap:10px;margin-top:12px;align-items:flex-end">
+          ${[["comum", "Operações comuns"], ["daytrade", "Day trade"], ["fii", "Fundos imobiliários"]].map(([k, l]) => `<div class="field"><label for="pl_${k}">${l} (R$)</label>
+            <input class="input" id="pl_${k}" inputmode="decimal" value="${esc(String(prefs.prior_losses[k] || "").replace(".", ","))}" placeholder="0,00"></div>`).join("")}
+          <button class="btn btn--primary">Salvar e recalcular</button></form></section>` : ""}`;
     el.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { tab = b.dataset.tab; draw(); });
+    const f = el.querySelector("#prior");
+    if (f) f.onsubmit = async e => {
+      e.preventDefault();
+      const pl = Object.fromEntries(["comum", "daytrade", "fii"].map(k => [k, f.querySelector("#pl_" + k).value.replace(/\./g, "").replace(",", ".") || "0"]));
+      try { await api.put("/v1/tax/settings", { prior_losses: pl }); toast("Prejuízos salvos. Apuração recalculada."); reload(); } catch (x) { toast(problemMsg(x)); }
+    };
+    el.querySelectorAll("[data-paid]").forEach(b => b.onclick = async () => {
+      const mk = b.dataset.paid, v = b.dataset.val;
+      try {
+        if (b.dataset.undo) await api.del(`/v1/tax/darfs/${mk}`);
+        else await api.put(`/v1/tax/darfs/${mk}`, { paid_value: v });
+        toast(b.dataset.undo ? "Marcação desfeita." : `DARF de ${mes(mk)} marcado como pago.`); reload();
+      } catch (x) { toast(problemMsg(x)); }
+    });
   };
   const months = () => `<section class="card"><div class="table-wrap"><table class="table"><caption class="sr-only">Apuração mensal de renda variável</caption>
     <thead><tr><th>Mês</th><th class="num">Vendas de ações</th><th>Isenção</th><th class="num">Resultado comum</th><th class="num">Day trade</th><th class="num">FII</th><th class="num">IR bruto</th><th class="num">IRRF</th><th>DARF 6015</th></tr></thead>
     <tbody>${t.months.map(m => `<tr><td><b>${mes(m.month)}</b></td><td class="num">${brl(m.sales_acoes)}</td><td>${m.exempt ? badge("isento", "até 20 mil") : badge("aberto", "tributável")}</td>
       <td class="num">${brl(m.result_comum)}${+m.exempt_gain ? `<div class="small pos">+${brl(m.exempt_gain)} isento</div>` : ""}</td><td class="num">${brl(m.result_daytrade)}</td><td class="num">${brl(m.result_fii)}</td>
       <td class="num">${brl(m.tax_due_gross)}</td><td class="num">${brl(m.irrf)}</td>
-      <td>${m.darf ? `${badge(m.darf.status)} <b>${brl(m.darf.valor)}</b><div class="small muted">vence ${dt(m.darf.vencimento)}${m.darf.valor_pago ? " · pago " + brl(m.darf.valor_pago) : ""}</div>` : `<span class="small muted">${+m.tax_due_gross > 0 ? "acumula (< R$ 10)" : "—"}</span>`}</td></tr>`).join("")}</tbody></table></div></section>`;
+      <td style="min-width:170px">${m.darf ? `${badge(m.darf.status)} <b>${brl(m.darf.valor)}</b><div class="small muted">vence ${dt(m.darf.vencimento)}${m.darf.valor_pago ? " · pago " + brl(m.darf.valor_pago) : ""}</div>${real ? (m.darf.status === "pago"
+        ? `<button class="btn btn--ghost btn--sm" data-paid="${m.month}" data-undo="1">desfazer</button>`
+        : `<button class="btn btn--ghost btn--sm" data-paid="${m.month}" data-val="${m.darf.valor}">marcar pago</button>`) : ""}` : `<span class="small muted">${+m.tax_due_gross > 0 ? "acumula (< R$ 10)" : "—"}</span>`}</td></tr>`).join("")}</tbody></table></div></section>`;
   const events = () => ev.items.length ? `<div class="stack">${ev.items.map(e => `<article class="alert ${e.status === "pendente_dado" ? "s-alto" : e.status === "isento" ? "s-oportunidade" : "s-informativo"}">
       <h4>${esc(e.ticker)} · ${e.kind === "daytrade" ? "Day trade" : "Venda"} em ${dt(e.date)} ${badge(e.status)}</h4>
       <p>Valor de venda ${brl(e.sale_value)} · custo ${e.cost_basis === "?" ? "<b>não informado</b>" : brl(e.cost_basis)} · resultado <b class="${+e.result < 0 ? "neg" : ""}">${e.result === "?" ? "—" : brl(e.result)}</b></p>

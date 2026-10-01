@@ -188,13 +188,13 @@ export function parseNotaCorretagem(text, { custodian = "" } = {}) {
   if (!date) throw new Error("Data do pregão não encontrada na nota.");
   const broker = custodian || (t.match(/(XP INVESTIMENTOS|CLEAR CORRETORA|RICO INVESTIMENTOS|BTG PACTUAL|NU INVEST|INTER DTVM|MODAL|GENIAL|ITAU CORRETORA|BB BANCO DE INVESTIMENTO|TORO)/i) || [])[1] || "Corretora";
   const trades = [];
-  const re = /(?:\d-)?BOVESPA\s+([CV])\s+(VISTA|FRACIONARIO|OPCAO DE COMPRA|OPCAO DE VENDA|EXERC OPC \w+|TERMO)\s+(.+?)\s+(?:[#@D]\s+)?(\d{1,3}(?:\.\d{3})*|\d+)\s+(\d{1,3}(?:\.\d{3})*,\d{2,8})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+([DC])/gi;
+  const re = /(?:\d-)?BOVESPA\s+([CV])\s+(VISTA|FRACIONARIO|OPCAO DE COMPRA|OPCAO DE VENDA|EXERC OPC \w+|TERMO)\s+(.+?)\s+(?:([#@D])\s+)?(\d{1,3}(?:\.\d{3})*|\d+)\s+(\d{1,3}(?:\.\d{3})*,\d{2,8})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+([DC])/gi;
   let m;
   while ((m = re.exec(t))) {
     const spec = m[3].replace(/\s+/g, " ").trim();
     const code = (spec.match(/\b([A-Z]{4}\d{1,2})F?\b/) || [])[1] || spec;
-    trades.push({ date, side: m[1].toUpperCase(), ticker: code.toUpperCase(), quantity: parseNumber(m[4]), price: parseNumber(m[5]), value: parseNumber(m[6]),
-      custodian: broker, market: m[2].toLowerCase() });
+    trades.push({ date, side: m[1].toUpperCase(), ticker: code.toUpperCase(), quantity: parseNumber(m[5]), price: parseNumber(m[6]), value: parseNumber(m[7]),
+      custodian: broker, market: m[2].toLowerCase(), ...(m[4] === "D" ? { daytrade: true } : {}) });
   }
   if (!trades.length) throw new Error("Nenhuma operação encontrada. A leitura de notas funciona com o padrão SINACOR (a maioria das corretoras).");
   const costs = t.match(/total custos\s*\/\s*despesas\s+([\d.]+,\d{2})/i);

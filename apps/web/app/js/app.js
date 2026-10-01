@@ -102,7 +102,7 @@ function shell(admin = false) {
       </div>
     </aside>
     <div class="main">
-      ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note"><b>Seus dados:</b> Início, Patrimônio e Finanças mostram seus números quando você envia seus arquivos em <a href="#/importar">Importar dados</a>. Tributação, alertas e simulações ainda usam exemplos.</div>` : ""}
+      ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note"><b>Seus dados:</b> Início, Patrimônio, Finanças e Tributação mostram seus números quando você envia seus arquivos em <a href="#/importar">Importar dados</a>. Alertas e simulações ainda usam exemplos.</div>` : ""}
       <header class="top">
         <button class="icon-btn burger" data-burger aria-label="Abrir menu">${icon("menu")}</button>
         <h1 data-title>Início</h1>

@@ -46,4 +46,33 @@ const ofxImp = list.find(i => i.filename === "itau-de-novo.ofx");
 assert.equal((await call("DELETE", `/v1/imports/${ofxImp.id}`, null, tk)).status, 204);
 assert.equal((await call("GET", "/v1/finance/summary", null, tk)).body.has_data, false, "lançamentos da última importação apagados");
 assert.equal((await call("POST", "/v1/imports", { filename: "vazio.csv", transactions: [{ date: "x" }] }, tk)).status, 422);
-console.log("IMPORTS E2E OK — importação, deduplicação, custo médio, painéis reais, substituição de posição, isolamento e exclusão");
+// ---- imposto sobre negociações reais (M4)
+assert.equal((await call("GET", "/v1/tax/summary", null, tk)).status, 402, "plano Free não tem apuração");
+const pro = await call("POST", "/v1/auth/register", { name: "Julia Prado Reis", email: "pro" + email, profession: "Contadora", phone: "(69) 99811-2235", password: "senhaSegura123", accept_terms: true, plan: "pro" });
+const tp = pro.body.token;
+assert.equal((await call("GET", "/v1/tax/summary", null, tp)).body.has_data, false);
+const neg = parseB3Workbook({ "Negociação": [["Data do Negócio", "Tipo de Movimentação", "Mercado", "Instituição", "Código de Negociação", "Quantidade", "Preço", "Valor"],
+  ["02/03/2026", "Compra", "Mercado à Vista", "XP", "VALE3", "1000", "60,00", "60.000,00"], ["10/04/2026", "Venda", "Mercado à Vista", "XP", "VALE3", "1000", "70,00", "70.000,00"],
+  ["10/06/2026", "Compra", "Mercado à Vista", "XP", "PETR4", "300", "30,00", "9.000,00"], ["10/06/2026", "Venda", "Mercado à Vista", "XP", "PETR4", "200", "32,00", "6.400,00"]] });
+assert.equal((await call("POST", "/v1/imports", { filename: "negociacao.xlsx", ...neg }, tp)).status, 201);
+let t = (await call("GET", "/v1/tax/summary?year=2026", null, tp)).body;
+assert.equal(t.has_data, true); assert.equal(t.months.find(m => m.month === "2026-04").darf.valor, "1496.50");
+assert.equal(t.months.find(m => m.month === "2026-06").result_daytrade, "400.00");
+const ev = (await call("GET", "/v1/tax/events?year=2026", null, tp)).body;
+assert.equal(ev.items.length, 2); assert.equal(ev.items[0].modality, "daytrade");
+assert.equal((await call("PUT", "/v1/tax/settings", { prior_losses: { comum: "1.000,00".replace(/\./g, "").replace(",", ".") } }, tp)).body.prior_losses.comum, "1000.00");
+assert.equal((await call("PUT", "/v1/tax/darfs/2026-04", { paid_value: "1346.50" }, tp)).status, 200);
+t = (await call("GET", "/v1/tax/summary?year=2026", null, tp)).body;
+const abr = t.months.find(m => m.month === "2026-04");
+assert.equal(abr.base_comum, "9000.00"); assert.equal(abr.darf.status, "pago"); assert.equal(abr.darf.valor_pago, "1346.50");
+assert.equal((await call("PUT", "/v1/tax/darfs/2026-04", { paid_value: "0" }, tp)).status, 422);
+const dash = (await call("GET", "/v1/dashboard", null, tp)).body;
+assert.equal(dash.tax.estimated, t.total_tax_due); assert.match(dash.tax.scope, /suas negociações/);
+// posições criadas a partir das negociações (sem posição da B3 importada)
+const pp = (await call("GET", "/v1/portfolio/consolidated", null, tp)).body;
+assert.equal(pp.positions.length, 1); assert.equal(pp.positions[0].ticker, "PETR4"); assert.equal(pp.positions[0].quantity, "100");
+// ---- mercado (M3): rota pública responde mesmo sem rede externa
+const mk = await call("GET", "/v1/market/indices");
+assert.equal(mk.status, 200); assert.ok("indices" in mk.body && "quotes" in mk.body);
+assert.equal((await call("POST", "/v1/market/refresh", null, tp)).status, 403);
+console.log("IMPORTS E2E OK — importação, deduplicação, custo médio, painéis reais, substituição de posição, isolamento, exclusão, imposto (M4) e mercado (M3)");

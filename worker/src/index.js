@@ -7,9 +7,12 @@
  *   OWNER_PASSWORD         senha do Ramon (10+ caracteres, letras e números)
  *   ASAAS_API_KEY          chave da API do Asaas ($aact_prod_… ou $aact_hmlg_…)
  *   ASAAS_WEBHOOK_TOKEN    token escolhido no cadastro do webhook no Asaas
+ *   BRAPI_TOKEN            (opcional) token gratuito da brapi.dev — reserva para as cotações se o Yahoo falhar
  * Variáveis (wrangler.toml): OWNER_EMAIL, OWNER_NAME, ALLOWED_ORIGINS
  */
 import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize } from "../../apps/web/app/js/fin_engine.js";
+import { computeTax, taxDashboard } from "../../apps/web/app/js/tax_engine.js";
+import { SGS, sgsUrl, parseSgs, indicesSnapshot, yahooUrl, brapiUrl, parseYahooChart, parseBrapi, applyQuotes, tickersFrom } from "../../apps/web/app/js/market.js";
 import { validateSignup, localCustomer, metricsFrom, addMonth, PRICE, PLAN_NAME, paymentsFrom, docValid, normalizePhone } from "../../apps/web/app/js/crm_rules.js";
 
 const FEATURES = {
@@ -65,6 +68,7 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS login_fails (email TEXT PRIMARY KEY, n INTEGER NOT NULL, until TEXT)",
   "CREATE TABLE IF NOT EXISTS fin_items (user_id TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, import_id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (user_id, kind, id))",
+  "CREATE TABLE IF NOT EXISTS quotes (ticker TEXT PRIMARY KEY, data TEXT NOT NULL, fetched_at TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS fin_items_import ON fin_items (user_id, import_id)",
 ];
 let schemaReady = false;
@@ -340,8 +344,16 @@ async function route(req, env, db, url) {
   }
 
 
+  /* ---- mercado (público): índices do Banco Central e situação das cotações */
+  if (m === "GET" && p === "/v1/market/indices") return marketPublic(env, db);
+  if (m === "POST" && p === "/v1/market/refresh") {
+    const u = await authUser(req, env, db);
+    if (!u.owner) throw new Problem(403, "Acesso negado", "Apenas o administrador.");
+    return { refreshed: await refreshMarket(env, db, { force: true }) };
+  }
+
   /* ---- dados financeiros reais do cliente (importação de arquivos; futuramente Open Finance) */
-  if (p.startsWith("/v1/imports") || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
+  if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
     const u = await authUser(req, env, db);
     return finRoute(m, p, body, q, u, db);
   }
@@ -517,9 +529,13 @@ export default {
     }
   },
   // rede de segurança: sincroniza todas as cobranças do Asaas a cada 15 min (caso algum webhook se perca)
+  // e mantém cotações (a cada 4 h) e índices do Banco Central (a cada 6 h) atualizados
   async scheduled(_evt, env, ctx) {
-    if (!env.ASAAS_API_KEY) return;
-    ctx.waitUntil((async () => { await ensureSchema(env.DB); try { await sync(env, env.DB); } catch (e) { console.error("sync falhou", e.detail || e); } })());
+    ctx.waitUntil((async () => {
+      await ensureSchema(env.DB);
+      if (env.ASAAS_API_KEY) { try { await sync(env, env.DB); } catch (e) { console.error("sync falhou", e.detail || e); } }
+      try { await refreshMarket(env, env.DB); } catch (e) { console.error("mercado falhou", e.message || e); }
+    })());
   },
 };
 
@@ -550,13 +566,14 @@ function cleanItem(kind, x, src) {
     if (value === null || value <= 0 || !str(x.name || x.ticker).trim()) return null;
     return { name: str(x.name || x.ticker, 120).trim(), ticker: str(x.ticker, 20).toUpperCase(), asset_class: ASSET_CLASSES.includes(x.asset_class) ? x.asset_class : "outro",
              custodian: str(x.custodian, 80), quantity: numOrNull(x.quantity) ?? 1, value, invested: numOrNull(x.invested), price: numOrNull(x.price),
-             as_of: isoDate(x.as_of), maturity: isoDate(x.maturity), indexer: str(x.indexer, 40), source: src };
+             as_of: isoDate(x.as_of) || today(), maturity: isoDate(x.maturity), indexer: str(x.indexer, 40), source: src };
   }
   if (kind === "trade") {
     const date = isoDate(x.date), q = numOrNull(x.quantity), price = numOrNull(x.price);
     if (!date || !q || !["C", "V"].includes(x.side) || !str(x.ticker).trim()) return null;
     return { date, ticker: str(x.ticker, 20).toUpperCase().trim(), side: x.side, quantity: q, price: price ?? 0,
-             value: numOrNull(x.value) ?? q * (price ?? 0), fees: numOrNull(x.fees) ?? 0, market: str(x.market, 40), custodian: str(x.custodian, 80), source: src };
+             value: numOrNull(x.value) ?? q * (price ?? 0), fees: numOrNull(x.fees) ?? 0, market: str(x.market, 40), custodian: str(x.custodian, 80),
+             ...(x.daytrade === true ? { daytrade: true } : {}), ...(["acao", "fii", "etf", "bdr"].includes(x.asset_class) ? { asset_class: x.asset_class } : {}), source: src };
   }
   return null;
 }
@@ -615,13 +632,142 @@ async function finRoute(m, p, body, q, u, db) {
     await db.prepare("DELETE FROM fin_items WHERE user_id=?").bind(uid).run();
     return new Resp(204);
   }
+  /* ---- preferências da apuração: prejuízos de anos anteriores e DARFs pagos */
+  const prefKey = "tax_prefs:" + uid;
+  if (p === "/v1/tax/settings") {
+    if (m === "GET") return await kvGet(db, prefKey, { prior_losses: {}, paid_darfs: {} });
+    if (m === "PUT") {
+      const prefs = await kvGet(db, prefKey, { prior_losses: {}, paid_darfs: {} });
+      const pl = body.prior_losses || {};
+      for (const k of ["comum", "daytrade", "fii"]) {
+        const v = numOrNull(String(pl[k] ?? "").replace(",", "."));
+        if (v !== null && v < 0) throw new Problem(422, "Dados inválidos", "Prejuízo deve ser um valor positivo.");
+        if (pl[k] !== undefined) prefs.prior_losses[k] = v ? money(v) : "0.00";
+      }
+      await kvSet(db, prefKey, prefs);
+      return prefs;
+    }
+  }
+  const darf = p.match(/^\/v1\/tax\/darfs\/(\d{4}-\d{2})$/);
+  if (darf && (m === "PUT" || m === "DELETE")) {
+    const prefs = await kvGet(db, prefKey, { prior_losses: {}, paid_darfs: {} });
+    if (m === "DELETE") delete prefs.paid_darfs[darf[1]];
+    else {
+      const v = numOrNull(String(body.paid_value ?? "").replace(",", "."));
+      if (!(v > 0)) throw new Problem(422, "Dados inválidos", "Informe o valor pago no DARF.");
+      prefs.paid_darfs[darf[1]] = money(v);
+    }
+    await kvSet(db, prefKey, prefs);
+    return new Resp(m === "DELETE" ? 204 : 200, m === "DELETE" ? null : prefs);
+  }
   if (m !== "GET") throw new Problem(405, "Método não permitido", `${m} ${p}`);
   const [txs, accounts, holdings, trades] = await Promise.all(FIN_KINDS.map(k => finLoad(db, uid, k)));
   const fin = financeSummary(txs, accounts);
   if (p === "/v1/finance/summary") return fin;
   if (p === "/v1/finance/transactions") return { has_data: txs.length > 0, ...transactionsList(txs, Math.min(+q.limit || 60, 500)) };
-  const port = portfolioSummary(holdings, trades);
+
+  const ref = today();
+  const known = Object.fromEntries(holdings.filter(h => h.ticker).map(h => [h.ticker, h.asset_class]));
+  const prefs = await kvGet(db, prefKey, { prior_losses: {}, paid_darfs: {} });
+  const year = /^\d{4}$/.test(q.year || "") ? +q.year : +ref.slice(0, 4);
+  const tax = computeTax(trades, { year, refDate: ref, knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs });
+  if (p.startsWith("/v1/tax/")) {
+    if (!(u.me.entitlements || []).includes("inteligencia_tributaria"))
+      throw new Problem(402, "Recurso do plano Pro", "A apuração de imposto sobre as suas negociações faz parte dos planos Pro e Premium.", { required_plan: "Pro" });
+    if (p === "/v1/tax/summary") { const { events, ...rest } = tax; return rest; }
+    if (p === "/v1/tax/events") return { has_data: tax.has_data, year, items: tax.events };
+    throw new Problem(404, "Não encontrado", p);
+  }
+  const quotes = await loadQuotes(db, tickersFrom([...holdings, ...trades]));
+  // a posição da B3 é a fonte de verdade; sem ela, as negociações formam as posições de bolsa
+  const hasRvPosition = holdings.some(h => ["acao", "fii", "etf", "bdr"].includes(h.asset_class));
+  const port = portfolioSummary(applyQuotes(holdings, quotes, hasRvPosition ? {} : tax.positions_cost), trades);
+  port.market = await kvGet(db, "market_indices", null);
+  port.quotes_as_of = Object.values(quotes).map(x => x.date).sort().at(-1) || null;
   if (p === "/v1/portfolio/consolidated") return port;
-  if (p === "/v1/dashboard") return dashboardSummary({ name: u.me.name, fin, port });
+  if (p === "/v1/dashboard") {
+    const d = dashboardSummary({ name: u.me.name, fin, port });
+    if (tax.has_data) d.tax = taxDashboard(tax);
+    return d;
+  }
   throw new Problem(404, "Não encontrado", p);
+}
+
+/* ------------------------------------------------------------------ mercado: cotações e índices (M3) */
+async function loadQuotes(db, tickers) {
+  if (!tickers.length) return {};
+  const out = {};
+  for (let i = 0; i < tickers.length; i += 90) {
+    const part = tickers.slice(i, i + 90);
+    const { results } = await db.prepare(`SELECT ticker, data FROM quotes WHERE ticker IN (${part.map(() => "?").join(",")})`).bind(...part).all();
+    results.forEach(r => { out[r.ticker] = JSON.parse(r.data); });
+  }
+  return out;
+}
+async function getJson(url, headers = {}) {
+  const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; AurionBot/1.0; +https://aurionfinance.com.br)", Accept: "application/json", ...headers },
+                               signal: AbortSignal.timeout(9000), cf: { cacheTtl: 300 } });
+  if (!r.ok) throw new Error(`HTTP ${r.status} em ${new URL(url).host}`);
+  return r.json();
+}
+const marketState = db => kvGet(db, "market_state", { indices_at: null, quotes_at: null, quotes_ok: 0, quotes_fail: 0, errors: [] });
+const ageH = iso => iso ? (Date.now() - Date.parse(iso)) / 36e5 : Infinity;
+
+async function refreshMarket(env, db, { force = false } = {}) {
+  const st = await marketState(db), errors = [];
+  const done = { indices: false, quotes: 0 };
+  // índices do Banco Central (4 requisições)
+  if (force || ageH(st.indices_at) >= 6) {
+    const to = today(), back = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+    try {
+      const [cdi, cdi_aa, selic_meta, ipca] = await Promise.all([
+        getJson(sgsUrl(SGS.cdi, back(400), to)), getJson(sgsUrl(SGS.cdi_aa, back(15), to)),
+        getJson(sgsUrl(SGS.selic_meta, back(60), to)), getJson(sgsUrl(SGS.ipca, back(430), to))].map(pr => pr.then(parseSgs)));
+      await kvSet(db, "market_indices", indicesSnapshot({ cdi, cdi_aa, selic_meta, ipca }, to));
+      st.indices_at = nowIso(); done.indices = true;
+    } catch (e) { errors.push("Banco Central: " + (e.message || e)); }
+  }
+  // cotações: até 20 por execução (limite de subrequisições do plano gratuito), as mais antigas primeiro
+  const { results } = await db.prepare("SELECT DISTINCT json_extract(data,'$.ticker') AS t FROM fin_items WHERE kind IN ('holding','trade')").all();
+  const tickers = tickersFrom(results.map(r => ({ ticker: r.t })));
+  if (tickers.length) {
+    const have = {};
+    for (let i = 0; i < tickers.length; i += 90) {
+      const part = tickers.slice(i, i + 90);
+      const r = await db.prepare(`SELECT ticker, fetched_at FROM quotes WHERE ticker IN (${part.map(() => "?").join(",")})`).bind(...part).all();
+      r.results.forEach(x => { have[x.ticker] = x.fetched_at; });
+    }
+    const stale = tickers.filter(t => force || ageH(have[t]) >= 4).sort((a, b) => (have[a] || "").localeCompare(have[b] || "")).slice(0, 20);
+    let ok = 0, fail = 0;
+    const stmts = [];
+    await Promise.all(stale.map(async t => {
+      let q = null;
+      try { q = parseYahooChart(await getJson(yahooUrl(t)), t); }
+      catch (e) {
+        if (env.BRAPI_TOKEN) { try { q = parseBrapi(await getJson(brapiUrl([t], env.BRAPI_TOKEN)))[0] || null; } catch (e2) { /* segue */ } }
+        if (!q) errors.push(`${t}: ${e.message || e}`);
+      }
+      if (q) { ok++; stmts.push(db.prepare("INSERT INTO quotes (ticker,data,fetched_at) VALUES (?,?,?) ON CONFLICT(ticker) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at").bind(t, JSON.stringify(q), nowIso())); }
+      else { fail++; stmts.push(db.prepare("INSERT INTO quotes (ticker,data,fetched_at) VALUES (?,?,?) ON CONFLICT(ticker) DO UPDATE SET fetched_at=excluded.fetched_at").bind(t, JSON.stringify({ ticker: t, close: null }), nowIso())); }
+    }));
+    if (stmts.length) await db.batch(stmts);
+    if (stale.length) { st.quotes_at = nowIso(); st.quotes_ok = ok; st.quotes_fail = fail; }
+    done.quotes = ok;
+  }
+  st.errors = errors.slice(0, 10);
+  await kvSet(db, "market_state", st);
+  return done;
+}
+async function marketPublic(env, db) {
+  let indices = await kvGet(db, "market_indices", null);
+  const st = await marketState(db);
+  if (!indices && ageH(st.tried_at) > 0.1) {      // primeira chamada após a publicação: busca na hora
+    await kvSet(db, "market_state", { ...st, tried_at: nowIso() });
+    try { await refreshMarket(env, db); } catch (e) { /* registrado no estado */ }
+    indices = await kvGet(db, "market_indices", null);
+  }
+  const n = await db.prepare("SELECT COUNT(*) AS n, MAX(json_extract(data,'$.date')) AS d FROM quotes WHERE json_extract(data,'$.close') IS NOT NULL").first();
+  const s = await marketState(db);
+  return { indices, quotes: { tickers: n?.n || 0, latest_date: n?.d || null, last_refresh: s.quotes_at, ok: s.quotes_ok, fail: s.quotes_fail },
+           indices_refreshed_at: s.indices_at, errors: s.errors || [], brapi_fallback: !!env.BRAPI_TOKEN };
 }
