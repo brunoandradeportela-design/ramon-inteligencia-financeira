@@ -273,7 +273,7 @@ async function demoCall(method, path, body) {
 
 async function realPost(p, b, h) {
   const r = await http("POST", p, b, h);
-  if (/^\/v1\/auth\/(login|register)$/.test(p) && r?.user?.name) { LS.set("name", r.user.name); LS.set("role", r.user.roles?.includes("admin") ? "admin" : "client"); }
+  if (/^\/v1\/auth\/(login|register|owner\/setup)$/.test(p) && r?.user?.name) { LS.set("name", r.user.name); LS.set("role", r.user.roles?.includes("admin") ? "admin" : "client"); }
   return r;
 }
 export const HAS_API = !!BASE;

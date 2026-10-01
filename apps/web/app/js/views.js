@@ -39,7 +39,40 @@ export async function login(root, r) {
       const res = await api.post("/v1/auth/login", { email: root.querySelector("#email").value, password: root.querySelector("#pw").value });
       onLogin(res.token, res.user);
       go("#/" + (res.user.roles?.includes("admin") ? "crm" : (r.params.get("next") || "dashboard")));
-    } catch (err) { root.querySelector("#err").textContent = problemMsg(err); btn.disabled = false; }
+    } catch (err) {
+      if (err instanceof ApiError && err.problem.code === "owner_setup_required") return ownerSetup(root, root.querySelector("#email").value);
+      root.querySelector("#err").textContent = problemMsg(err); btn.disabled = false;
+    }
+  });
+}
+
+/* primeiro acesso do administrador: código de ativação (uso único) + senha escolhida por ele */
+function ownerSetup(root, email) {
+  root.innerHTML = authLayout(`
+    <a href="#/entrar" class="muted small">← Voltar</a>
+    <h1>Primeiro acesso</h1>
+    <p class="small muted">Ative a conta de administrador <b>${esc(email)}</b>: informe o código de ativação recebido e crie sua senha.</p>
+    <form id="s" class="stack" novalidate>
+      <div class="field"><label for="code">Código de ativação</label><input class="input" id="code" autocomplete="one-time-code" required placeholder="XXXX-XXXX-XXXX" style="text-transform:uppercase"></div>
+      <div class="field"><label for="np">Nova senha</label><input class="input" id="np" type="password" autocomplete="new-password" minlength="10" required>
+        <span class="small muted">10+ caracteres, com letras e números.</span></div>
+      <div class="field"><label for="np2">Repita a senha</label><input class="input" id="np2" type="password" autocomplete="new-password" required></div>
+      <p class="err" id="err" role="alert"></p>
+      <button class="btn btn--primary" style="width:100%;height:44px">Ativar e entrar</button>
+    </form>
+    ${trust("O código vale uma única vez. Depois disso, o acesso é só com o e-mail e a senha que você criar agora.")}`);
+  root.querySelector("#s").addEventListener("submit", async e => {
+    e.preventDefault();
+    const err = root.querySelector("#err"), btn = e.target.querySelector("button"), pw = root.querySelector("#np").value;
+    err.textContent = "";
+    if (pw !== root.querySelector("#np2").value) return err.textContent = "As senhas não conferem.";
+    if (pw.length < 10 || !/\d/.test(pw) || !/[a-z]/i.test(pw)) return err.textContent = "Use 10+ caracteres, com letras e números.";
+    btn.disabled = true;
+    try {
+      const res = await api.post("/v1/auth/owner/setup", { email, code: root.querySelector("#code").value, password: pw });
+      onLogin(res.token, res.user);
+      go("#/crm");
+    } catch (x) { err.textContent = problemMsg(x); btn.disabled = false; }
   });
 }
 

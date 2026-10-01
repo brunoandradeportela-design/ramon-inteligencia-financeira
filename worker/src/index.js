@@ -300,8 +300,12 @@ async function route(req, env, db, url) {
     const email = String(body.email || "").trim().toLowerCase(), pw = String(body.password || "");
     await throttle(db, email);
     if (email === ownerEmail(env)) {
-      if (!env.OWNER_PASSWORD) { console.error("OWNER_PASSWORD ausente: defina o secret no Worker (Settings → Variables and Secrets)"); throw new Problem(503, "Acesso do administrador ainda não ativado", "O acesso do administrador ainda não foi ativado no servidor. Tente novamente em alguns minutos."); }
-      if (!safeEqual(pw, env.OWNER_PASSWORD)) { await loginFailed(db, email); throw new Problem(401, "Não autenticado", "E-mail ou senha incorretos."); }
+      const stored = await kvGet(db, "owner_pw");                       // senha definida pelo próprio Ramon no primeiro acesso
+      if (!env.OWNER_PASSWORD && !stored)
+        throw new Problem(409, "Primeiro acesso do administrador", "Defina sua senha com o código de ativação.", { code: "owner_setup_required" });
+      const ok = stored ? await checkPassword(pw, stored) : safeEqual(pw, env.OWNER_PASSWORD);
+      if (!ok) { await loginFailed(db, email); throw new Problem(401, "Não autenticado", "E-mail ou senha incorretos."); }
+      await db.prepare("DELETE FROM login_fails WHERE email=?").bind(email).run();
       return { token: await newSession(db, OWNER_ID), user: ownerMe(env, await kvGet(db, "owner_theme", "system")) };
     }
     const row = await db.prepare("SELECT pw, data FROM users WHERE email=?").bind(email).first();
@@ -309,6 +313,17 @@ async function route(req, env, db, url) {
     await db.prepare("DELETE FROM login_fails WHERE email=?").bind(email).run();
     const c = JSON.parse(row.data); c.last_login_at = nowIso(); await saveCustomer(db, c);
     return { token: await newSession(db, c.id), user: meFromCustomer(c) };
+  }
+  /* primeiro acesso do dono: código de ativação de uso único (só o hash fica no código) → Ramon define a própria senha */
+  if (m === "POST" && p === "/v1/auth/owner/setup") {
+    const email = String(body.email || "").trim().toLowerCase(), pw = String(body.password || ""), code = String(body.code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    await throttle(db, "setup:" + email);
+    if (email !== ownerEmail(env)) throw new Problem(403, "Acesso negado", "Este primeiro acesso é exclusivo do administrador.");
+    if (await kvGet(db, "owner_pw") || env.OWNER_PASSWORD) throw new Problem(409, "Já ativado", "O acesso do administrador já foi ativado. Entre com sua senha.");
+    if (!env.OWNER_SETUP_HASH || !safeEqual(await sha256(code), env.OWNER_SETUP_HASH)) { await loginFailed(db, "setup:" + email); throw new Problem(401, "Código inválido", "Código de ativação incorreto."); }
+    if (pw.length < 10 || !/\d/.test(pw) || !/[a-z]/i.test(pw)) throw new Problem(422, "Senha fraca", "Use 10+ caracteres, com letras e números.");
+    await kvSet(db, "owner_pw", await hashPassword(pw));
+    return new Resp(201, { token: await newSession(db, OWNER_ID), user: ownerMe(env, await kvGet(db, "owner_theme", "system")) });
   }
   if (m === "POST" && p === "/v1/auth/logout") {
     const h = req.headers.get("Authorization") || "";

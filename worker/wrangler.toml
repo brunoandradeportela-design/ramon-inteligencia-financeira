@@ -6,6 +6,8 @@ workers_dev = true
 [vars]
 OWNER_EMAIL = "ramonjunio07@gmail.com"
 OWNER_NAME = "Ramon Junio Araujo Pereira"
+# hash do código de ativação de uso único do primeiro acesso do administrador (o código não fica no repositório)
+OWNER_SETUP_HASH = "1watoObSimzeiD0ZXCRPyNrb9J4SFQQ8f7YpT8zuyoE"
 ALLOWED_ORIGINS = "https://aurionfinance.com.br,https://www.aurionfinance.com.br"
 
 [[d1_databases]]
