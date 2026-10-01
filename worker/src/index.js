@@ -9,6 +9,7 @@
  *   ASAAS_WEBHOOK_TOKEN    token escolhido no cadastro do webhook no Asaas
  * Variáveis (wrangler.toml): OWNER_EMAIL, OWNER_NAME, ALLOWED_ORIGINS
  */
+import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize } from "../../apps/web/app/js/fin_engine.js";
 import { validateSignup, localCustomer, metricsFrom, addMonth, PRICE, PLAN_NAME, paymentsFrom, docValid, normalizePhone } from "../../apps/web/app/js/crm_rules.js";
 
 const FEATURES = {
@@ -63,6 +64,8 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS gw_payments (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS login_fails (email TEXT PRIMARY KEY, n INTEGER NOT NULL, until TEXT)",
+  "CREATE TABLE IF NOT EXISTS fin_items (user_id TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, import_id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (user_id, kind, id))",
+  "CREATE INDEX IF NOT EXISTS fin_items_import ON fin_items (user_id, import_id)",
 ];
 let schemaReady = false;
 async function ensureSchema(db) {
@@ -321,6 +324,13 @@ async function route(req, env, db, url) {
     return { theme };
   }
 
+
+  /* ---- dados financeiros reais do cliente (importação de arquivos; futuramente Open Finance) */
+  if (p.startsWith("/v1/imports") || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
+    const u = await authUser(req, env, db);
+    return finRoute(m, p, body, q, u, db);
+  }
+
   /* ---- assinatura do cliente */
   if (m === "POST" && p === "/v1/billing/checkout") {
     const u = await authUser(req, env, db);
@@ -499,3 +509,104 @@ export default {
 };
 
 export const _internals = { recompute, hashPassword, checkPassword, STATUS_MAP, normalizePhone };
+
+/* ------------------------------------------------------------------ dados financeiros (importação) */
+const FIN_KINDS = ["transaction", "account", "holding", "trade"];
+const LIMITS = { transaction: 20000, account: 50, holding: 500, trade: 10000 };
+const str = (v, n = 200) => String(v ?? "").slice(0, n);
+const numOrNull = v => (v === null || v === undefined || v === "" || !isFinite(+v)) ? null : Math.round(+v * 1e6) / 1e6;
+const isoDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : null;
+const ASSET_CLASSES = ["acao", "fii", "etf", "bdr", "tesouro", "renda_fixa", "fundo", "previdencia", "cripto", "outro"];
+
+function cleanItem(kind, x, src) {
+  if (!x || typeof x !== "object") return null;
+  if (kind === "transaction") {
+    const date = isoDate(x.date), amount = numOrNull(x.amount);
+    if (!date || amount === null || !str(x.description).trim()) return null;
+    return { date, description: str(x.description).trim(), amount, category: str(x.category, 40) || categorize(x.description, amount),
+             account_id: str(x.account_id, 80), fitid: str(x.fitid, 80), source: src };
+  }
+  if (kind === "account") {
+    return { name: str(x.name, 80) || "Conta", institution: str(x.institution, 80), type: x.type === "cartao" ? "cartao" : "conta",
+             balance: numOrNull(x.balance) ?? 0, balance_date: isoDate(x.balance_date), external_id: str(x.external_id, 80), source: src };
+  }
+  if (kind === "holding") {
+    const value = numOrNull(x.value);
+    if (value === null || value <= 0 || !str(x.name || x.ticker).trim()) return null;
+    return { name: str(x.name || x.ticker, 120).trim(), ticker: str(x.ticker, 20).toUpperCase(), asset_class: ASSET_CLASSES.includes(x.asset_class) ? x.asset_class : "outro",
+             custodian: str(x.custodian, 80), quantity: numOrNull(x.quantity) ?? 1, value, invested: numOrNull(x.invested), price: numOrNull(x.price),
+             as_of: isoDate(x.as_of), maturity: isoDate(x.maturity), indexer: str(x.indexer, 40), source: src };
+  }
+  if (kind === "trade") {
+    const date = isoDate(x.date), q = numOrNull(x.quantity), price = numOrNull(x.price);
+    if (!date || !q || !["C", "V"].includes(x.side) || !str(x.ticker).trim()) return null;
+    return { date, ticker: str(x.ticker, 20).toUpperCase().trim(), side: x.side, quantity: q, price: price ?? 0,
+             value: numOrNull(x.value) ?? q * (price ?? 0), fees: numOrNull(x.fees) ?? 0, market: str(x.market, 40), custodian: str(x.custodian, 80), source: src };
+  }
+  return null;
+}
+async function itemId(kind, it) {
+  const key = kind === "transaction" ? [it.account_id, it.date, it.amount, it.description, it.fitid].join("|")
+    : kind === "account" ? [it.institution, it.name, it.external_id].join("|")
+    : kind === "holding" ? [it.source, it.custodian, it.ticker || it.name, it.maturity, it.indexer].join("|")
+    : [it.date, it.ticker, it.side, it.quantity, it.price, it.custodian].join("|");
+  return kind.slice(0, 3) + "_" + (await sha256(key)).slice(0, 22);
+}
+async function finLoad(db, uid, kind) {
+  const { results } = await db.prepare("SELECT id, data FROM fin_items WHERE user_id=? AND kind=?").bind(uid, kind).all();
+  return results.map(r => ({ id: r.id, ...JSON.parse(r.data) }));
+}
+
+async function finRoute(m, p, body, q, u, db) {
+  const uid = u.me.id;
+  if (m === "POST" && p === "/v1/imports") {
+    const src = str(body.source, 60) || "arquivo";
+    const filename = str(body.filename, 160) || "arquivo";
+    const importId = "imp_" + randomToken(9).replace(/[-_]/g, "");
+    const counts = {}, stmts = [];
+    let total = 0;
+    for (const kind of FIN_KINDS) {
+      const raw = Array.isArray(body[kind + "s"]) ? body[kind + "s"] : [];
+      if (raw.length > LIMITS[kind]) throw new Problem(422, "Arquivo grande demais", `Máximo de ${LIMITS[kind]} registros do tipo ${kind} por importação.`);
+      counts[kind + "s"] = 0;
+      for (const x of raw) {
+        const it = cleanItem(kind, x, src);
+        if (!it) continue;
+        const id = await itemId(kind, it);
+        stmts.push(db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET data=excluded.data, import_id=excluded.import_id")
+          .bind(uid, kind, id, importId, JSON.stringify(it)));
+        counts[kind + "s"]++; total++;
+      }
+    }
+    if (!total) throw new Problem(422, "Nada para importar", "Não encontramos registros válidos neste arquivo.");
+    // posição é uma foto: uma nova posição da mesma origem substitui a anterior
+    if (body.replace_holdings && counts.holdings)
+      stmts.unshift(db.prepare("DELETE FROM fin_items WHERE user_id=? AND kind='holding' AND json_extract(data,'$.source')=?").bind(uid, src));
+    const rec = { id: importId, filename, source: src, kind: str(body.kind, 40), counts, created_at: nowIso() };
+    stmts.push(db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?)").bind(uid, "import", importId, importId, JSON.stringify(rec)));
+    for (let i = 0; i < stmts.length; i += 90) await db.batch(stmts.slice(i, i + 90));
+    return new Resp(201, rec);
+  }
+  if (m === "GET" && p === "/v1/imports") {
+    const items = (await finLoad(db, uid, "import")).sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return { items };
+  }
+  const del = p.match(/^\/v1\/imports\/(imp_[A-Za-z0-9]+)$/);
+  if (m === "DELETE" && del) {
+    await db.prepare("DELETE FROM fin_items WHERE user_id=? AND import_id=?").bind(uid, del[1]).run();
+    return new Resp(204);
+  }
+  if (m === "DELETE" && p === "/v1/imports") {
+    await db.prepare("DELETE FROM fin_items WHERE user_id=?").bind(uid).run();
+    return new Resp(204);
+  }
+  if (m !== "GET") throw new Problem(405, "Método não permitido", `${m} ${p}`);
+  const [txs, accounts, holdings, trades] = await Promise.all(FIN_KINDS.map(k => finLoad(db, uid, k)));
+  const fin = financeSummary(txs, accounts);
+  if (p === "/v1/finance/summary") return fin;
+  if (p === "/v1/finance/transactions") return { has_data: txs.length > 0, ...transactionsList(txs, Math.min(+q.limit || 60, 500)) };
+  const port = portfolioSummary(holdings, trades);
+  if (p === "/v1/portfolio/consolidated") return port;
+  if (p === "/v1/dashboard") return dashboardSummary({ name: u.me.name, fin, port });
+  throw new Problem(404, "Não encontrado", p);
+}

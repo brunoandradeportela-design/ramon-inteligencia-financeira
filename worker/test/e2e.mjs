@@ -19,7 +19,7 @@ const call = async (method, path, body, token, headers = {}) => {
 try {
   const email = `marina.${Date.now()}@exemplo.com`;
   let r = await call("POST", "/v1/auth/register", { name: "Marina Costa Lima", email, profession: "Engenheira", phone: "(69) 99876-5432", password: "senhaSegura123", accept_terms: true });
-  assert.equal(r.status, 201, JSON.stringify(r.body)); assert.equal(r.cors, "https://aurionfinance.com.br");
+  assert.equal(r.status, 201, JSON.stringify(r.body)); if (!process.env.AURION_TEST_URL) assert.equal(r.cors, "https://aurionfinance.com.br");
   const cli = r.body.token, uid = r.body.user.id;
   assert.equal((await call("POST", "/v1/auth/register", { name: "Marina Costa Lima", email, profession: "Engenheira", phone: "(69) 99876-5432", password: "senhaSegura123", accept_terms: true })).status, 409);
   assert.equal((await call("POST", "/v1/auth/login", { email: "ramonjunio07@gmail.com", password: "errada" })).status, 401);

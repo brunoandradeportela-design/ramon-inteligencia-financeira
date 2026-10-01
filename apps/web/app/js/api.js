@@ -9,7 +9,14 @@ export const DEMO = !BASE;
 /* Modo híbrido (API na nuvem): contas, CRM e pagamentos são reais; os módulos de análise
    (finanças, impostos, carteira, simulações) usam o snapshot de demonstração até o Open Finance. */
 export const ANALYTICS_DEMO = true;
-const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing)(\/|\?|$)/.test(p);
+const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing|imports)(\/|\?|$)/.test(p);
+/* painéis que usam os dados importados pelo cliente; sem dados próprios, mostram o exemplo */
+const HYBRID_DATA = p => !!BASE && /^\/v1\/(finance\/summary|finance\/transactions|portfolio\/consolidated|dashboard)(\?|$)/.test(p);
+async function hybridGet(p) {
+  const r = await http("GET", p);
+  if (r && r.has_data === false) return { ...(await demoCall("GET", p)), sample: true };
+  return r;
+}
 const TOKEN_KEY = "ramon.token";
 let demoData = null;
 
@@ -269,11 +276,13 @@ async function realPost(p, b, h) {
   if (/^\/v1\/auth\/(login|register)$/.test(p) && r?.user?.name) { LS.set("name", r.user.name); LS.set("role", r.user.roles?.includes("admin") ? "admin" : "client"); }
   return r;
 }
+export const HAS_API = !!BASE;
 export const api = {
-  get: p => REAL(p) ? http("GET", p) : demoCall("GET", p),
+  get: p => REAL(p) ? http("GET", p) : HYBRID_DATA(p) ? hybridGet(p) : demoCall("GET", p),
   post: (p, b, h) => REAL(p) ? realPost(p, b, h) : demoCall("POST", p, b),
   put: (p, b) => REAL(p) ? http("PUT", p, b) : demoCall("PUT", p, b),
   patch: (p, b) => REAL(p) ? http("PATCH", p, b) : demoCall("PATCH", p, b),
   del: p => REAL(p) ? http("DELETE", p) : Promise.reject(new ApiError({ status: 409, title: "Indisponível", detail: "Solicite pelo suporte: exportação/exclusão de dados é feita pelo administrador." })),
+  demo: p => demoCall("GET", p),   // simulador de vendas: continua sobre a grade pré-calculada do exemplo
   demoGrid: async () => ANALYTICS_DEMO ? (await demo()).simulation_grid : null,
 };

@@ -1,3 +1,4 @@
+import { importData } from "./views_import.js";
 /* Shell da aplicação: roteamento por hash, sessão, tema (Claro/Escuro/Sistema) e navegação. */
 import { api, DEMO, ANALYTICS_DEMO, session, ApiError } from "./api.js";
 import { esc, icon, errorBox, loading } from "./ui.js";
@@ -8,7 +9,7 @@ import { payments } from "./views_payments.js";
 const NAV = [
   ["dashboard", "Início", "home"], ["patrimonio", "Patrimônio", "wealth"], ["financas", "Finanças", "finance"],
   ["tributacao", "Tributação", "tax"], ["simulador", "Simulador", "sim"], ["alertas", "Alertas", "bell"],
-  ["documentos", "Documentos", "doc"], ["conexoes", "Conexões", "link"], ["assistente", "Assistente IA", "ai"],
+  ["importar", "Importar dados", "doc"], ["documentos", "Documentos", "doc"], ["conexoes", "Conexões", "link"], ["assistente", "Assistente IA", "ai"],
 ];
 const TITLES = Object.fromEntries(NAV.map(([k, t]) => [k, t]));
 Object.assign(TITLES, { crm: "CRM · Clientes", pagamentos: "Pagamentos", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
@@ -16,7 +17,7 @@ const PUBLIC = { entrar: V.login, cadastro: V.register };
 const ROUTES = {
   dashboard: V.dashboard, patrimonio: V.portfolio, financas: V.finance, tributacao: V.tax, simulador: V.simulator,
   alertas: V.alerts, documentos: V.documents, conexoes: V.connections, assistente: V.assistant, planos: V.plans,
-  configuracoes: V.settings, privacidade: V.privacy,
+  configuracoes: V.settings, privacidade: V.privacy, importar: importData,
 };
 const ADMIN_ROUTES = { ...ROUTES, crm, pagamentos: payments };
 
@@ -101,7 +102,7 @@ function shell(admin = false) {
       </div>
     </aside>
     <div class="main">
-      ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note"><b>Painéis de análise com dados de exemplo</b> — sua conta e assinatura são reais; os números se tornam seus quando as conexões Open Finance forem ativadas.</div>` : ""}
+      ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note"><b>Seus dados:</b> Início, Patrimônio e Finanças mostram seus números quando você envia seus arquivos em <a href="#/importar">Importar dados</a>. Tributação, alertas e simulações ainda usam exemplos.</div>` : ""}
       <header class="top">
         <button class="icon-btn burger" data-burger aria-label="Abrir menu">${icon("menu")}</button>
         <h1 data-title>Início</h1>

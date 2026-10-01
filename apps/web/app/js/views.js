@@ -6,6 +6,7 @@ import { areaChart, barChart, brl, confidence, donut, dt, dtm, empty, esc, hbars
 
 const trust = txt => `<p class="trust-line">${icon("info")}<span>${txt}</span></p>`;
 const badge = (s, label) => `<span class="badge b-${esc(s)}">${esc(label || s.replace("_", " "))}</span>`;
+const sampleNote = d => d && d.sample ? `<div class="card" style="margin-bottom:16px;border-color:var(--brand-2)"><p class="small"><b>Exemplo ilustrativo.</b> Estes números não são seus. Envie seus extratos e relatórios da B3 em <a href="#/importar">Importar dados</a> para ver a sua situação real.</p></div>` : "";
 const go = h => { location.hash = h; };
 const problemMsg = e => e instanceof ApiError ? (e.problem.detail || e.problem.title) + (e.problem.errors?.length ? " — " + e.problem.errors.map(x => x.msg).join("; ") : "") : String(e.message || e);
 
@@ -116,12 +117,12 @@ export async function dashboard(el, r) {
   const d = await api.get("/v1/dashboard");
   const tax = d.tax, nw = d.net_worth;
   const up = nw.variation_pct >= 0;
-  el.innerHTML = `
+  el.innerHTML = `${sampleNote(d)}
     <div class="row between wrap" style="margin-bottom:18px">
       <div class="hello"><h2>Olá, ${esc(d.greeting)}!</h2><p>Aqui está um resumo da sua vida financeira.</p></div>
       <span class="chip">Referência: ${dt(d.reference_date)}</span></div>
     ${r.params.get("primeiro") ? `<div class="card" style="margin-bottom:16px;border-color:var(--brand-2)"><h3>${icon("ai")} Seu primeiro diagnóstico</h3>
-      <p class="small muted" style="margin-top:6px">Conecte instituições em <a href="#/conexoes">Conexões</a> ou envie notas de corretagem e extratos em <a href="#/documentos">Documentos</a> para que os motores consolidem seus dados.</p></div>` : ""}
+      <p class="small muted" style="margin-top:6px">Envie seus extratos (OFX/CSV) e os relatórios da B3 em <a href="#/importar">Importar dados</a> para que os motores consolidem seus números reais.</p></div>` : ""}
     <div class="grid g-dash">
       <section class="card" aria-labelledby="k1"><h3 id="k1">Patrimônio total</h3>
         <div class="kpi">${brl(nw.total)}</div>
@@ -159,10 +160,11 @@ export async function dashboard(el, r) {
 /* ================================================================ PATRIMÔNIO */
 export async function portfolio(el) {
   const p = await api.get("/v1/portfolio/consolidated");
-  el.innerHTML = `
+  const money = v => v == null ? "—" : brl(v);
+  el.innerHTML = `${sampleNote(p)}
     <div class="grid g-4">
       <div class="card"><h3>Patrimônio consolidado</h3><div class="kpi">${brl(p.total)}</div></div>
-      <div class="card"><h3>Valor aplicado</h3><div class="kpi">${brl(p.invested)}</div></div>
+      <div class="card"><h3>Valor aplicado</h3><div class="kpi">${brl(p.invested)}</div>${p.result_coverage != null && p.result_coverage < 0.999 ? `<p class="small muted">custo conhecido de ${pct(p.result_coverage, 0)} da carteira · importe as negociações da B3</p>` : ""}</div>
       <div class="card"><h3>Resultado</h3><div class="kpi ${+p.result < 0 ? "neg" : "pos"}">${brl(p.result)}</div><span class="delta ${p.result_pct >= 0 ? "delta--up" : "delta--down"}">${pct(p.result_pct)}</span></div>
       <div class="card"><h3>Liquidez em até D+2</h3><div class="kpi">${pct(p.liquidity.share, 0)}</div><p class="small muted">${brl(p.liquidity.d2_or_less)}</p></div>
     </div>
@@ -178,7 +180,7 @@ export async function portfolio(el) {
       <div class="table-wrap"><table class="table" style="margin-top:10px"><caption class="sr-only">Posições consolidadas</caption>
       <thead><tr><th>Ativo</th><th>Classe</th><th>Custódia</th><th class="num">Qtd.</th><th class="num">Aplicado</th><th class="num">Valor</th><th class="num">Resultado</th><th class="num">Peso</th><th>Origem</th></tr></thead>
       <tbody>${p.positions.map(x => `<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.group)}</td><td>${esc(x.custodian)}</td><td class="num">${x.quantity === "1" ? "—" : num(x.quantity)}</td>
-        <td class="num">${brl(x.invested)}</td><td class="num">${brl(x.value)}</td><td class="num ${+x.result < 0 ? "neg" : "pos"}">${brl(x.result)}</td><td class="num">${pct(x.weight)}</td>
+        <td class="num">${money(x.invested)}</td><td class="num">${brl(x.value)}</td><td class="num ${+x.result < 0 ? "neg" : "pos"}">${money(x.result)}</td><td class="num">${pct(x.weight)}</td>
         <td class="small muted">${esc(x.price_source)}${x.as_of ? " · " + dt(x.as_of) : ""}</td></tr>`).join("")}</tbody></table></div>
       ${trust("Informação descritiva. A plataforma não recomenda compra ou venda de ativos (fora do escopo do MVP e sujeita à regulação da CVM).")}</section>`;
 }
@@ -186,7 +188,7 @@ export async function portfolio(el) {
 /* ================================================================ FINANÇAS */
 export async function finance(el) {
   const [f, tx] = await Promise.all([api.get("/v1/finance/summary"), api.get("/v1/finance/transactions?limit=60")]);
-  el.innerHTML = `
+  el.innerHTML = `${sampleNote(f)}
     <div class="grid g-4">
       <div class="card"><h3>Entradas (${mes(f.period.from)}–${mes(f.period.to)})</h3><div class="kpi pos">${brl(f.totals.income)}</div></div>
       <div class="card"><h3>Saídas</h3><div class="kpi">${brl(f.totals.expense)}</div></div>
@@ -267,7 +269,7 @@ function upsell(what, e) {
 /* ================================================================ SIMULADOR */
 export async function simulator(el) {
   let pf, sims;
-  try { [pf, sims] = await Promise.all([api.get("/v1/portfolio/consolidated"), api.get("/v1/simulations")]); }
+  try { [pf, sims] = await Promise.all([ANALYTICS_DEMO ? api.demo("/v1/portfolio/consolidated") : api.get("/v1/portfolio/consolidated"), api.get("/v1/simulations")]); }
   catch (e) { if (e.status === 402) { el.innerHTML = upsell("Simulação de cenários", e); return; } throw e; }
   const rv = pf.positions.filter(p => ["acao", "etf", "fii", "bdr"].includes(p.asset_class));
   let tab = "venda";
