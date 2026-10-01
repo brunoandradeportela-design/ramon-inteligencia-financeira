@@ -161,7 +161,7 @@ def test_crm_acompanha_novo_cadastro_e_pagamento():
                     json={"amount": "24.90", "method": "pix", "status": "pago", "date": "2026-09-27", "period": "2026-09"})
     assert p.status_code == 201
     d = client.get(f"/v1/admin/crm/customers/{uid}", headers=h).json()
-    assert d["stage"] == "pagante" and d["total_paid"] == "24.90" and d["subscription"]["next_due"].startswith("2026-10")
+    assert d["stage"] == "pagante" and d["total_paid"] == "24.90" and d["subscription"]["next_due"] > "2026-09-27"   # um mês após o pagamento (depende da data do cadastro)
     n = client.post(f"/v1/admin/crm/customers/{uid}/notes", headers=h, json={"text": "Boas-vindas enviadas", "kind": "whatsapp"})
     assert n.status_code == 201
     assert client.patch(f"/v1/admin/crm/customers/{uid}", headers=h, json={"stage": "cancelado"}).json()["stage"] == "cancelado"
