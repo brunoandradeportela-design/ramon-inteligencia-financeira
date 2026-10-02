@@ -22,7 +22,7 @@ export async function connectionsReal(el) {
   const st = await api.get("/v1/openfinance");
   const trustLine = `<div class="trust-line" style="margin-top:16px">${icon("shield")}<span>Nunca pedimos nem guardamos a senha do seu banco. A autorização acontece no ambiente da instituição, pelo Open Finance regulado pelo Banco Central, e você pode desconectar quando quiser.</span></div>`;
   if (!st.configured) {
-    el.innerHTML = `<section class="card" style="max-width:760px"><h3>${icon("link")} Conexão automática com bancos e corretoras</h3>
+    el.innerHTML = `<section class="card" style="max-width:760px"><h3>Conexão automática com bancos e corretoras</h3>
       <p class="small" style="margin-top:8px">Em breve você poderá conectar suas contas pelo <b>Open Finance</b> e manter extratos, cartões e investimentos atualizados todos os dias, sem enviar arquivos.</p>
       <p class="small muted" style="margin-top:8px">Enquanto a conexão automática é ativada, envie seus extratos (OFX/CSV) e os relatórios da B3 — os painéis, o imposto, os alertas e o simulador já funcionam com eles.</p>
       <a class="btn btn--primary" style="margin-top:14px" href="#/importar">Importar dados</a>${trustLine}</section>`;
@@ -34,7 +34,7 @@ export async function connectionsReal(el) {
       <button class="btn btn--primary" id="add">+ Conectar banco ou corretora</button></div>
     <p class="err" id="oferr" role="alert"></p>
     <div class="grid g-3">${items.map(c => { const [k, l] = BADGE[c.state] || BADGE.desconhecido; return `<article class="card">
-      <h3 style="display:flex;gap:10px;align-items:center">${c.logo ? `<img src="${esc(c.logo)}" alt="" width="28" height="28" style="border-radius:6px" onerror="this.remove()">` : icon("link")} ${esc(c.institution)} <span class="right">${badge(k, l)}</span></h3>
+      <h3 style="display:flex;gap:10px;align-items:center">${c.logo ? `<img src="${esc(c.logo)}" alt="" width="28" height="28" style="border-radius:6px" onerror="this.remove()">` : ""} ${esc(c.institution)} <span class="right">${badge(k, l)}</span></h3>
       <ul class="stack small" style="margin-top:12px">
         <li><b>Situação:</b> ${esc(c.label || "—")}${c.error ? ` · <span class="neg">${esc(c.error)}</span>` : ""}</li>
         <li><b>Última sincronização:</b> ${c.last_sync_at ? dtm(c.last_sync_at) : "aguardando a instituição"}</li>

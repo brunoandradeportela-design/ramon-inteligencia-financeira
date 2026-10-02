@@ -77,3 +77,18 @@ Pronto e testado contra um simulador da API da Pluggy (`worker/test/fake_pluggy.
    `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET` e, opcional, `PLUGGY_WEBHOOK_TOKEN` (qualquer texto longo aleatório).
 3. Para testar com as instituições de teste da Pluggy, adicionar a variável `PLUGGY_SANDBOX = 1`; remover ao ir para produção.
 4. Produção com bancos reais exige o contrato comercial com a Pluggy.
+
+## Assistente sobre os dados reais
+
+`assistant_engine.js` (roda na API, `POST /v1/assistant/query`, planos Pro e Premium): classifica a intenção, consulta o motor certo e responde
+só com números calculados, cada um com evidência e fonte. Entende impostos (DARFs, isenção do mês, prejuízos), gastos e recorrências,
+patrimônio, alertas, documentos pendentes e simulações escritas em texto ("simular venda de 400 PETR4 a 35 em 20/10").
+Bloqueia pedido de recomendação de compra/venda, tentativa de mudar as regras e pedido de senha. Sem dados, orienta a importar ou conectar.
+
+## Documentos
+
+Cofre de arquivos do cliente no D1 (blocos de 1 MB; até 8 MB por arquivo e 100 MB por cliente). Envio binário (sem base64, poupa CPU),
+conteúdo conferido pelos primeiros bytes (PDF, PNG, JPG, texto, XLSX/DOCX), tipo e ano detectados pelo nome e editáveis.
+Rotas: `GET/POST /v1/documents`, `GET /v1/documents/{id}/download`, `PATCH/DELETE /v1/documents/{id}`.
+Checklist da declaração do IRPF (`doc_engine.js`): informe de cada instituição que aparece nos dados, notas de corretagem, comprovantes
+dos DARFs pagos, recibos de saúde e educação (com o total encontrado nos extratos), previdência, prejuízos a informar e declaração anterior.

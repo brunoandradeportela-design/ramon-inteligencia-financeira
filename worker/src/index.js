@@ -17,6 +17,8 @@ import { computeTax, taxDashboard } from "../../apps/web/app/js/tax_engine.js";
 import { buildAlerts } from "../../apps/web/app/js/alert_engine.js";
 import { simulateSale, simulatePgbl } from "../../apps/web/app/js/sim_engine.js";
 import { normalizeItem, itemView, PLUGGY_WIDGET } from "../../apps/web/app/js/openfinance.js";
+import { answer as assistantAnswer, DISCLAIMER as ASSIST_DISCLAIMER } from "../../apps/web/app/js/assistant_engine.js";
+import { classifyDoc, guessYear, irpfChecklist, sniff, ALLOWED, DOC_KINDS } from "../../apps/web/app/js/doc_engine.js";
 import { SGS, sgsLastUrl, parseSgs, indicesSnapshot, yahooUrl, brapiUrl, parseYahooChart, parseBrapi, applyQuotes, tickersFrom } from "../../apps/web/app/js/market.js";
 import { validateSignup, localCustomer, metricsFrom, addMonth, PRICE, PLAN_NAME, paymentsFrom, docValid, normalizePhone } from "../../apps/web/app/js/crm_rules.js";
 
@@ -73,6 +75,8 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS login_fails (email TEXT PRIMARY KEY, n INTEGER NOT NULL, until TEXT)",
   "CREATE TABLE IF NOT EXISTS fin_items (user_id TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, import_id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (user_id, kind, id))",
+  "CREATE TABLE IF NOT EXISTS docs (user_id TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, size INTEGER NOT NULL, PRIMARY KEY (user_id, id))",
+  "CREATE TABLE IF NOT EXISTS doc_chunks (doc_id TEXT NOT NULL, n INTEGER NOT NULL, bytes BLOB NOT NULL, PRIMARY KEY (doc_id, n))",
   "CREATE TABLE IF NOT EXISTS quotes (ticker TEXT PRIMARY KEY, data TEXT NOT NULL, fetched_at TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS fin_items_import ON fin_items (user_id, import_id)",
 ];
@@ -285,7 +289,8 @@ async function loginFailed(db, email) {
 /* ------------------------------------------------------------------ rotas */
 async function route(req, env, db, url, ctx) {
   const m = req.method, p = url.pathname.replace(/\/$/, "") || "/";
-  const body = ["POST", "PUT", "PATCH"].includes(m) ? await req.json().catch(() => ({})) : {};
+  const rawUpload = m === "POST" && p === "/v1/documents" && !/json/.test(req.headers.get("Content-Type") || "");
+  const body = ["POST", "PUT", "PATCH"].includes(m) && !rawUpload ? await req.json().catch(() => ({})) : {};
   const q = Object.fromEntries(url.searchParams);
 
   if (p === "/health" || p === "/") return { status: "ok", service: "aurion-api", time: nowIso(), gateway: !!env.ASAAS_API_KEY };
@@ -365,7 +370,8 @@ async function route(req, env, db, url, ctx) {
   }
 
   /* ---- dados financeiros reais do cliente (importação de arquivos; futuramente Open Finance) */
-  if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || p.startsWith("/v1/alerts") || p === "/v1/simulations" || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
+  if (p.startsWith("/v1/documents")) { const u = await authUser(req, env, db); return docRoute(m, p, body, q, u, db, req); }
+  if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || p.startsWith("/v1/alerts") || p === "/v1/simulations" || p === "/v1/assistant/query" || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
     const u = await authUser(req, env, db);
     return finRoute(m, p, body, q, u, db);
   }
@@ -514,8 +520,8 @@ function corsHeaders(req, env) {
   const ok = allowed.includes(origin);
   return { "Access-Control-Allow-Origin": ok ? origin : allowed[0] || "*", Vary: "Origin",
            "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-           "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Correlation-ID,Idempotency-Key",
-           "Access-Control-Expose-Headers": "X-Correlation-ID", "Access-Control-Max-Age": "86400" };
+           "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Correlation-ID,Idempotency-Key,X-Filename,X-Doc-Kind,X-Doc-Year",
+           "Access-Control-Expose-Headers": "X-Correlation-ID,Content-Disposition", "Access-Control-Max-Age": "86400" };
 }
 function json(data, status, extra) {
   return new Response(status === 204 ? null : JSON.stringify(data),
@@ -532,6 +538,7 @@ export default {
     try {
       await ensureSchema(env.DB);
       const out = await route(req, env, env.DB, url, ctx);
+      if (out instanceof Response) { const h = new Headers(out.headers); Object.entries(cors).forEach(([k, v]) => h.set(k, v)); return new Response(out.body, { status: out.status, headers: h }); }
       if (out instanceof Resp) return json(out.body, out.status, { ...cors, "X-Correlation-ID": cid });
       return json(out, 200, { ...cors, "X-Correlation-ID": cid });
     } catch (e) {
@@ -687,7 +694,7 @@ async function finRoute(m, p, body, q, u, db) {
   }
   const ents = u.me.entitlements || [];
   if (p === "/v1/simulations" && m === "GET") return { items: await kvGet(db, "sims:" + uid, []) };
-  if (m !== "GET" && p !== "/v1/simulations") throw new Problem(405, "Método não permitido", `${m} ${p}`);
+  if (m !== "GET" && p !== "/v1/simulations" && p !== "/v1/assistant/query") throw new Problem(405, "Método não permitido", `${m} ${p}`);
   const [txs, accounts, holdings, trades] = await Promise.all(FIN_KINDS.map(k => finLoad(db, uid, k)));
   const fin = financeSummary(txs, accounts);
   if (p === "/v1/finance/summary") return fin;
@@ -731,6 +738,21 @@ async function finRoute(m, p, body, q, u, db) {
   port.quotes_as_of = Object.values(quotes).map(x => x.date).sort().at(-1) || null;
   if (p === "/v1/portfolio/consolidated") return port;
   const alertsFor = async () => buildAlerts({ fin, port, tax, refDate: ref, statuses: await kvGet(db, "alerts_status:" + uid, {}) });
+  if (p === "/v1/assistant/query" && m === "POST") {
+    if (!ents.includes("assistente_ia")) throw new Problem(402, "Recurso do plano Pro", "O assistente faz parte dos planos Pro e Premium.", { required_plan: "Pro" });
+    const qtext = str(body.question, 800).trim();
+    if (!qtext) throw new Problem(422, "Dados inválidos", "Escreva a pergunta.");
+    const t0 = Date.now();
+    const docsMeta = (await db.prepare("SELECT data FROM docs WHERE user_id=?").bind(uid).all()).results.map(r => JSON.parse(r.data));
+    const hasRv = holdings.some(h => ["acao", "fii", "etf", "bdr"].includes(h.asset_class));
+    const positions = applyQuotes(holdings, quotes, hasRv ? {} : tax.positions_cost);
+    const checklist = irpfChecklist({ year: +ref.slice(0, 4), accounts, holdings, txs, tax, docs: docsMeta, hasTrades: trades.some(t => t.date.startsWith(ref.slice(0, 4))), trades });
+    const a = assistantAnswer(qtext, { fin, port, tax, alerts: await alertsFor(), name: u.me.name, trades, positions, refDate: ref, documents: docsMeta, checklist,
+      taxOpts: { knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs } });
+    a.tool_calls.forEach(t => { t.latency_ms = Date.now() - t0; });
+    return { id: "ans_" + randomToken(8).replace(/[-_]/g, ""), thread_id: str(body.thread_id, 40) || "thr_" + randomToken(6).replace(/[-_]/g, ""), question: qtext, created_at: nowIso(),
+             provider: "motor determinístico sobre os seus dados", disclaimer: ASSIST_DISCLAIMER, has_data: fin.has_data || port.has_data || tax.has_data, ...a };
+  }
   if (p === "/v1/alerts") {
     const items = await alertsFor(), limited = !ents.includes("radar");
     return { has_data: fin.has_data || port.has_data || tax.has_data, limited, items: limited ? items.slice(0, 3) : items };
@@ -955,4 +977,66 @@ async function ofCron(env, db) {
   for (const [uid, id] of due.slice(0, 2)) {
     try { await ofSync(env, db, uid, id); } catch (e) { await ofUpsertMeta(db, uid, { id, error: e.detail || e.message, checked_at: nowIso() }); }
   }
+}
+
+/* ------------------------------------------------------------------ documentos (D1, em blocos de 1 MB) */
+const DOC_MAX = 8 * 1024 * 1024, DOC_QUOTA = 100 * 1024 * 1024, CHUNK = 1024 * 1024;
+async function docRoute(m, p, body, q, u, db, req) {
+  const uid = u.me.id;
+  const load = async id => { const r = await db.prepare("SELECT data FROM docs WHERE user_id=? AND id=?").bind(uid, id).first(); if (!r) throw new Problem(404, "Documento não encontrado", id); return JSON.parse(r.data); };
+  if (m === "GET" && p === "/v1/documents") {
+    const items = (await db.prepare("SELECT data FROM docs WHERE user_id=?").bind(uid).all()).results.map(r => JSON.parse(r.data)).sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at));
+    const year = /^\d{4}$/.test(q.year || "") ? +q.year : +today().slice(0, 4);
+    const [txs, accounts, holdings, trades] = await Promise.all(FIN_KINDS.map(k => finLoad(db, uid, k)));
+    const prefs = await kvGet(db, "tax_prefs:" + uid, { prior_losses: {}, paid_darfs: {} });
+    const known = Object.fromEntries(holdings.filter(h => h.ticker).map(h => [h.ticker, h.asset_class]));
+    const tax = computeTax(trades, { year, refDate: today(), knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs });
+    return { items, kinds: DOC_KINDS, used_bytes: items.reduce((s, d) => s + d.size, 0), quota_bytes: DOC_QUOTA,
+             checklist: irpfChecklist({ year, accounts, holdings, txs, tax, docs: items, hasTrades: trades.some(t => t.date.startsWith(String(year))), trades }) };
+  }
+  if (m === "POST" && p === "/v1/documents") {
+    const filename = str(decodeURIComponent(req.headers.get("X-Filename") || ""), 160).replace(/[\\/]/g, "_").trim();
+    const ext = filename.split(".").pop().toLowerCase();
+    if (!filename || !ALLOWED[ext]) throw new Problem(422, "Arquivo não aceito", "Envie PDF, PNG, JPG, CSV, OFX, TXT, XLSX ou DOCX.");
+    const buf = new Uint8Array(await req.arrayBuffer());
+    if (!buf.length) throw new Problem(422, "Arquivo vazio", "O arquivo está vazio.");
+    if (buf.length > DOC_MAX) throw new Problem(413, "Arquivo grande demais", "Máximo de 8 MB por arquivo.");
+    const kindOk = sniff(buf.slice(0, 64));
+    if (!ALLOWED[ext].includes(kindOk)) throw new Problem(422, "Conteúdo não confere", `O conteúdo do arquivo não corresponde à extensão .${ext}.`);
+    const used = (await db.prepare("SELECT COALESCE(SUM(size),0) AS s FROM docs WHERE user_id=?").bind(uid).first()).s;
+    if (used + buf.length > DOC_QUOTA) throw new Problem(413, "Espaço esgotado", "Você atingiu 100 MB de documentos. Apague arquivos antigos para enviar novos.");
+    const id = "doc_" + randomToken(10).replace(/[-_]/g, "").slice(0, 16);
+    const kindH = req.headers.get("X-Doc-Kind"), yearH = +req.headers.get("X-Doc-Year");
+    const kind = DOC_KINDS[kindH] ? kindH : classifyDoc(filename);
+    const year = yearH >= 2000 && yearH <= 2100 ? yearH : guessYear(filename, +today().slice(0, 4) - (kind === "informe_rendimentos" || kind === "declaracao" ? 1 : 0));
+    const hash = b64u(await crypto.subtle.digest("SHA-256", buf.subarray(0, 262144))).slice(0, 22);   // impressão do início (poupa CPU do plano gratuito)
+    const doc = { id, filename, mime: kindOk === "text/plain" ? "text/plain" : kindOk === "application/zip" ? "application/octet-stream" : kindOk, size: buf.length, checksum: hash,
+                  kind, title: `${DOC_KINDS[kind]} ${year}`.replace(/^Outro documento/, filename.replace(/\.[^.]+$/, "").slice(0, 60)), year, status: "guardado", uploaded_at: nowIso() };
+    const stmts = [db.prepare("INSERT INTO docs (user_id,id,data,size) VALUES (?,?,?,?)").bind(uid, id, JSON.stringify(doc), buf.length)];
+    for (let i = 0, n = 0; i < buf.length; i += CHUNK, n++) stmts.push(db.prepare("INSERT INTO doc_chunks (doc_id,n,bytes) VALUES (?,?,?)").bind(id, n, buf.slice(i, i + CHUNK)));
+    await db.batch(stmts);
+    return new Resp(201, doc);
+  }
+  const mm = p.match(/^\/v1\/documents\/(doc_[A-Za-z0-9]+)(\/download)?$/);
+  if (!mm) throw new Problem(404, "Não encontrado", p);
+  const doc = await load(mm[1]);
+  if (m === "GET" && mm[2]) {
+    const { results } = await db.prepare("SELECT bytes FROM doc_chunks WHERE doc_id=? ORDER BY n").bind(doc.id).all();
+    const parts = results.map(r => new Uint8Array(r.bytes)), out = new Uint8Array(parts.reduce((s, x) => s + x.length, 0));
+    let off = 0; parts.forEach(x => { out.set(x, off); off += x.length; });
+    return new Response(out, { status: 200, headers: { "Content-Type": doc.mime, "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(doc.filename)}`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
+  }
+  if (m === "PATCH" && !mm[2]) {
+    if (body.kind && DOC_KINDS[body.kind]) doc.kind = body.kind;
+    if (body.year && +body.year >= 2000 && +body.year <= 2100) doc.year = +body.year;
+    if (body.title !== undefined) doc.title = str(body.title, 120).trim() || doc.title;
+    if (body.institution !== undefined) doc.institution = str(body.institution, 80);
+    await db.prepare("UPDATE docs SET data=? WHERE user_id=? AND id=?").bind(JSON.stringify(doc), uid, doc.id).run();
+    return doc;
+  }
+  if (m === "DELETE" && !mm[2]) {
+    await db.batch([db.prepare("DELETE FROM docs WHERE user_id=? AND id=?").bind(uid, doc.id), db.prepare("DELETE FROM doc_chunks WHERE doc_id=?").bind(doc.id)]);
+    return new Resp(204);
+  }
+  throw new Problem(405, "Método não permitido", `${m} ${p}`);
 }

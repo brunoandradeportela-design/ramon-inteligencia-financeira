@@ -9,7 +9,7 @@ export const DEMO = !BASE;
 /* Modo híbrido (API na nuvem): contas, CRM e pagamentos são reais; os módulos de análise
    (finanças, impostos, carteira, simulações) usam o snapshot de demonstração até o Open Finance. */
 export const ANALYTICS_DEMO = true;
-const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing|imports|market|tax\/settings|tax\/darfs|simulations|openfinance|alerts\/alr_[a-f0-9]+)(\/|\?|$)/.test(p);
+const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing|imports|market|tax\/settings|tax\/darfs|simulations|openfinance|documents|assistant|alerts\/alr_[a-f0-9]+)(\/|\?|$)/.test(p);
 /* painéis que usam os dados importados pelo cliente; sem dados próprios, mostram o exemplo */
 const HYBRID_DATA = p => !!BASE && /^\/v1\/(finance\/summary|finance\/transactions|portfolio\/consolidated|dashboard|tax\/summary|tax\/events|alerts)(\?|$)/.test(p);
 async function hybridGet(p) {
@@ -285,6 +285,19 @@ export const api = {
   del: p => REAL(p) ? http("DELETE", p) : Promise.reject(new ApiError({ status: 409, title: "Indisponível", detail: "Solicite pelo suporte: exportação/exclusão de dados é feita pelo administrador." })),
   demo: p => demoCall("GET", p),
   demoPost: (p, b) => demoCall("POST", p, b),
-  demoPatch: (p, b) => demoCall("PATCH", p, b),   // simulador de vendas: continua sobre a grade pré-calculada do exemplo
+  demoPatch: (p, b) => demoCall("PATCH", p, b),
+  /* envio binário (documentos): sem base64, sem JSON */
+  upload: async (p, file, meta = {}) => {
+    const res = await fetch(BASE + p, { method: "POST", body: file, headers: { "Content-Type": file.type || "application/octet-stream", "X-Filename": encodeURIComponent(file.name),
+      ...(meta.kind ? { "X-Doc-Kind": meta.kind } : {}), ...(meta.year ? { "X-Doc-Year": String(meta.year) } : {}), ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}) } });
+    const data = await res.json().catch(() => ({ title: "Erro", detail: res.statusText, status: res.status }));
+    if (!res.ok) throw new ApiError(data);
+    return data;
+  },
+  download: async p => {
+    const res = await fetch(BASE + p, { headers: session.token ? { Authorization: `Bearer ${session.token}` } : {} });
+    if (!res.ok) throw new ApiError(await res.json().catch(() => ({ title: "Erro", detail: res.statusText, status: res.status })));
+    return res.blob();
+  },   // simulador de vendas: continua sobre a grade pré-calculada do exemplo
   demoGrid: async () => ANALYTICS_DEMO ? (await demo()).simulation_grid : null,
 };

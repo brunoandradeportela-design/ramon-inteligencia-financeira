@@ -1,6 +1,7 @@
 /* Telas do MVP (Dossiê §9 e §47; Plano técnico §12). Toda saída tributária é rotulada como estimativa. */
 import { api, DEMO, ANALYTICS_DEMO, ApiError, HAS_API } from "./api.js";
 import { connectionsReal } from "./views_openfinance.js";
+import { documentsReal } from "./views_docs.js";
 import { onLogin, themeSwitch, theme } from "./app.js";
 import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
 import { areaChart, barChart, brl, confidence, donut, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
@@ -463,6 +464,7 @@ export async function alerts(el, r, ctx) {
 
 /* ================================================================ DOCUMENTOS */
 export async function documents(el) {
+  if (HAS_API) return documentsReal(el);
   const res = await api.get("/v1/documents");
   el.innerHTML = `
     <section class="card"><h3>${icon("upload")} Enviar documento</h3>
@@ -555,13 +557,13 @@ export async function assistant(el, r) {
   el.innerHTML = `<div class="grid g-dash2" style="align-items:start">
     <section class="card"><div class="chat" id="chat"><div class="msg msg--ai">Olá! Eu explico o que os motores da plataforma calcularam — patrimônio, finanças, impostos estimados, alertas e simulações. Todo número vem de um motor, com evidência.</div></div>
       <form id="qf" class="row" style="gap:8px;margin-top:16px"><label class="sr-only" for="q">Pergunta</label><input class="input" id="q" maxlength="800" placeholder="Pergunte, por exemplo: Por que meu imposto aumentou?" autocomplete="off"><button class="btn btn--primary">Enviar</button></form>
-      <div class="suggest" style="margin-top:12px">${["Por que meu imposto aumentou?", "O que mudou nos meus gastos?", "Quais alertas existem?", "Quanto eu tenho de patrimônio?", "Compare cenários de venda"].map(s => `<button type="button" data-s="${esc(s)}">${esc(s)}</button>`).join("")}</div></section>
+      <div class="suggest" style="margin-top:12px">${["Por que meu imposto aumentou?", "O que mudou nos meus gastos?", "Quais alertas existem?", "Quanto eu tenho de patrimônio?", "Quais documentos faltam para o IR?"].map(s => `<button type="button" data-s="${esc(s)}">${esc(s)}</button>`).join("")}</div></section>
     <section class="card"><h3>Como a IA funciona aqui</h3><ul class="stack small" style="margin-top:10px">
       <li>• Classifica a intenção e consulta o motor certo (Financeiro, Patrimônio, Tributário, Simulação, Documentos).</li>
       <li>• Checagem de consistência: nenhum número sem evidência é exibido.</li>
       <li>• Pedidos de recomendação de compra/venda são bloqueados (regulação CVM).</li>
       <li>• Cada resposta é auditada com correlation_id e ferramentas usadas.</li></ul>
-      ${ANALYTICS_DEMO ? trust("Modo demonstração: respostas geradas pelo orquestrador real sobre o snapshot demo.") : ""}</section></div>`;
+      ${DEMO ? trust("Modo demonstração: respostas geradas pelo orquestrador real sobre o snapshot demo.") : trust("Respostas calculadas sobre os dados que você importou ou conectou. Para simular, escreva por exemplo: simular venda de 100 PETR4.")}</section></div>`;
   const chat = el.querySelector("#chat");
   const ask = async q => {
     if (!q.trim()) return;
