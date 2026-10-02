@@ -225,7 +225,7 @@ function marketCard(p) {
   const cell = (label, x, sub) => `<div><span class="small muted">${label}</span><div style="font-size:20px;font-weight:600;margin-top:2px">${x ? pct(x.value) : "—"}</div><span class="small muted">${sub || ""}</span></div>`;
   return `<section class="card section"><h3>Referências de mercado <span class="right small muted">${p.quotes_as_of ? "cotações de fechamento até " + dt(p.quotes_as_of) : ""}</span></h3>
     ${mk ? `<div class="grid g-4" style="margin-top:12px">
-      ${cell("Selic (meta)", mk.selic_meta, mk.selic_meta ? "ao ano · " + dt(mk.selic_meta.date) : "")}
+      ${cell("Selic (meta)", mk.selic_meta, mk.selic_meta ? "ao ano · definida pelo Copom" : "")}
       ${cell("CDI em 12 meses", mk.cdi_12m, mk.cdi_aa ? "hoje " + pct(mk.cdi_aa.value) + " ao ano" : "")}
       ${cell("CDI no ano", mk.cdi_ytd, mk.cdi_ytd ? "até " + (mk.cdi_ytd.monthly ? mes(mk.cdi_ytd.to) : dt(mk.cdi_ytd.to)) : "")}
       ${cell("IPCA em 12 meses", mk.ipca_12m, mk.ipca_month ? `${mes(mk.ipca_month.month)}: ${pct(mk.ipca_month.value)}` : "")}
