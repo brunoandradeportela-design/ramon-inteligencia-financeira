@@ -113,6 +113,14 @@ test("Banco Central: séries e indicadores acumulados", () => {
   assert.match(sgsUrl(12, "2025-09-01", "2026-10-01"), /bcdata\.sgs\.12\/dados\?formato=json&dataInicial=01\/09\/2025&dataFinal=01\/10\/2026/);
 });
 
+test("CDI mensal (consulta leve) e ordem decrescente do SGS", () => {
+  const cdi_m = parseSgs(Array.from({ length: 13 }, (_, i) => ({ data: `01/${String((i + 8) % 12 + 1).padStart(2, "0")}/${i < 4 ? 2025 : 2026}`, valor: "1.10" })).reverse());
+  assert.equal(cdi_m[0].date, "2025-09-01");
+  const s = indicesSnapshot({ cdi_m }, "2026-10-01");
+  assert.ok(Math.abs(s.cdi_12m.value - (1.011 ** 12 - 1)) < 1e-9); assert.equal(s.cdi_12m.monthly, true);
+  assert.equal(s.cdi_ytd.to, "2026-09"); assert.ok(Math.abs(s.cdi_ytd.value - (1.011 ** 9 - 1)) < 1e-9);
+});
+
 test("Yahoo e brapi: última cotação e fechamento anterior", () => {
   const y = { chart: { result: [{ meta: { currency: "BRL", regularMarketPrice: 31.42, regularMarketTime: 1759262400 },
     timestamp: [1759089600, 1759176000, 1759262400], indicators: { quote: [{ close: [30.9, 31.1, 31.42] }] } }], error: null } };

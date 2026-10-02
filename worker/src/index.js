@@ -12,7 +12,7 @@
  */
 import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize } from "../../apps/web/app/js/fin_engine.js";
 import { computeTax, taxDashboard } from "../../apps/web/app/js/tax_engine.js";
-import { SGS, sgsUrl, parseSgs, indicesSnapshot, yahooUrl, brapiUrl, parseYahooChart, parseBrapi, applyQuotes, tickersFrom } from "../../apps/web/app/js/market.js";
+import { SGS, sgsLastUrl, parseSgs, indicesSnapshot, yahooUrl, brapiUrl, parseYahooChart, parseBrapi, applyQuotes, tickersFrom } from "../../apps/web/app/js/market.js";
 import { validateSignup, localCustomer, metricsFrom, addMonth, PRICE, PLAN_NAME, paymentsFrom, docValid, normalizePhone } from "../../apps/web/app/js/crm_rules.js";
 
 const FEATURES = {
@@ -704,9 +704,9 @@ async function loadQuotes(db, tickers) {
   }
   return out;
 }
-async function getJson(url, headers = {}) {
+async function getJson(url, headers = {}, timeout = 9000) {
   const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; AurionBot/1.0; +https://aurionfinance.com.br)", Accept: "application/json", ...headers },
-                               signal: AbortSignal.timeout(9000), cf: { cacheTtl: 300 } });
+                               signal: AbortSignal.timeout(timeout), cf: { cacheTtl: 300 } });
   if (!r.ok) throw new Error(`HTTP ${r.status} em ${new URL(url).host}`);
   return r.json();
 }
@@ -716,16 +716,23 @@ const ageH = iso => iso ? (Date.now() - Date.parse(iso)) / 36e5 : Infinity;
 async function refreshMarket(env, db, { force = false } = {}) {
   const st = await marketState(db), errors = [];
   const done = { indices: false, quotes: 0 };
-  // índices do Banco Central (4 requisições)
+  // índices do Banco Central (4 consultas leves; o SGS costuma ser lento — guarda o que vier e tenta o resto depois)
   if (force || ageH(st.indices_at) >= 6) {
-    const to = today(), back = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
-    try {
-      const [cdi, cdi_aa, selic_meta, ipca] = await Promise.all([
-        getJson(sgsUrl(SGS.cdi, back(400), to)), getJson(sgsUrl(SGS.cdi_aa, back(15), to)),
-        getJson(sgsUrl(SGS.selic_meta, back(60), to)), getJson(sgsUrl(SGS.ipca, back(430), to))].map(pr => pr.then(parseSgs)));
-      await kvSet(db, "market_indices", indicesSnapshot({ cdi, cdi_aa, selic_meta, ipca }, to));
-      st.indices_at = nowIso(); done.indices = true;
-    } catch (e) { errors.push("Banco Central: " + (e.message || e)); }
+    const prev = await kvGet(db, "market_indices", null);
+    const raw = (await kvGet(db, "market_raw", null)) || {};
+    const want = { cdi_m: sgsLastUrl(SGS.cdi_m, 13), cdi_aa: sgsLastUrl(SGS.cdi_aa, 1), selic_meta: sgsLastUrl(SGS.selic_meta, 1), ipca: sgsLastUrl(SGS.ipca, 13) };
+    const res = await Promise.allSettled(Object.values(want).map(u => getJson(u, {}, 25000).then(parseSgs)));
+    let okAll = true;
+    Object.keys(want).forEach((k, i) => {
+      if (res[i].status === "fulfilled" && res[i].value.length) raw[k] = res[i].value;
+      else { okAll = false; errors.push(`Banco Central (${k}): ${res[i].reason?.message || "sem dados"}`); }
+    });
+    if (Object.keys(raw).length) {
+      await kvSet(db, "market_raw", raw);
+      await kvSet(db, "market_indices", { ...(prev || {}), ...Object.fromEntries(Object.entries(indicesSnapshot(raw, today())).filter(([, v]) => v !== null)) });
+      done.indices = true;
+    }
+    if (okAll) st.indices_at = nowIso();
   }
   // cotações: até 20 por execução (limite de subrequisições do plano gratuito), as mais antigas primeiro
   const { results } = await db.prepare("SELECT DISTINCT json_extract(data,'$.ticker') AS t FROM fin_items WHERE kind IN ('holding','trade')").all();

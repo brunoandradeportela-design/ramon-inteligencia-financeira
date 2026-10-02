@@ -227,7 +227,7 @@ function marketCard(p) {
     ${mk ? `<div class="grid g-4" style="margin-top:12px">
       ${cell("Selic (meta)", mk.selic_meta, mk.selic_meta ? "ao ano · " + dt(mk.selic_meta.date) : "")}
       ${cell("CDI em 12 meses", mk.cdi_12m, mk.cdi_aa ? "hoje " + pct(mk.cdi_aa.value) + " ao ano" : "")}
-      ${cell("CDI no ano", mk.cdi_ytd, mk.cdi_ytd ? "até " + dt(mk.cdi_ytd.to) : "")}
+      ${cell("CDI no ano", mk.cdi_ytd, mk.cdi_ytd ? "até " + (mk.cdi_ytd.monthly ? mes(mk.cdi_ytd.to) : dt(mk.cdi_ytd.to)) : "")}
       ${cell("IPCA em 12 meses", mk.ipca_12m, mk.ipca_month ? `${mes(mk.ipca_month.month)}: ${pct(mk.ipca_month.value)}` : "")}
     </div>
     <p class="note">${p.invested && +p.invested > 0 && p.result_coverage > 0.5 ? `Resultado da carteira sobre o custo conhecido: <b>${pct(p.result_pct)}</b> (acumulado desde as compras; compare com o CDI e o IPCA do mesmo período). ` : ""}Fonte: ${esc(mk.source)}.</p>` : ""}

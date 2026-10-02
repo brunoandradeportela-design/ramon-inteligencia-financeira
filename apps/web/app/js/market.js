@@ -12,13 +12,15 @@ const isoFromBr = s => { const m = String(s || "").match(/^(\d{2})\/(\d{2})\/(\d
 const isoFromUnix = s => new Date((+s - 3 * 3600) * 1000).toISOString().slice(0, 10);   // horário de Brasília
 
 /* ------------------------------------------------------------------ Banco Central — SGS */
-export const SGS = { cdi: 12, cdi_aa: 4389, selic_meta: 432, ipca: 433 };
+export const SGS = { cdi: 12, cdi_m: 4391, cdi_aa: 4389, selic_meta: 432, ipca: 433 };
+/* consulta leve (últimos N valores) — o SGS é lento para intervalos longos */
+export const sgsLastUrl = (code, n) => `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${code}/dados/ultimos/${n}?formato=json`;
 export function sgsUrl(code, from, to) {
   return `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${code}/dados?formato=json&dataInicial=${brDate(from)}&dataFinal=${brDate(to)}`;
 }
 export function parseSgs(json) {
   if (!Array.isArray(json)) throw new Error("Resposta inesperada do Banco Central");
-  return json.map(r => ({ date: isoFromBr(r.data), value: +String(r.valor).replace(",", ".") })).filter(r => r.date && isFinite(r.value));
+  return json.map(r => ({ date: isoFromBr(r.data), value: +String(r.valor).replace(",", ".") })).filter(r => r.date && isFinite(r.value)).sort((a, b) => a.date.localeCompare(b.date));
 }
 const compound = rows => rows.reduce((acc, r) => acc * (1 + r.value / 100), 1) - 1;
 
@@ -30,17 +32,21 @@ export function indicesSnapshot(series, refDate) {
   const back12 = d => { const x = new Date(d + "T12:00:00Z"); x.setUTCFullYear(x.getUTCFullYear() - 1); return x.toISOString().slice(0, 10); };
   const cdi12 = lastCdi ? cdi.filter(r => r.date > back12(lastCdi.date)) : [];
   const cdiYtd = lastCdi ? cdi.filter(r => r.date.slice(0, 4) === lastCdi.date.slice(0, 4)) : [];
+  const cdiM = series.cdi_m || [];                 // CDI mensal (% a.m.), alternativa leve ao diário
+  const cdiM12 = cdiM.slice(-12), lastM = cdiM.at(-1), cdiMYtd = lastM ? cdiM.filter(r => r.date.slice(0, 4) === lastM.date.slice(0, 4)) : [];
   const ipca12 = ipca.slice(-12), ipcaYtd = lastIpca ? ipca.filter(r => r.date.slice(0, 4) === lastIpca.date.slice(0, 4)) : [];
   return {
     reference_date: refDate,
     selic_meta: last(series.selic_meta) ? { value: last(series.selic_meta).value / 100, date: last(series.selic_meta).date } : null,
     cdi_aa: last(series.cdi_aa) ? { value: last(series.cdi_aa).value / 100, date: last(series.cdi_aa).date } : null,
-    cdi_12m: cdi12.length > 200 ? { value: compound(cdi12), from: cdi12[0].date, to: lastCdi.date } : null,
-    cdi_ytd: cdiYtd.length ? { value: compound(cdiYtd), from: cdiYtd[0].date, to: lastCdi.date } : null,
+    cdi_12m: cdi12.length > 200 ? { value: compound(cdi12), from: cdi12[0].date, to: lastCdi.date }
+      : cdiM12.length === 12 ? { value: compound(cdiM12), from: cdiM12[0].date.slice(0, 7), to: lastM.date.slice(0, 7), monthly: true } : null,
+    cdi_ytd: cdiYtd.length ? { value: compound(cdiYtd), from: cdiYtd[0].date, to: lastCdi.date }
+      : cdiMYtd.length ? { value: compound(cdiMYtd), from: cdiMYtd[0].date.slice(0, 7), to: lastM.date.slice(0, 7), monthly: true } : null,
     ipca_month: lastIpca ? { value: lastIpca.value / 100, month: lastIpca.date.slice(0, 7) } : null,
     ipca_12m: ipca12.length === 12 ? { value: compound(ipca12), from: ipca12[0].date.slice(0, 7), to: lastIpca.date.slice(0, 7) } : null,
     ipca_ytd: ipcaYtd.length ? { value: compound(ipcaYtd), to: lastIpca.date.slice(0, 7) } : null,
-    source: "Banco Central do Brasil — SGS (séries 12, 4389, 432 e 433)",
+    source: "Banco Central do Brasil — SGS (CDI, Selic meta e IPCA)",
   };
 }
 
