@@ -1,5 +1,6 @@
 /* Telas do MVP (Dossiê §9 e §47; Plano técnico §12). Toda saída tributária é rotulada como estimativa. */
 import { api, DEMO, ANALYTICS_DEMO, ApiError, HAS_API } from "./api.js";
+import { connectionsReal } from "./views_openfinance.js";
 import { onLogin, themeSwitch, theme } from "./app.js";
 import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
 import { areaChart, barChart, brl, confidence, donut, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
@@ -486,6 +487,7 @@ export async function documents(el) {
 
 /* ================================================================ CONEXÕES */
 export async function connections(el, r) {
+  if (HAS_API) return connectionsReal(el);
   if (r.sub === "retorno") return connectReturn(el, r);
   const [res, inst] = await Promise.all([api.get("/v1/connections"), api.get("/v1/institutions")]);
   const labels = { accounts: "Contas e saldos", transactions: "Transações", credit_cards: "Cartões de crédito", investments: "Investimentos (Open Investment)" };

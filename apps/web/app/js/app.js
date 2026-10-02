@@ -107,7 +107,7 @@ function shell(admin = false) {
         <button class="icon-btn burger" data-burger aria-label="Abrir menu">${icon("menu")}</button>
         <h1 data-title>Início</h1>
         <div class="top__spacer"></div>
-        <span class="chip hide-m" title="Data de referência dos cálculos">Set 2026</span>
+        <span class="chip hide-m" title="Data de referência dos cálculos">${DEMO ? "Set 2026" : (() => { const s = new Date(Date.now() - 3 * 3600e3).toLocaleDateString("pt-BR", { month: "short", year: "numeric", timeZone: "UTC" }).replace(".", "").replace(" de ", " "); return s.charAt(0).toUpperCase() + s.slice(1); })()}</span>
         ${themeSwitch()}
         <a class="icon-btn" href="#/alertas" aria-label="Alertas">${icon("bell")}<span class="dot" data-dot hidden></span></a>
         <div class="avatar" title="${esc(me?.name || "")}" aria-label="Usuário ${esc(me?.name || "")}">${esc((me?.name || "?")[0])}</div>

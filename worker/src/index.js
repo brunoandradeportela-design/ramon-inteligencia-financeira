@@ -7,6 +7,8 @@
  *   OWNER_PASSWORD         senha do Ramon (10+ caracteres, letras e números)
  *   ASAAS_API_KEY          chave da API do Asaas ($aact_prod_… ou $aact_hmlg_…)
  *   ASAAS_WEBHOOK_TOKEN    token escolhido no cadastro do webhook no Asaas
+ *   PLUGGY_CLIENT_ID / PLUGGY_CLIENT_SECRET   credenciais do agregador Open Finance (Pluggy) — liga as conexões automáticas
+ *   PLUGGY_WEBHOOK_TOKEN   (opcional) token secreto na URL do webhook da Pluggy
  *   BRAPI_TOKEN            (opcional) token gratuito da brapi.dev — reserva para as cotações se o Yahoo falhar
  * Variáveis (wrangler.toml): OWNER_EMAIL, OWNER_NAME, ALLOWED_ORIGINS
  */
@@ -14,6 +16,7 @@ import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, c
 import { computeTax, taxDashboard } from "../../apps/web/app/js/tax_engine.js";
 import { buildAlerts } from "../../apps/web/app/js/alert_engine.js";
 import { simulateSale, simulatePgbl } from "../../apps/web/app/js/sim_engine.js";
+import { normalizeItem, itemView, PLUGGY_WIDGET } from "../../apps/web/app/js/openfinance.js";
 import { SGS, sgsLastUrl, parseSgs, indicesSnapshot, yahooUrl, brapiUrl, parseYahooChart, parseBrapi, applyQuotes, tickersFrom } from "../../apps/web/app/js/market.js";
 import { validateSignup, localCustomer, metricsFrom, addMonth, PRICE, PLAN_NAME, paymentsFrom, docValid, normalizePhone } from "../../apps/web/app/js/crm_rules.js";
 
@@ -280,7 +283,7 @@ async function loginFailed(db, email) {
 }
 
 /* ------------------------------------------------------------------ rotas */
-async function route(req, env, db, url) {
+async function route(req, env, db, url, ctx) {
   const m = req.method, p = url.pathname.replace(/\/$/, "") || "/";
   const body = ["POST", "PUT", "PATCH"].includes(m) ? await req.json().catch(() => ({})) : {};
   const q = Object.fromEntries(url.searchParams);
@@ -345,6 +348,13 @@ async function route(req, env, db, url) {
     return { theme };
   }
 
+
+  /* ---- Open Finance (Pluggy) */
+  if (m === "POST" && p === "/v1/webhooks/pluggy") return pluggyWebhook(env, db, body, q, ctx);
+  if (p === "/v1/openfinance" || p.startsWith("/v1/openfinance/")) {
+    const u = await authUser(req, env, db);
+    return ofRoute(m, p, body, u, env, db, url);
+  }
 
   /* ---- mercado (público): índices do Banco Central e situação das cotações */
   if (m === "GET" && p === "/v1/market/indices") return marketPublic(env, db);
@@ -514,14 +524,14 @@ function json(data, status, extra) {
 }
 
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const cors = corsHeaders(req, env);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const url = new URL(req.url);
     const cid = req.headers.get("X-Correlation-ID") || randomToken(8);
     try {
       await ensureSchema(env.DB);
-      const out = await route(req, env, env.DB, url);
+      const out = await route(req, env, env.DB, url, ctx);
       if (out instanceof Resp) return json(out.body, out.status, { ...cors, "X-Correlation-ID": cid });
       return json(out, 200, { ...cors, "X-Correlation-ID": cid });
     } catch (e) {
@@ -537,6 +547,7 @@ export default {
       await ensureSchema(env.DB);
       if (env.ASAAS_API_KEY) { try { await sync(env, env.DB); } catch (e) { console.error("sync falhou", e.detail || e); } }
       try { await refreshMarket(env, env.DB); } catch (e) { console.error("mercado falhou", e.message || e); }
+      if (ofConfigured(env)) { try { await ofCron(env, env.DB); } catch (e) { console.error("open finance falhou", e.message || e); } }
     })());
   },
 };
@@ -586,6 +597,24 @@ async function itemId(kind, it) {
     : [it.date, it.ticker, it.side, it.quantity, it.price, it.custodian].join("|");
   return kind.slice(0, 3) + "_" + (await sha256(key)).slice(0, 22);
 }
+async function finStmts(db, uid, importId, src, body) {
+  const counts = {}, stmts = [];
+  let total = 0;
+  for (const kind of FIN_KINDS) {
+    const raw = Array.isArray(body[kind + "s"]) ? body[kind + "s"] : [];
+    if (raw.length > LIMITS[kind]) throw new Problem(422, "Arquivo grande demais", `Máximo de ${LIMITS[kind]} registros do tipo ${kind} por importação.`);
+    counts[kind + "s"] = 0;
+    for (const x of raw) {
+      const it = cleanItem(kind, x, src);
+      if (!it) continue;
+      const id = await itemId(kind, it);
+      stmts.push(db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET data=excluded.data, import_id=excluded.import_id")
+        .bind(uid, kind, id, importId, JSON.stringify(it)));
+      counts[kind + "s"]++; total++;
+    }
+  }
+  return { stmts, counts, total };
+}
 async function finLoad(db, uid, kind) {
   const { results } = await db.prepare("SELECT id, data FROM fin_items WHERE user_id=? AND kind=?").bind(uid, kind).all();
   return results.map(r => ({ id: r.id, ...JSON.parse(r.data) }));
@@ -597,21 +626,7 @@ async function finRoute(m, p, body, q, u, db) {
     const src = str(body.source, 60) || "arquivo";
     const filename = str(body.filename, 160) || "arquivo";
     const importId = "imp_" + randomToken(9).replace(/[-_]/g, "");
-    const counts = {}, stmts = [];
-    let total = 0;
-    for (const kind of FIN_KINDS) {
-      const raw = Array.isArray(body[kind + "s"]) ? body[kind + "s"] : [];
-      if (raw.length > LIMITS[kind]) throw new Problem(422, "Arquivo grande demais", `Máximo de ${LIMITS[kind]} registros do tipo ${kind} por importação.`);
-      counts[kind + "s"] = 0;
-      for (const x of raw) {
-        const it = cleanItem(kind, x, src);
-        if (!it) continue;
-        const id = await itemId(kind, it);
-        stmts.push(db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET data=excluded.data, import_id=excluded.import_id")
-          .bind(uid, kind, id, importId, JSON.stringify(it)));
-        counts[kind + "s"]++; total++;
-      }
-    }
+    const { stmts, counts, total } = await finStmts(db, uid, importId, src, body);
     if (!total) throw new Problem(422, "Nada para importar", "Não encontramos registros válidos neste arquivo.");
     // posição é uma foto: uma nova posição da mesma origem substitui a anterior
     if (body.replace_holdings && counts.holdings)
@@ -721,7 +736,7 @@ async function finRoute(m, p, body, q, u, db) {
     return { has_data: fin.has_data || port.has_data || tax.has_data, limited, items: limited ? items.slice(0, 3) : items };
   }
   if (p === "/v1/dashboard") {
-    const d = dashboardSummary({ name: u.me.name, fin, port });
+    const d = dashboardSummary({ name: u.me.name, fin, port, refDate: ref });
     if (tax.has_data) d.tax = taxDashboard(tax);
     const open = (await alertsFor()).filter(a => a.status !== "resolvido");
     d.alerts = { open: open.length, critical: open.filter(a => a.severity === "critico").length };
@@ -814,4 +829,130 @@ async function marketPublic(env, db) {
   const s = await marketState(db);
   return { indices, quotes: { tickers: n?.n || 0, latest_date: n?.d || null, last_refresh: s.quotes_at, ok: s.quotes_ok, fail: s.quotes_fail },
            indices_refreshed_at: s.indices_at, errors: s.errors || [], brapi_fallback: !!env.BRAPI_TOKEN };
+}
+
+/* ------------------------------------------------------------------ Open Finance via Pluggy (M5) */
+const ofConfigured = env => !!(env.PLUGGY_CLIENT_ID && env.PLUGGY_CLIENT_SECRET);
+const ofBase = env => (env.PLUGGY_BASE_URL || "https://api.pluggy.ai").replace(/\/$/, "");
+async function pluggyKey(env, db, force = false) {
+  const c = await kvGet(db, "pluggy_key", null);
+  if (!force && c && Date.parse(c.exp) > Date.now()) return c.key;
+  const r = await fetch(ofBase(env) + "/auth", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clientId: env.PLUGGY_CLIENT_ID, clientSecret: env.PLUGGY_CLIENT_SECRET }), signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Problem(502, "Open Finance indisponível", "Não foi possível autenticar no agregador. Confira PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET.");
+  const { apiKey } = await r.json();
+  await kvSet(db, "pluggy_key", { key: apiKey, exp: new Date(Date.now() + 100 * 60e3).toISOString() });
+  return apiKey;
+}
+async function pluggy(env, db, method, path, body, retry = true) {
+  const r = await fetch(ofBase(env) + path, { method, headers: { "Content-Type": "application/json", "X-API-KEY": await pluggyKey(env, db) },
+    body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(20000) });
+  if (r.status === 401 && retry) { await pluggyKey(env, db, true); return pluggy(env, db, method, path, body, false); }
+  if (r.status === 204) return null;
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Problem(r.status === 404 ? 404 : 502, "Open Finance", data.message || `Erro ${r.status} no agregador`); e.upstream = r.status; throw e; }
+  return data;
+}
+const ofItems = (db, uid) => kvGet(db, "of_items:" + uid, []);
+const saveOfItems = (db, uid, items) => kvSet(db, "of_items:" + uid, items);
+async function ofUpsertMeta(db, uid, patch) {
+  const items = await ofItems(db, uid), i = items.findIndex(x => x.id === patch.id);
+  if (i >= 0) items[i] = { ...items[i], ...patch }; else items.unshift({ created_at: nowIso(), ...patch });
+  await saveOfItems(db, uid, items);
+}
+
+/* baixa contas, 12 meses de lançamentos e investimentos do item e substitui os dados dele */
+async function ofSync(env, db, uid, itemId) {
+  const item = await pluggy(env, db, "GET", `/items/${itemId}`);
+  const view = itemView(item);
+  if (["UPDATING", "CREATED"].includes(item.status) || item.status === "LOGIN_ERROR" || item.status === "WAITING_USER_INPUT") {
+    await ofUpsertMeta(db, uid, { ...view, checked_at: nowIso() });
+    return { synced: false, ...view };
+  }
+  const accounts = (await pluggy(env, db, "GET", `/accounts?itemId=${itemId}`)).results || [];
+  const from = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
+  const transactions = {};
+  for (const a of accounts.slice(0, 8)) {
+    transactions[a.id] = [];
+    for (let page = 1; page <= 6; page++) {
+      const r = await pluggy(env, db, "GET", `/transactions?accountId=${a.id}&from=${from}&pageSize=500&page=${page}`);
+      transactions[a.id].push(...(r.results || []));
+      if (!r.totalPages || page >= r.totalPages) break;
+    }
+  }
+  let investments = [];
+  try { investments = (await pluggy(env, db, "GET", `/investments?itemId=${itemId}`)).results || []; } catch (e) { if (e.upstream !== 404) throw e; }
+  const norm = normalizeItem({ item, accounts, transactions, investments });
+  const importId = "of_" + itemId.replace(/[^A-Za-z0-9]/g, "").slice(0, 40);
+  const src = "open_finance:" + (item.connector?.name || "instituicao").toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 30);
+  const { stmts, counts } = await finStmts(db, uid, importId, src, norm);
+  stmts.unshift(db.prepare("DELETE FROM fin_items WHERE user_id=? AND import_id=?").bind(uid, importId));
+  for (let i = 0; i < stmts.length; i += 90) await db.batch(stmts.slice(i, i + 90));
+  await ofUpsertMeta(db, uid, { ...view, counts, last_sync_at: nowIso(), checked_at: nowIso() });
+  return { synced: true, ...view, counts };
+}
+
+async function ofRoute(m, p, body, u, env, db, url) {
+  const uid = u.me.id;
+  if (m === "GET" && p === "/v1/openfinance")
+    return { configured: ofConfigured(env), provider: "Pluggy", widget_url: PLUGGY_WIDGET, sandbox: env.PLUGGY_SANDBOX === "1", items: await ofItems(db, uid) };
+  if (!ofConfigured(env)) throw new Problem(409, "Conexão automática ainda não ativada", "O Open Finance será ativado em breve. Enquanto isso, envie seus extratos e relatórios em Importar dados.");
+  if (m === "POST" && p === "/v1/openfinance/connect-token") {
+    const items = await ofItems(db, uid);
+    if (!body.item_id && items.length >= 10) throw new Problem(422, "Limite de conexões", "Máximo de 10 instituições conectadas.");
+    if (body.item_id && !items.some(x => x.id === body.item_id)) throw new Problem(404, "Conexão não encontrada", "Item de outra conta.");
+    const hook = `${url.origin}/v1/webhooks/pluggy${env.PLUGGY_WEBHOOK_TOKEN ? "?token=" + encodeURIComponent(env.PLUGGY_WEBHOOK_TOKEN) : ""}`;
+    const r = await pluggy(env, db, "POST", "/connect_token", { ...(body.item_id ? { itemId: body.item_id } : {}), options: { clientUserId: uid, webhookUrl: hook, avoidDuplicates: true } });
+    return { access_token: r.accessToken, widget_url: PLUGGY_WIDGET, sandbox: env.PLUGGY_SANDBOX === "1" };
+  }
+  if (m === "POST" && p === "/v1/openfinance/items") {
+    const id = str(body.item_id, 80);
+    if (!/^[A-Za-z0-9-]{8,80}$/.test(id)) throw new Problem(422, "Dados inválidos", "Identificador da conexão inválido.");
+    const item = await pluggy(env, db, "GET", `/items/${id}`);
+    if (item.clientUserId && item.clientUserId !== uid) throw new Problem(403, "Acesso negado", "Esta conexão pertence a outra conta.");
+    await kvSet(db, "of_owner:" + id, uid);
+    await ofUpsertMeta(db, uid, itemView(item));
+    return new Resp(201, await ofSync(env, db, uid, id));
+  }
+  const mm = p.match(/^\/v1\/openfinance\/items\/([A-Za-z0-9-]{8,80})(\/sync)?$/);
+  if (mm) {
+    const items = await ofItems(db, uid);
+    if (!items.some(x => x.id === mm[1])) throw new Problem(404, "Conexão não encontrada", "Esta conexão não existe nesta conta.");
+    if (m === "POST" && mm[2]) return ofSync(env, db, uid, mm[1]);
+    if (m === "DELETE" && !mm[2]) {
+      try { await pluggy(env, db, "DELETE", `/items/${mm[1]}`); } catch (e) { if (e.upstream !== 404) throw e; }
+      await db.prepare("DELETE FROM fin_items WHERE user_id=? AND import_id=?").bind(uid, "of_" + mm[1].replace(/[^A-Za-z0-9]/g, "").slice(0, 40)).run();
+      await saveOfItems(db, uid, items.filter(x => x.id !== mm[1]));
+      await db.prepare("DELETE FROM kv WHERE k=?").bind("of_owner:" + mm[1]).run();
+      return new Resp(204);
+    }
+  }
+  throw new Problem(404, "Não encontrado", `${m} ${p}`);
+}
+
+/* a Pluggy avisa quando terminou de atualizar um item; buscamos os dados na hora */
+async function pluggyWebhook(env, db, body, q, ctx) {
+  if (env.PLUGGY_WEBHOOK_TOKEN && !safeEqual(q.token, env.PLUGGY_WEBHOOK_TOKEN)) throw new Problem(401, "Não autorizado", "Token do webhook inválido.");
+  if (!ofConfigured(env)) return { received: true, ignored: "não configurado" };
+  const itemId = str(body.itemId || body.item?.id, 80), event = str(body.event, 60);
+  const uid = itemId ? await kvGet(db, "of_owner:" + itemId, null) : null;
+  if (!uid) return { received: true, ignored: "item desconhecido" };
+  const job = (async () => {
+    try {
+      if (/^item\/(deleted)$/.test(event)) { await saveOfItems(db, uid, (await ofItems(db, uid)).filter(x => x.id !== itemId)); return; }
+      await ofSync(env, db, uid, itemId);
+    } catch (e) { await ofUpsertMeta(db, uid, { id: itemId, error: e.detail || e.message, checked_at: nowIso() }); }
+  })();
+  if (ctx?.waitUntil) ctx.waitUntil(job); else await job;
+  return { received: true, event };
+}
+
+/* rede de segurança: sincroniza até 2 conexões por execução que estejam há mais de 20 h sem atualização */
+async function ofCron(env, db) {
+  const { results } = await db.prepare("SELECT k, v FROM kv WHERE k LIKE 'of_items:%'").all();
+  const due = [];
+  for (const r of results) for (const it of JSON.parse(r.v)) if (ageH(it.last_sync_at || it.checked_at) >= 20) due.push([r.k.slice(9), it.id]);
+  for (const [uid, id] of due.slice(0, 2)) {
+    try { await ofSync(env, db, uid, id); } catch (e) { await ofUpsertMeta(db, uid, { id, error: e.detail || e.message, checked_at: nowIso() }); }
+  }
 }

@@ -57,4 +57,23 @@ contra o snapshot de demonstração: R$ 1.419,88 de imposto, R$ 12,94 de IRRF e 
   Rotas: `POST/GET /v1/simulations` (planos Pro e Premium).
 - Datas do servidor no horário de Brasília. Cotação que falhou nunca zera uma posição.
 
-Próximo módulo: M5 (Open Finance via agregador, mesmo formato de registros).
+## M5 — Open Finance via agregador (Pluggy)
+
+Pronto e testado contra um simulador da API da Pluggy (`worker/test/fake_pluggy.mjs`). Liga sozinho quando os secrets existem.
+
+- Fluxo: o cliente clica em **Conectar banco ou corretora** → a API gera um *connect token* (`POST /v1/openfinance/connect-token`,
+  `clientUserId` = id do cliente) → o widget da Pluggy abre e o cliente autoriza no ambiente da instituição → o site registra o item
+  (`POST /v1/openfinance/items`), a API confere que o item pertence ao cliente e baixa contas, 12 meses de lançamentos e investimentos.
+- `openfinance.js` converte para os mesmos registros da importação; cada conexão grava com `import_id = of_<item>` e é substituída
+  inteira a cada sincronização (sem duplicar).
+- Atualização: webhook `POST /v1/webhooks/pluggy` (a URL vai no connect token, com `?token=` se `PLUGGY_WEBHOOK_TOKEN` existir) e,
+  como rede de segurança, o cron sincroniza até 2 conexões por execução com mais de 20 h.
+- Rotas: `GET /v1/openfinance`, `POST /v1/openfinance/items/{id}/sync`, `DELETE /v1/openfinance/items/{id}` (apaga na Pluggy e os dados aqui).
+- Sem os secrets, a tela Conexões explica que a conexão automática está em ativação e leva para Importar dados.
+
+### Como ativar
+1. Criar a conta da empresa em dashboard.pluggy.ai e pegar **Client ID** e **Client Secret** (começa no ambiente de testes).
+2. Cloudflare → Workers → aurion-api → Settings → Variables and Secrets → adicionar como **Secret**:
+   `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET` e, opcional, `PLUGGY_WEBHOOK_TOKEN` (qualquer texto longo aleatório).
+3. Para testar com as instituições de teste da Pluggy, adicionar a variável `PLUGGY_SANDBOX = 1`; remover ao ir para produção.
+4. Produção com bancos reais exige o contrato comercial com a Pluggy.
