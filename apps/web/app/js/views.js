@@ -345,13 +345,18 @@ function upsell(what, e) {
 /* ================================================================ SIMULADOR */
 export async function simulator(el) {
   let pf, sims;
-  try { [pf, sims] = await Promise.all([ANALYTICS_DEMO ? api.demo("/v1/portfolio/consolidated") : api.get("/v1/portfolio/consolidated"), api.get("/v1/simulations")]); }
+  pf = HAS_API ? await api.get("/v1/portfolio/consolidated") : await api.demo("/v1/portfolio/consolidated");
+  const realSim = HAS_API && !pf.sample;               // com dados importados, simula sobre as negociações reais
+  if (!realSim && HAS_API) pf = await api.demo("/v1/portfolio/consolidated");
+  try { sims = realSim ? await api.get("/v1/simulations") : await api.demo("/v1/simulations"); }
   catch (e) { if (e.status === 402) { el.innerHTML = upsell("Simulação de cenários", e); return; } throw e; }
   const rv = pf.positions.filter(p => ["acao", "etf", "fii", "bdr"].includes(p.asset_class));
+  const today = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
   let tab = "venda";
   const draw = () => {
     el.innerHTML = `
       <div class="tabs" role="tablist">${[["venda", "Venda de ativos"], ["pgbl", "Aporte em PGBL"]].map(([k, l]) => `<button role="tab" aria-selected="${tab === k}" data-tab="${k}">${l}</button>`).join("")}</div>
+      ${realSim ? "" : `<div class="card" style="margin-bottom:16px;border-color:var(--brand-2)"><p class="small"><b>Exemplo ilustrativo.</b> ${HAS_API ? 'Importe suas negociações da B3 em <a href="#/importar">Importar dados</a> para simular sobre a sua carteira real.' : "Modo demonstração."}</p></div>`}
       <div class="grid g-dash2"><section class="card">${tab === "venda" ? saleForm() : pgblForm()}<p class="err" id="err" role="alert"></p></section>
         <section class="card"><h3>Como funciona</h3><p class="small muted" style="margin-top:8px">O simulador compara o <b>cenário atual</b> com uma alternativa e mostra imposto estimado, liquidez gerada, diferença e premissas.
           O resultado é reprodutível (hash de versão) e usa as mesmas regras da Central Tributária. <b>O sistema mostra consequências; quem decide é você ou seu contador.</b></p>
@@ -366,10 +371,10 @@ export async function simulator(el) {
   };
   const saleForm = () => `<h3>Cenário alternativo: vender parte de uma posição</h3>
     <form id="sf" class="stack" style="margin-top:12px"><div class="form-grid">
-      <div class="field"><label for="tk">Ativo</label><select class="input" id="tk">${rv.map(p => `<option value="${esc(p.asset_id)}" data-q="${p.quantity}">${esc(p.name)} · ${num(p.quantity)} un.</option>`).join("")}</select></div>
+      <div class="field"><label for="tk">Ativo</label><select class="input" id="tk">${rv.map(p => `<option value="${esc(realSim ? p.ticker || p.name : p.asset_id)}" data-q="${p.quantity}">${esc(p.name)} · ${num(p.quantity)} un.</option>`).join("")}</select>${realSim && !rv.length ? `<span class="small muted">Nenhuma posição em bolsa importada.</span>` : ""}</div>
       <div class="field"><label for="fr">Quantidade</label><select class="input" id="fr">${[25, 50, 75, 100].map(f => `<option value="${f}">${f}% da posição</option>`).join("")}</select><span class="small muted" id="qh"></span></div>
-      <div class="field"><label for="dd">Data da venda</label><select class="input" id="dd"><option value="2026-09-29">29/09/2026 (mês atual)</option><option value="2026-10-15">15/10/2026 (próximo mês)</option></select></div>
-      ${ANALYTICS_DEMO ? "" : `<div class="field"><label for="pr">Preço (opcional)</label><input class="input" id="pr" inputmode="decimal" placeholder="última cotação"></div>`}
+      <div class="field"><label for="dd">Data da venda</label>${realSim ? `<input class="input" type="date" id="dd" min="${today}" value="${today}">` : `<select class="input" id="dd"><option value="2026-09-29">29/09/2026 (mês atual)</option><option value="2026-10-15">15/10/2026 (próximo mês)</option></select>`}</div>
+      ${realSim ? `<div class="field"><label for="pr">Preço (opcional)</label><input class="input" id="pr" inputmode="decimal" placeholder="última cotação"></div>` : ""}
     </div><button class="btn btn--primary">Simular impacto</button></form>`;
   const pgblForm = () => `<h3>Cenário: aporte adicional em PGBL</h3>
     <form id="pf" class="stack" style="margin-top:12px"><div class="form-grid">
@@ -390,7 +395,7 @@ export async function simulator(el) {
     e.preventDefault();
     const tk = el.querySelector("#tk").value, fr = +el.querySelector("#fr").value, date = el.querySelector("#dd").value;
     const q = Math.floor(+el.querySelector("#tk").selectedOptions[0].dataset.q * fr / 100);
-    const price = el.querySelector("#pr")?.value.replace(".", "").replace(",", ".");
+    const price = el.querySelector("#pr")?.value.replace(/\./g, "").replace(",", ".");
     await run({ kind: "venda_ativos", scenarios: [{ name: `Vender ${q} ${tk} em ${dt(date)}`, operations: [{ ticker: tk, quantity: q, fraction: fr, date, ...(price ? { price } : {}) }] }] });
   }
   async function runPgbl(e) {
@@ -402,7 +407,7 @@ export async function simulator(el) {
   async function run(body) {
     const out = el.querySelector("#out"), err = el.querySelector("#err"); err.textContent = ""; out.innerHTML = `<div class="skeleton" style="height:120px"></div>`;
     try {
-      const res = await api.post("/v1/simulations", body, { "Idempotency-Key": crypto.randomUUID?.() || String(Date.now()) });
+      const res = realSim ? await api.post("/v1/simulations", body, { "Idempotency-Key": crypto.randomUUID?.() || String(Date.now()) }) : await api.demoPost("/v1/simulations", body);
       out.innerHTML = res.kind === "pgbl" ? pgblOut(res) : saleOut(res);
       out.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (x) { out.innerHTML = ""; err.textContent = problemMsg(x); }
@@ -411,7 +416,7 @@ export async function simulator(el) {
       <h3>${esc(s.name)}</h3><div class="kpi">${brl(s.tax_year)}</div><p class="small muted">imposto estimado no ano (renda variável)</p>
       ${s.tax_difference_vs_base !== undefined ? `<p style="margin-top:10px">Diferença vs. atual: <b class="${+s.tax_difference_vs_base > 0 ? "neg" : "pos"}">${+s.tax_difference_vs_base > 0 ? "+" : ""}${brl(s.tax_difference_vs_base)}</b></p>
         <p class="small">Liquidez gerada ${brl(s.liquidity_generated)} · líquida após imposto adicional ${brl(s.net_liquidity_after_tax)}</p>
-        ${s.months.map(m => `<p class="small muted" style="margin-top:6px">${mes(m.month)}: vendas de ações ${brl(m.sales_acoes)} (${m.exempt ? "dentro" : "acima"} do limite de isenção) · IR do mês ${brl(m.tax_due_gross)}</p>`).join("")}` : `<p class="small muted" style="margin-top:10px">Ganhos isentos no ano ${brl(s.exempt_gain_year)}</p>`}
+        ${s.months.map(m => `<p class="small muted" style="margin-top:6px">${mes(m.month)}: ${+m.sales_acoes ? `vendas de ações ${brl(m.sales_acoes)} (${m.exempt ? "dentro" : "acima"} do limite de isenção) · ` : ""}IR do mês ${brl(m.tax_due_gross)}${m.darf ? ` · DARF ${brl(m.darf.valor)} até ${dt(m.darf.vencimento)}` : ""}</p>`).join("")}` : `<p class="small muted" style="margin-top:10px">Ganhos isentos no ano ${brl(s.exempt_gain_year)}</p>`}
       <div style="margin-top:10px">${confidence(s.confidence)}</div></section>`).join("")}</div>
     <section class="card section"><details><summary>Premissas, limitações e versões das regras</summary><ul class="stack small" style="margin-top:10px">${[...res.premises, ...res.limitations].map(p => `<li>• ${esc(p)}</li>`).join("")}
       <li>• Regras: ${Object.entries(res.rule_versions).map(([k, v]) => `${esc(k)} v${esc(v)}`).join(", ")}</li><li>• Hash de reprodutibilidade: <code>${esc(res.reproducibility_hash)}</code></li></ul></details>
@@ -429,9 +434,10 @@ export async function alerts(el, r, ctx) {
   const res = await api.get("/v1/alerts");
   let filter = "abertos";
   const draw = () => {
+    const note = sampleNote(res);
     const items = res.items.filter(a => filter === "todos" || (filter === "abertos" ? a.status !== "resolvido" : a.status === "resolvido"));
     el.innerHTML = `
-      <div class="row between wrap" style="margin-bottom:14px"><p class="muted small">Priorização: impacto × urgência × relevância × confiança. Cor sempre acompanhada de rótulo e ícone.</p>
+      ${note}<div class="row between wrap" style="margin-bottom:14px"><p class="muted small">Priorização: impacto × urgência × relevância × confiança. Cor sempre acompanhada de rótulo e ícone.</p>
         <div class="theme-switch" role="group" aria-label="Filtro">${[["abertos", "Em aberto"], ["resolvidos", "Resolvidos"], ["todos", "Todos"]].map(([k, l]) => `<button type="button" aria-pressed="${filter === k}" data-f="${k}">${l}</button>`).join("")}</div></div>
       ${res.limited ? `<div class="trust-line" style="margin-bottom:12px">${icon("info")}<span>Plano Free mostra até 3 alertas. <a href="#/planos">Radar completo no Pro</a>.</span></div>` : ""}
       <div class="stack">${items.length ? items.map(a => `<article class="alert s-${a.severity} ${a.status === "resolvido" ? "is-resolved" : ""}" aria-label="${esc(sevLabel[a.severity])}: ${esc(a.title)}">
@@ -445,7 +451,7 @@ export async function alerts(el, r, ctx) {
           <a class="btn btn--ghost btn--sm" href="#/assistente?q=${encodeURIComponent("Explique: " + a.title)}">Explicar com IA</a></div></article>`).join("") : empty("Nada por aqui.")}</div>`;
     el.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { filter = b.dataset.f; draw(); });
     el.querySelectorAll("[data-st]").forEach(b => b.onclick = async () => {
-      await api.patch(`/v1/alerts/${b.dataset.id}`, { status: b.dataset.st });
+      await (res.sample ? api.demoPatch : api.patch)(`/v1/alerts/${b.dataset.id}`, { status: b.dataset.st });
       res.items.find(a => a.id === b.dataset.id).status = b.dataset.st; draw();
       const n = res.items.filter(a => a.status === "novo").length, c = document.querySelector("[data-alert-count]");
       if (c) { c.textContent = n; c.hidden = !n; } const d = document.querySelector("[data-dot]"); if (d) d.hidden = !n;

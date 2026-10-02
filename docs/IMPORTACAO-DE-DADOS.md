@@ -46,4 +46,15 @@ contra o snapshot de demonstração: R$ 1.419,88 de imposto, R$ 12,94 de IRRF e 
 - A carteira usa a cotação quando ela é mais nova que a posição importada; sem posição da B3, as negociações formam as posições.
 - Rota pública de verificação: `GET /v1/market/indices`. O dono pode forçar: `POST /v1/market/refresh`.
 
+## M6 — Radar de alertas e simulador sobre os dados reais
+
+- `alert_engine.js`: DARF vencido ou a vencer (15 dias), venda sem custo, vendas de ações perto do limite de R$ 20 mil no mês,
+  limite ultrapassado, prejuízo a compensar, classe inferida, reserva curta, gasto acima do normal, assinaturas, saídas maiores
+  que entradas, concentração e posições sem preço médio. Status (novo/visto/resolvido) salvo por cliente; Free vê 3 alertas.
+  Rotas: `GET /v1/alerts`, `PATCH /v1/alerts/{id}`. O painel inicial passa a contar os alertas reais.
+- `sim_engine.js`: venda hipotética recalcula a apuração do ano e compara com o cenário atual (imposto, mês afetado, DARF,
+  liquidez); posição da B3 sem negociações usa o valor aplicado como custo. PGBL: dedução até 12%.
+  Rotas: `POST/GET /v1/simulations` (planos Pro e Premium).
+- Datas do servidor no horário de Brasília. Cotação que falhou nunca zera uma posição.
+
 Próximo módulo: M5 (Open Finance via agregador, mesmo formato de registros).

@@ -78,7 +78,7 @@ export function parseBrapi(json) {
 export function applyQuotes(holdings, quotes, positionsFromTrades = {}) {
   const Q = quotes || {};
   const out = (holdings || []).map(h => {
-    const tk = String(h.ticker || "").toUpperCase(), q = Q[tk];
+    const tk = String(h.ticker || "").toUpperCase(), q = Q[tk] && +Q[tk].close > 0 ? Q[tk] : null;
     if (!q || !RV.has(h.asset_class) || !(+h.quantity > 0)) return h;
     if (h.as_of && q.date && q.date < h.as_of) return h;
     return { ...h, value: +(+h.quantity * q.close).toFixed(2), price: q.close, as_of: q.date, source: `cotação ${q.source}`,
@@ -87,7 +87,7 @@ export function applyQuotes(holdings, quotes, positionsFromTrades = {}) {
   const have = new Set(out.map(h => String(h.ticker || "").toUpperCase()).filter(Boolean));
   for (const [tk, p] of Object.entries(positionsFromTrades)) {
     if (have.has(tk) || !(+p.quantidade > 0)) continue;
-    const q = Q[tk];
+    const q = Q[tk] && +Q[tk].close > 0 ? Q[tk] : null;
     const cls = p.classe || assetClassOf(tk).cls;
     out.push({ id: "pos_" + tk, name: tk, ticker: tk, asset_class: RV.has(cls) ? cls : "outro", custodian: "Negociações importadas",
       quantity: +p.quantidade, invested: +p.custo_total, value: q ? +(+p.quantidade * q.close).toFixed(2) : +p.custo_total,

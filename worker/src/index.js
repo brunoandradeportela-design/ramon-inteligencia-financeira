@@ -12,6 +12,8 @@
  */
 import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize } from "../../apps/web/app/js/fin_engine.js";
 import { computeTax, taxDashboard } from "../../apps/web/app/js/tax_engine.js";
+import { buildAlerts } from "../../apps/web/app/js/alert_engine.js";
+import { simulateSale, simulatePgbl } from "../../apps/web/app/js/sim_engine.js";
 import { SGS, sgsLastUrl, parseSgs, indicesSnapshot, yahooUrl, brapiUrl, parseYahooChart, parseBrapi, applyQuotes, tickersFrom } from "../../apps/web/app/js/market.js";
 import { validateSignup, localCustomer, metricsFrom, addMonth, PRICE, PLAN_NAME, paymentsFrom, docValid, normalizePhone } from "../../apps/web/app/js/crm_rules.js";
 
@@ -37,7 +39,7 @@ class Problem extends Error {
   constructor(status, title, detail, extra = {}) { super(detail); this.status = status; this.title = title; this.detail = detail; this.extra = extra; }
 }
 const nowIso = () => new Date().toISOString();
-const today = () => nowIso().slice(0, 10);
+const today = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);   // data de Brasília
 const money = v => (Math.round(Number(v || 0) * 100) / 100).toFixed(2);
 const enc = new TextEncoder();
 const b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -353,7 +355,7 @@ async function route(req, env, db, url) {
   }
 
   /* ---- dados financeiros reais do cliente (importação de arquivos; futuramente Open Finance) */
-  if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
+  if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || p.startsWith("/v1/alerts") || p === "/v1/simulations" || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
     const u = await authUser(req, env, db);
     return finRoute(m, p, body, q, u, db);
   }
@@ -660,7 +662,17 @@ async function finRoute(m, p, body, q, u, db) {
     await kvSet(db, prefKey, prefs);
     return new Resp(m === "DELETE" ? 204 : 200, m === "DELETE" ? null : prefs);
   }
-  if (m !== "GET") throw new Problem(405, "Método não permitido", `${m} ${p}`);
+  /* ---- radar: status dos alertas */
+  const al = p.match(/^\/v1\/alerts\/(alr_[a-f0-9]+)$/);
+  if (al && m === "PATCH") {
+    if (!["novo", "visto", "resolvido"].includes(body.status)) throw new Problem(422, "Dados inválidos", "Status deve ser novo, visto ou resolvido.");
+    const st = await kvGet(db, "alerts_status:" + uid, {});
+    st[al[1]] = body.status; await kvSet(db, "alerts_status:" + uid, st);
+    return { id: al[1], status: body.status };
+  }
+  const ents = u.me.entitlements || [];
+  if (p === "/v1/simulations" && m === "GET") return { items: await kvGet(db, "sims:" + uid, []) };
+  if (m !== "GET" && p !== "/v1/simulations") throw new Problem(405, "Método não permitido", `${m} ${p}`);
   const [txs, accounts, holdings, trades] = await Promise.all(FIN_KINDS.map(k => finLoad(db, uid, k)));
   const fin = financeSummary(txs, accounts);
   if (p === "/v1/finance/summary") return fin;
@@ -671,6 +683,24 @@ async function finRoute(m, p, body, q, u, db) {
   const prefs = await kvGet(db, prefKey, { prior_losses: {}, paid_darfs: {} });
   const year = /^\d{4}$/.test(q.year || "") ? +q.year : +ref.slice(0, 4);
   const tax = computeTax(trades, { year, refDate: ref, knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs });
+  if (p === "/v1/simulations" && m === "POST") {
+    if (!ents.includes("simulacao")) throw new Problem(402, "Recurso do plano Pro", "O simulador de cenários faz parte dos planos Pro e Premium.", { required_plan: "Pro" });
+    let res;
+    try {
+      if (body.kind === "pgbl") res = simulatePgbl(body);
+      else {
+        const quotes = await loadQuotes(db, tickersFrom([...holdings, ...trades]));
+        const hasRv = holdings.some(h => ["acao", "fii", "etf", "bdr"].includes(h.asset_class));
+        const positions = applyQuotes(holdings, quotes, hasRv ? {} : tax.positions_cost);
+        const ops = (body.scenarios?.[0]?.operations || []).slice(0, 10).map(o => ({ ticker: str(o.ticker, 20), quantity: numOrNull(o.quantity), date: isoDate(o.date), price: numOrNull(String(o.price ?? "").replace(",", ".")) }));
+        res = simulateSale({ trades, positions, ops, opts: { refDate: ref, knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs } });
+      }
+    } catch (e) { if (e.status === 422) throw new Problem(422, "Simulação inválida", e.message); throw e; }
+    res = { id: "sim_" + randomToken(8).replace(/[-_]/g, ""), created_at: nowIso(), ...res };
+    const list = await kvGet(db, "sims:" + uid, []);
+    await kvSet(db, "sims:" + uid, [{ id: res.id, kind: res.kind, created_at: res.created_at, reproducibility_hash: res.reproducibility_hash || null, results: res.results.map(r => ({ name: r.name })) }, ...list].slice(0, 10));
+    return new Resp(201, res);
+  }
   if (p.startsWith("/v1/tax/")) {
     if (!(u.me.entitlements || []).includes("inteligencia_tributaria"))
       throw new Problem(402, "Recurso do plano Pro", "A apuração de imposto sobre as suas negociações faz parte dos planos Pro e Premium.", { required_plan: "Pro" });
@@ -685,9 +715,16 @@ async function finRoute(m, p, body, q, u, db) {
   port.market = await kvGet(db, "market_indices", null);
   port.quotes_as_of = Object.values(quotes).map(x => x.date).sort().at(-1) || null;
   if (p === "/v1/portfolio/consolidated") return port;
+  const alertsFor = async () => buildAlerts({ fin, port, tax, refDate: ref, statuses: await kvGet(db, "alerts_status:" + uid, {}) });
+  if (p === "/v1/alerts") {
+    const items = await alertsFor(), limited = !ents.includes("radar");
+    return { has_data: fin.has_data || port.has_data || tax.has_data, limited, items: limited ? items.slice(0, 3) : items };
+  }
   if (p === "/v1/dashboard") {
     const d = dashboardSummary({ name: u.me.name, fin, port });
     if (tax.has_data) d.tax = taxDashboard(tax);
+    const open = (await alertsFor()).filter(a => a.status !== "resolvido");
+    d.alerts = { open: open.length, critical: open.filter(a => a.severity === "critico").length };
     return d;
   }
   throw new Problem(404, "Não encontrado", p);
@@ -700,7 +737,7 @@ async function loadQuotes(db, tickers) {
   for (let i = 0; i < tickers.length; i += 90) {
     const part = tickers.slice(i, i + 90);
     const { results } = await db.prepare(`SELECT ticker, data FROM quotes WHERE ticker IN (${part.map(() => "?").join(",")})`).bind(...part).all();
-    results.forEach(r => { out[r.ticker] = JSON.parse(r.data); });
+    results.forEach(r => { const q = JSON.parse(r.data); if (+q.close > 0) out[r.ticker] = q; });
   }
   return out;
 }

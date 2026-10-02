@@ -138,6 +138,8 @@ test("carteira: cotação atualiza posição e negociações viram posição", (
   const out = applyQuotes(holdings, quotes, { VALE3: { quantidade: "10", custo_total: "550.00", classe: "acao" } });
   assert.equal(out[0].value, 3200); assert.equal(out[1].value, 10000);
   assert.equal(out[2].ticker, "VALE3"); assert.equal(out[2].value, 600); assert.equal(out[2].invested, 550);
+  const failed = applyQuotes([holdings[0]], { PETR4: { ticker: "PETR4", close: null } }, { VALE3: { quantidade: "10", custo_total: "550.00", classe: "acao" } });
+  assert.equal(failed[0].value, 3000); assert.equal(failed[1].value, 550);                // cotação que falhou não zera a posição
   const older = applyQuotes([{ ...holdings[0], as_of: "2026-10-01" }], quotes);
   assert.equal(older[0].value, 3000);                                                     // posição mais nova que a cotação
   assert.deepEqual(tickersFrom([{ ticker: "petr4" }, { ticker: "PETR4F" }, { ticker: "Tesouro" }, { ticker: "HGLG11" }]), ["HGLG11", "PETR4"]);

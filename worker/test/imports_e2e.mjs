@@ -71,8 +71,23 @@ assert.equal(dash.tax.estimated, t.total_tax_due); assert.match(dash.tax.scope, 
 // posições criadas a partir das negociações (sem posição da B3 importada)
 const pp = (await call("GET", "/v1/portfolio/consolidated", null, tp)).body;
 assert.equal(pp.positions.length, 1); assert.equal(pp.positions[0].ticker, "PETR4"); assert.equal(pp.positions[0].quantity, "100");
+// ---- radar e simulador sobre os dados reais (M6)
+const al = (await call("GET", "/v1/alerts", null, tp)).body;
+assert.equal(al.has_data, true); assert.equal(al.limited, false); assert.ok(al.items.some(x => x.code === "DARF_VENCIDO"));
+const first = al.items[0];
+assert.equal((await call("PATCH", `/v1/alerts/${first.id}`, { status: "resolvido" }, tp)).body.status, "resolvido");
+assert.equal((await call("GET", "/v1/alerts", null, tp)).body.items.find(x => x.id === first.id).status, "resolvido");
+assert.equal((await call("PATCH", `/v1/alerts/${first.id}`, { status: "xx" }, tp)).status, 422);
+assert.equal((await call("GET", "/v1/alerts", null, tk)).body.limited, true);
+const future = new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10);
+const sim = await call("POST", "/v1/simulations", { kind: "venda_ativos", scenarios: [{ operations: [{ ticker: "PETR4", quantity: 100, date: future, price: "35,00" }] }] }, tp);
+assert.equal(sim.status, 201, JSON.stringify(sim.body)); assert.equal(sim.body.results[1].liquidity_generated, "3500.00");
+assert.equal((await call("POST", "/v1/simulations", { kind: "pgbl", taxable_income: "100000", current_contributions: "0", extra_contribution: "5000", marginal_rate: "0.275", full_model: true, contributes_social_security: true }, tp)).body.difference, "1375.00");
+assert.equal((await call("GET", "/v1/simulations", null, tp)).body.items.length, 2);
+assert.equal((await call("POST", "/v1/simulations", { kind: "pgbl", taxable_income: "1" }, tk)).status, 402);
+assert.equal((await call("POST", "/v1/simulations", { kind: "venda_ativos", scenarios: [{ operations: [{ ticker: "PETR4", quantity: 1, date: "2020-01-01" }] }] }, tp)).status, 422);
 // ---- mercado (M3): rota pública responde mesmo sem rede externa
 const mk = await call("GET", "/v1/market/indices");
 assert.equal(mk.status, 200); assert.ok("indices" in mk.body && "quotes" in mk.body);
 assert.equal((await call("POST", "/v1/market/refresh", null, tp)).status, 403);
-console.log("IMPORTS E2E OK — importação, deduplicação, custo médio, painéis reais, substituição de posição, isolamento, exclusão, imposto (M4) e mercado (M3)");
+console.log("IMPORTS E2E OK — importação, deduplicação, custo médio, painéis reais, substituição de posição, isolamento, exclusão, imposto (M4), mercado (M3), radar e simulador (M6)");
