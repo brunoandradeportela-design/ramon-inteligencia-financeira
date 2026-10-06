@@ -1,0 +1,34 @@
+name: Backup do banco (criptografado)
+
+# Desligado até existirem os segredos AURION_BACKUP_TOKEN (igual ao BACKUP_TOKEN do Worker) e AURION_BACKUP_PASSPHRASE.
+# O arquivo sai criptografado (AES-256, PBKDF2) — o repositório é público e o artefato não pode ir em claro.
+on:
+  schedule:
+    - cron: "41 6 * * 0"     # domingo, 03:41 de Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: cfg
+        env:
+          T: ${{ secrets.AURION_BACKUP_TOKEN }}
+          P: ${{ secrets.AURION_BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$T" ] || [ -z "$P" ]; then echo "::notice title=backup::Backup desligado: cadastre AURION_BACKUP_TOKEN e AURION_BACKUP_PASSPHRASE nos segredos do repositório."; echo "on=0" >> "$GITHUB_OUTPUT"; else echo "on=1" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.cfg.outputs.on == '1'
+        env:
+          BACKUP_TOKEN: ${{ secrets.AURION_BACKUP_TOKEN }}
+          BACKUP_PASSPHRASE: ${{ secrets.AURION_BACKUP_PASSPHRASE }}
+        run: python3 scripts/backup/aurion_backup.py backup --api "https://aurion-api.bruno-andradeportela.workers.dev" --out "aurion-backup-$(date -u +%Y%m%dT%H%MZ).enc"
+      - if: steps.cfg.outputs.on == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurion-backup-criptografado
+          path: aurion-backup-*.enc
+          retention-days: 14

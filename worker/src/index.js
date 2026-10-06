@@ -16,6 +16,7 @@ import { TRADER_SCHEMA, traderRoute } from "./trader.js";
 import { actAs, sharingRoute } from "./pro_hub.js";
 import { integrationsRoute } from "./integrations.js";
 import { mailCron, notifItems, cacheForMail } from "./mailer.js";
+import { backupRoute } from "./backup.js";
 import { eventsView as buildEvents, personalEvents } from "../../apps/web/app/js/event_engine.js";
 import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
 import { Resp, Problem, nowIso, today, money, enc, b64u, randomToken, sha256, safeEqual, hashPassword, checkPassword, kvGet, kvSet, str, numOrNull, isoDate, ageH } from "./shared.js";
@@ -334,6 +335,14 @@ async function route(req, env, db, url, ctx) {
     const u = await authUser(req, env, db);
     if (!u.owner) throw new Problem(403, "Acesso negado", "Apenas o administrador.");
     return { refreshed: await refreshMarket(env, db, { force: true }) };
+  }
+
+  /* ---- backup lógico e restauração (ver backup.js e docs/BACKUP-RESTAURACAO.md) */
+  if (p.startsWith("/v1/admin/backup/") || p.startsWith("/v1/admin/restore/")) {
+    const u = req.headers.get("X-Backup-Token") ? null : await authUser(req, env, db, { required: false });
+    const r = await backupRoute(m, p, body, q, req, env, db, { ownerOk: !!u?.owner });
+    if (m === "GET" && p.endsWith("/manifest")) await audit(db, req, { user_id: OWNER_ID, actor: u?.me?.id || "rotina-backup", action: "admin.backup", resource: p });   // restauração não grava auditoria no destino para não intercalar a trilha restaurada
+    return r;
   }
 
   if (m === "POST" && p === "/v1/admin/mail/run") {
