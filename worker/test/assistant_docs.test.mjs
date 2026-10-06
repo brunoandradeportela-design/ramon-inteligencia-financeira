@@ -49,3 +49,22 @@ test("documentos: classificação, ano, conteúdo e checklist do IRPF", () => {
   const a = answer("Quais documentos faltam para o IR?", { ...ctx, checklist: irpfChecklist({ year: 2026, accounts: [{ institution: "Itaú" }], txs: tx, tax, docs: [] }) });
   assert.match(a.answer, /declaração de 2027/); assert.match(a.answer, /Faltam: Informe de rendimentos 2026 — Itaú/);
 });
+
+import { retrieve, buildKnowledge, citation } from "../../apps/web/app/js/knowledge.js";
+import { answer as answerKB } from "../../apps/web/app/js/assistant_engine.js";
+test("base de conhecimento governada: metadados, só regras validadas, citação com versão e sem inventar", () => {
+  const kb = buildKnowledge();
+  for (const d of kb) for (const k of ["source_id", "source_type", "version", "published_at", "effective_at", "checksum", "tenant_scope", "access_policy"]) assert.ok(k in d.meta, `${d.id} sem ${k}`);
+  assert.ok(!kb.some(d => d.id.includes("TABELA-ANUAL")), "regra pendente fora do contexto");
+  assert.equal(retrieve("Como funciona a isenção de 20 mil?")[0].id, "rule-BR-IRPF-RV-COMUM-2026.1");
+  assert.equal(retrieve("Qual a regra de day trade?")[0].id, "rule-BR-IRPF-RV-DAYTRADE-2026.1");
+  assert.equal(retrieve("O que é come-cotas?").length, 0, "fora da base: nenhuma resposta inventada");
+  assert.ok(retrieve("open finance").every(h => h.meta.tenant_scope === "public"));
+  const ctx = { fin: { has_data: false, liquidity: { cash: 0 } }, port: { has_data: false, total: 0 }, tax: { has_data: false, total_tax_due: "0.00", year: 2026 }, alerts: [], refDate: "2026-10-06" };
+  const a = answerKB("Qual a regra de day trade?", ctx);
+  assert.equal(a.intent, "conhecimento"); assert.match(a.answer, /alíquota: 20%/); assert.match(a.answer, /versão 2026\.1/);
+  assert.equal(a.knowledge.citations[0].source_id, "BR-IRPF-RV-DAYTRADE"); assert.ok(a.knowledge.citations[0].links.length > 0);
+  assert.match(answerKB("O que é come-cotas?", ctx).answer, /Prefiro não responder sem fonte/);
+  assert.equal(answerKB("devo comprar PETR4?", ctx).guardrail, "recomendacao", "guardrail continua antes do conhecimento");
+  assert.deepEqual(Object.keys(citation(retrieve("open finance")[0])).sort(), ["collection", "document", "effective_at", "links", "source_id", "version"]);
+});

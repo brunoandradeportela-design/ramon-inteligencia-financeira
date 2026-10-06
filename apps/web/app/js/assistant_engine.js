@@ -4,6 +4,7 @@
 import { simulateSale } from "./sim_engine.js";
 import { tradeAnalytics } from "./trader_engine.js";
 import { eventsView } from "./event_engine.js";
+import { retrieve, citation, KB_VERSION, ruleText } from "./knowledge.js";
 
 export const PATTERNS = {"injection": ["ignore (as |todas as |suas )?(instru|regras)", "ignore (all|previous|the above)", "system prompt", "prompt do sistema", "modo desenvolvedor", "developer mode", "jailbreak", "aja como (um )?consultor", "finja (que|ser)", "sem (as )?restri", "desative (o|os) (guardrail|filtro)", "revele (suas|as) instru"], "credential": ["\\bsenha\\b.*\\b(banco|conta|corretora)", "\\btoken\\b.*\\b(banco|seguranca)", "\\bminha senha\\b"], "advice": ["\\b(devo|deveria|vale a pena|compensa) (comprar|vender|investir|aplicar|resgatar|sair|entrar)", "\\b(qual|quais|que) (acao|acoes|ativo|ativos|fundo|fundos|fii|fiis|etf|cripto|investimento)s? (devo|deveria|comprar|vender|recomenda|indica|e melhor|sao melhores)", "\\b(recomend|indic|sugir|sugest)\\w* .*(acao|acoes|ativo|fundo|fii|carteira|investimento|compra|venda)", "\\bmonte (uma|minha) carteira", "\\bcarteira recomendada", "\\bonde (devo )?investir", "\\b(compro|vendo) (agora|hoje|ou)", "\\bmelhor (acao|investimento|fundo|ativo)", "\\bpreco[- ]alvo", "\\bvai (subir|cair|valorizar)", "\\bhora (certa|de) (comprar|vender)"], "intents": {"tributaria": ["impost", "\\bir\\b", "irpf", "darf", "tribut", "isen", "prejuiz", "aliquota", "day ?trade", "ganho de capital", "imposto de renda", "receita federal", "pgbl", "vgbl", "dedu"], "simulacao": ["simul", "cenario", "e se ", "what if", "comparar cenario", "compare"], "alertas": ["alerta", "atencao", "pendenc", "radar", "o que (merece|preciso)", "prioridade"], "patrimonio": ["patrimon", "carteira", "aloca", "posic", "concentra", "liquidez", "quanto (eu )?tenho", "onde esta", "investimento"], "financeira": ["gasto", "despes", "receita", "fluxo", "categoria", "orcamento", "saldo", "conta", "cartao", "recorren", "mudou", "economi"], "documento": ["document", "informe", "nota de corretagem", "comprovante", "upload", "arquivo"], "trader": ["\\btrade", "trader", "operac", "taxa de acerto", "win rate", "payoff", "drawdown", "backtest", "estrategia", "resultado das (minhas )?operac"], "eventos": ["evento", "divulga", "fato relevante", "comunicado", "noticia", "agenda", "prazo", "vencimento", "aconteceu", "daily", "resumo do dia"]}};
 const DISCLAIMER = "Informação educativa calculada sobre os seus dados; não é recomendação de investimento nem substitui seu contador.";
@@ -14,11 +15,13 @@ const dbr = iso => String(iso || "").slice(0, 10).split("-").reverse().join("/")
 const mesBr = mk => { const [y, m] = String(mk).split("-"); return ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"][+m - 1] + "/" + y; };
 const ev = (label, value, display, source) => ({ label, value: String(value), display, source });
 
+const CONCEPT = /^(o que (e|sao|significa)|oque|como (funciona|e calculad|o aurion|voces|calcula)|qual (e |eh )?a regra|quais (sao )?as regras|explique|explica|me explica|por que o aurion|o aurion (faz|executa|recomenda|guarda|le)|existe (isencao|limite)|tem (isencao|limite)|qual a aliquota|quais as aliquotas|onde (esta|fica) a fonte)/;
 export function classify(q) {
   const t = norm(q), any = list => list.some(p => new RegExp(p).test(t));
   if (any(PATTERNS.injection)) return "bloqueado";
   if (any(PATTERNS.credential)) return "credencial";
   if (any(PATTERNS.advice)) return "investimento_individual";
+  if (CONCEPT.test(t)) return "conhecimento";
   if (/document|comprovante|recibo|informe de rend/.test(t)) return "documento";
   if (/vend\w*\s+(de\s+)?\d/.test(t) && /[a-z]{4}\d{1,2}/.test(t)) return "simulacao";
   let best = "geral", score = 0;
@@ -71,7 +74,7 @@ export function answer(question, ctx) {
     } catch (e) { return say(e.message || "Não consegui simular esse cenário."); }
   }
 
-  if (noData && intent !== "documento") {
+  if (noData && intent !== "documento" && intent !== "conhecimento") {
     out.suggestions = ["Como importar meus dados?"];
     return say(`${name ? name.split(" ")[0] + ", ainda" : "Ainda"} não há dados seus para eu analisar. Envie seus extratos (OFX/CSV) e os relatórios da B3 em Importar dados, ou conecte seu banco em Conexões — aí eu respondo com os seus números.`);
   }
@@ -161,6 +164,22 @@ export function answer(question, ctx) {
     return say(e.items.length ? `Próximos eventos seus: ${e.items.slice(0, 4).map(i => `${i.date.split("-").reverse().join("/")} — ${i.title}`).join("; ")}.${tail}` : `Nenhum prazo pessoal (DARF ou vencimento de título) nos próximos dias.${tail}`);
   }
 
+  if (intent === "conhecimento" || intent === "geral") {
+    const hits = retrieve(question);
+    if (hits.length) {
+      tool("knowledge_base");
+      const h = hits[0];
+      out.knowledge = { kb_version: KB_VERSION, citations: hits.map(citation) };
+      out.evidence = hits.map(x => ev(x.title, x.meta.version, `${x.collection === "regras" ? "regra" : x.collection === "produto" ? "AURION" : "fonte oficial"} · versão ${x.meta.version}`, x.meta.source_id));
+      out.suggestions = ["Quanto vou pagar de imposto?", "Simular venda de 100 PETR4", "Quais alertas existem?"];
+      out.confidence = h.collection === "regras" ? 0.9 : 0.8;
+      const src = h.collection === "regras" ? ` Fonte: regra ${h.meta.source_id} versão ${h.meta.version}, vigente desde ${dbr(h.meta.effective_at)}${h.meta.sources.length ? ` (${h.meta.sources.map(x => x.title).join("; ")})` : ""}.`
+        : h.collection === "fontes_publicas" ? ` Fonte oficial: ${h.title}${h.meta.sources[0]?.url ? ` — ${h.meta.sources[0].url}` : ""}. O conteúdo é da fonte; o AURION não o altera.` : ` Fonte: documentação do AURION (${KB_VERSION}).`;
+      return say(`${h.collection === "regras" ? ruleText(h.meta.source_id, h.meta.version) : h.text}${src}`);
+    }
+    if (intent === "conhecimento") { out.suggestions = ["Como o AURION calcula o imposto?", "Qual a regra de day trade?", "O que o AURION não faz?"]; return say("Não encontrei esse assunto nas regras versionadas nem na documentação do AURION. Prefiro não responder sem fonte; tente reformular ou pergunte sobre seus números."); }
+  }
+
   // visão geral
   tool("finance"); tool("portfolio"); tool("tax"); tool("alerts");
   const cash = +fin.liquidity.cash || 0;
@@ -170,3 +189,4 @@ export function answer(question, ctx) {
   return say(`Resumo: patrimônio de ${brl((+port.total || 0) + cash)}, imposto estimado de ${brl(tax.total_tax_due)} em ${tax.year} e ${alerts.filter(a => a.status !== "resolvido").length} alerta(s) em aberto. Pergunte sobre impostos, gastos, patrimônio, alertas ou simule uma venda.`);
 }
 export { DISCLAIMER };
+
