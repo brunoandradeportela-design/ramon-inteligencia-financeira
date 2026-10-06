@@ -5,11 +5,12 @@ import { esc, icon, errorBox, loading } from "./ui.js";
 import * as V from "./views.js";
 import { crm } from "./views_crm.js";
 import { payments } from "./views_payments.js";
+import { trader } from "./views_trader.js";
 
 const NAV = [
   ["dashboard", "Visão Geral", "home"], ["financas", "Finanças", "finance"], ["patrimonio", "Patrimônio", "wealth"], ["alocacao", "Minha Alocação", "wealth"],
   ["tributacao", "Tributação", "tax"], ["simulador", "Simulador", "sim"], ["alertas", "Radar", "bell"],
-  ["assistente", "Inteligência", "ai"], ["documentos", "Documentos", "doc"], ["importar", "Importar dados", "doc"], ["conexoes", "Conexões", "link"],
+  ["assistente", "Inteligência", "ai"], ["trader", "Trader Intelligence", "sim"], ["documentos", "Documentos", "doc"], ["importar", "Importar dados", "doc"], ["conexoes", "Conexões", "link"],
 ];
 const TITLES = Object.fromEntries(NAV.map(([k, t]) => [k, t]));
 Object.assign(TITLES, { crm: "CRM · Clientes", pagamentos: "Pagamentos", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
@@ -17,7 +18,7 @@ const PUBLIC = { entrar: V.login, cadastro: V.register, recuperar: V.recoverView
 const ROUTES = {
   dashboard: V.dashboard, patrimonio: V.portfolio, financas: V.finance, tributacao: V.tax, simulador: V.simulator,
   alertas: V.alerts, documentos: V.documents, conexoes: V.connections, assistente: V.assistant, planos: V.plans,
-  configuracoes: V.settings, privacidade: V.privacy, importar: importData, alocacao: V.allocation,
+  configuracoes: V.settings, privacidade: V.privacy, importar: importData, alocacao: V.allocation, trader,
 };
 const ADMIN_ROUTES = { ...ROUTES, crm, pagamentos: payments };
 

@@ -12,6 +12,8 @@
  *   BRAPI_TOKEN            (opcional) token gratuito da brapi.dev — reserva para as cotações se o Yahoo falhar
  * Variáveis (wrangler.toml): OWNER_EMAIL, OWNER_NAME, ALLOWED_ORIGINS
  */
+import { TRADER_SCHEMA, traderRoute } from "./trader.js";
+import { eventsView as buildEvents } from "../../apps/web/app/js/event_engine.js";
 import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
 import { Resp, Problem, nowIso, today, money, enc, b64u, randomToken, sha256, safeEqual, hashPassword, checkPassword, kvGet, kvSet, str, numOrNull, isoDate, ageH } from "./shared.js";
 import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize, CATEGORIES } from "../../apps/web/app/js/fin_engine.js";
@@ -58,6 +60,7 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS quotes (ticker TEXT PRIMARY KEY, data TEXT NOT NULL, fetched_at TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS fin_items_import ON fin_items (user_id, import_id)",
   ...IDENTITY_SCHEMA,
+  ...TRADER_SCHEMA,
 ];
 let schemaReady = false;
 async function ensureSchema(db) {
@@ -325,6 +328,31 @@ async function route(req, env, db, url, ctx) {
     const u = await authUser(req, env, db);
     if (!u.owner) throw new Problem(403, "Acesso negado", "Apenas o administrador.");
     return { refreshed: await refreshMarket(env, db, { force: true }) };
+  }
+
+  /* ---- Event Intelligence: prazos pessoais + exposição (divulgações públicas são mescladas no app) */
+  if (m === "GET" && p === "/v1/events") {
+    const u = await authUser(req, env, db), uid = u.me.id;
+    const [holdings, trades, wl] = await Promise.all([finLoad(db, uid, "holding"), finLoad(db, uid, "trade"), finLoad(db, uid, "watchlist")]);
+    const act = trades.filter(t => !t.superseded_by && t.status !== "voided");
+    const prefs = await kvGet(db, "tax_prefs:" + uid, { prior_losses: {}, paid_darfs: {} });
+    const tax = act.length ? computeTax(act, { refDate: today(), knownClasses: Object.fromEntries(holdings.filter(h => h.ticker).map(h => [h.ticker, h.asset_class])), priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs }) : null;
+    return buildEvents({ tax, holdings, trades: act, watchlists: wl, refDate: today() });
+  }
+
+  /* ---- Trader Intelligence (sem execução de ordens — ADR-0009) */
+  if (p.startsWith("/v1/trader/")) {
+    const u = await authUser(req, env, db);
+    const prefsOf = uid => kvGet(db, "tax_prefs:" + uid, { prior_losses: {}, paid_darfs: {} });
+    const DT = { finLoad, loadQuotes,
+      taxFor: async (uid, trades) => { const holdings = await finLoad(db, uid, "holding"), prefs = await prefsOf(uid);
+        return computeTax(trades, { year: /^\d{4}$/.test(q.year || "") ? +q.year : +today().slice(0, 4), refDate: today(), knownClasses: Object.fromEntries(holdings.filter(h => h.ticker).map(h => [h.ticker, h.asset_class])), priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs }); },
+      positionsFor: async uid => { const [holdings, trades] = await Promise.all([finLoad(db, uid, "holding"), finLoad(db, uid, "trade")]);
+        const act = trades.filter(t => !t.superseded_by && t.status !== "voided");
+        const quotes = await loadQuotes(db, tickersFrom([...holdings, ...act]));
+        const hasRv = holdings.some(h => ["acao", "fii", "etf", "bdr"].includes(h.asset_class));
+        return applyQuotes(holdings, quotes, hasRv ? {} : computeTax(act, { refDate: today() }).positions_cost); } };
+    return traderRoute(m, p, body, q, req, u, db, env, DT);
   }
 
   /* ---- dados financeiros reais do cliente (importação de arquivos; futuramente Open Finance) */
@@ -696,7 +724,8 @@ async function finRoute(m, p, body, q, u, db, req) {
   }
   if (m === "GET" && p === "/v1/finance/categories") return { items: CATEGORIES };
   if (m !== "GET" && p !== "/v1/simulations" && p !== "/v1/assistant/query") throw new Problem(405, "Método não permitido", `${m} ${p}`);
-  const [txsAll, accounts, holdings, trades, overrides] = await Promise.all([...FIN_KINDS, "tx_override"].map(k => finLoad(db, uid, k)));
+  const [txsAll, accounts, holdings, tradesAll, overrides] = await Promise.all([...FIN_KINDS, "tx_override"].map(k => finLoad(db, uid, k)));
+  const trades = tradesAll.filter(t => !t.superseded_by && t.status !== "voided");      // versões substituídas e anuladas ficam guardadas, fora dos cálculos
   const ovMap = Object.fromEntries(overrides.map(o => [o.id, o]));
   const withOv = txsAll.map(t => ovMap[t.id]?.category ? { ...t, original_category: t.category, category: ovMap[t.id].category } : t);
   const { kept: txs, duplicates: dupTxs } = dedupeTransactions(withOv);
@@ -1060,7 +1089,7 @@ async function docRoute(m, p, body, q, u, db, req) {
   if (m === "GET" && p === "/v1/documents") {
     const items = (await db.prepare("SELECT data FROM docs WHERE user_id=?").bind(uid).all()).results.map(r => JSON.parse(r.data)).sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at));
     const year = /^\d{4}$/.test(q.year || "") ? +q.year : +today().slice(0, 4);
-    const [txs, accounts, holdings, trades] = await Promise.all(FIN_KINDS.map(k => finLoad(db, uid, k)));
+    const [txs, accounts, holdings, tradesAll] = await Promise.all(FIN_KINDS.map(k => finLoad(db, uid, k))); const trades = tradesAll.filter(t => !t.superseded_by && t.status !== "voided");
     const prefs = await kvGet(db, "tax_prefs:" + uid, { prior_losses: {}, paid_darfs: {} });
     const known = Object.fromEntries(holdings.filter(h => h.ticker).map(h => [h.ticker, h.asset_class]));
     const tax = computeTax(trades, { year, refDate: today(), knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs });
