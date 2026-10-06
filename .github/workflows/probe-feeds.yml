@@ -13,19 +13,12 @@ jobs:
           python-version: "3.11"
       - run: |
           python scripts/public_data/probe_feeds.py \
-            "https://www.gov.br/cvm/pt-br/assuntos/noticias/RSS" \
-            "https://www.gov.br/cvm/pt-br/assuntos/noticias/2026/RSS" \
-            "https://www.gov.br/cvm/pt-br/search_rss?portal_type=News+Item&sort_on=effective&sort_order=reverse" \
-            "https://www.gov.br/cvm/pt-br/assuntos/noticias/2026/outubro/RSS" \
-            "https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2026/RSS" \
-            "https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2026/outubro/RSS" \
-            "https://www.gov.br/receitafederal/pt-br/search_rss?portal_type=News+Item&sort_on=effective&sort_order=reverse" \
-            "https://www.gov.br/fazenda/pt-br/assuntos/noticias/2026/RSS" \
-            "https://www.gov.br/fazenda/pt-br/assuntos/noticias/2026/outubro/RSS" \
-            "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/notas" \
+            "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/notas?ano=2026" \
             "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/noticias" \
             "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/comunicadoscopom" \
             "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/notasimprensa" \
             "https://www.bcb.gov.br/api/feed/app/notas" \
+            "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/comunicados" \
             "https://agenciagov.ebc.com.br/noticias/RSS" \
-            "https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml"
+            "https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml" \
+            "https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2026/setembro/RSS"
