@@ -82,6 +82,13 @@ Como reproduzir:
   - Plano de incidentes em `docs/INCIDENTES.md`.
 - **Observabilidade (§25–26).** Painel Operações com os SLOs (`ops_e2e`).
 
+- **Copilot com base de conhecimento governada (§20).**
+  - Responde perguntas conceituais com citação da regra, da versão e da vigência, com link oficial.
+  - Fora da base, diz que não encontrou em vez de inventar (ADR-0018).
+- **Relatório de apoio à declaração (IRPF).**
+  - Renda variável mês a mês, ganhos isentos e prejuízo a compensar.
+  - Bens e direitos pelo custo em 31/12, com Excel; disponível também para o contador no acesso somente leitura.
+
 ### Ainda abertos
 - **Limite de requisições global.** O limitador atual conta por instância do Worker; o limite global entre regiões exige o Rate Limiting do Cloudflare no plano pago.
 - **OCR de documentos escaneados (imagem).** Ainda não é feito; depende de provedor ou plano pago.
