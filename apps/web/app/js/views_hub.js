@@ -59,7 +59,7 @@ export async function news(el) {
       <div class="row wrap" style="gap:10px;justify-content:space-between;align-items:center"><h3>Notícias</h3>
         <div class="tabs" role="tablist"><button role="tab" class="btn btn--sm" data-m="voce" aria-selected="true">Para você</button> <button role="tab" class="btn btn--ghost btn--sm" data-m="todas" aria-selected="false">Todas</button></div></div>
       <div id="nl" class="section"></div>
-      <p class="note">Fontes públicas: ${nw.sources.length ? nw.sources.map(s => `${esc(s.name)}${s.status === "ok" ? "" : " (indisponível na última coleta)"}`).join("; ") : "aguardando a primeira coleta"}. ${nw.generated_at ? "Atualizado em " + dtm(nw.generated_at) + "." : ""} Mostramos só título e link; o conteúdo é da fonte. A seleção “Para você” usa seus ativos e temas no próprio aparelho.</p>
+      <p class="note">Fontes públicas: ${nw.sources.length ? nw.sources.map(s => `${esc(s.name)}${s.status === "ok" ? "" : s.status === "desatualizado" ? " (sem publicações recentes no feed)" : " (indisponível na última coleta)"}`).join("; ") : "aguardando a primeira coleta"}. ${nw.generated_at ? "Atualizado em " + dtm(nw.generated_at) + "." : ""} Mostramos só título e link; o conteúdo é da fonte. A seleção “Para você” usa seus ativos e temas no próprio aparelho.</p>
     </section>`;
   el.querySelector("#say").onclick = e => speak(daily.voice_script, e.target);
   el.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { mode = b.dataset.m; el.querySelectorAll("[data-m]").forEach(x => { x.setAttribute("aria-selected", x === b); x.className = "btn btn--sm" + (x === b ? "" : " btn--ghost"); }); draw(); });
