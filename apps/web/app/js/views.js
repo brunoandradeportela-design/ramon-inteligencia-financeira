@@ -3,6 +3,8 @@ import { api, DEMO, ANALYTICS_DEMO, ApiError, HAS_API } from "./api.js";
 import { connectionsReal } from "./views_openfinance.js";
 import { documentsReal } from "./views_docs.js";
 import { loginReal, recoverView, resetView, securitySection, privacyReal } from "./views_identity.js";
+import { wireTxEdits, allocation, dataHubSection } from "./views_finance2.js";
+export { allocation };
 export { recoverView, resetView };
 import { onLogin, themeSwitch, theme } from "./app.js";
 import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
@@ -245,7 +247,9 @@ function marketCard(p) {
 
 /* ================================================================ FINANÇAS */
 export async function finance(el) {
-  const [f, tx] = await Promise.all([api.get("/v1/finance/summary"), api.get("/v1/finance/transactions?limit=60")]);
+  const [f, tx] = await Promise.all([api.get("/v1/finance/summary"), api.get("/v1/finance/transactions?limit=100")]);
+  const editable = HAS_API && !f.sample && !tx.sample;
+  const cats = editable ? (await api.get("/v1/finance/categories").catch(() => ({ items: [] }))).items : [];
   el.innerHTML = `${sampleNote(f)}
     <div class="grid g-4">
       <div class="card"><h3>Entradas (${mes(f.period.from)}–${mes(f.period.to)})</h3><div class="kpi pos">${brl(f.totals.income)}</div></div>
@@ -267,9 +271,14 @@ export async function finance(el) {
       <section class="card"><h3>Mudanças relevantes</h3>${f.changes.length ? `<ul class="stack small" style="margin-top:12px">${f.changes.map(c => `<li><b>${esc(c.category)}</b>: ${brl(c.last)} no último mês, contra ${brl(c.baseline)} de referência (${c.delta_pct > 0 ? "+" : ""}${pct(c.delta_pct, 0)}).</li>`).join("")}</ul>` : "<p class='small muted'>Sem mudanças relevantes.</p>"}
         <p class="note">${esc(f.reading)}.</p></section>
     </div>
+    ${(f.cards || []).length ? `<section class="card section"><h3>Cartões</h3><div class="grid g-3" style="margin-top:10px">${f.cards.map(c => `<div class="card" style="box-shadow:none"><b class="small">${esc(c.name)}</b> <span class="small muted">${esc(c.institution || "")}</span>
+      <div class="kpi" style="font-size:22px">${brl(Math.abs(+c.balance))}</div><p class="small muted">fatura atual · gastos em ${mes(c.month)}: ${brl(c.month_spend)}</p></div>`).join("")}</div></section>` : ""}
     <section class="card section"><h3>Transações <span class="right small muted">${tx.total} no total</span></h3>
+      ${editable ? `<p class="small muted" style="margin-top:4px">Corrija a categoria quando precisar: o lançamento original fica preservado e a correção entra na sua trilha de auditoria.</p>` : ""}
       <div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th>Origem</th></tr></thead>
-      <tbody>${tx.items.map(t => `<tr><td>${dt(t.date)}</td><td>${esc(t.description)}</td><td>${esc(t.category)}</td><td class="num ${+t.amount < 0 ? "" : "pos"}">${brl(t.amount)}</td><td class="small muted">${esc(t.source)}</td></tr>`).join("")}</tbody></table></div></section>`;
+      <tbody>${tx.items.map(t => `<tr><td>${dt(t.date)}</td><td>${esc(t.description)}</td><td>${editable ? `<select class="input" data-cat="${esc(t.id)}" style="padding:3px 8px;min-width:150px" aria-label="Categoria de ${esc(t.description)}">${[...new Set([t.category, ...cats])].map(c => `<option ${c === t.category ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${t.category_overridden ? `<div class="small muted">corrigida · original: ${esc(t.original_category)}</div>` : ""}` : esc(t.category)}</td>
+        <td class="num ${+t.amount < 0 ? "" : "pos"}">${brl(t.amount)}</td><td class="small muted">${esc(t.source)}${editable ? ` · <a href="#" data-lin="${esc(t.id)}">origem</a>` : ""}</td></tr><tr hidden data-linrow="${esc(t.id)}"><td colspan="5"></td></tr>`).join("")}</tbody></table></div></section>`;
+  if (editable) wireTxEdits(el, () => finance(el));
 }
 
 /* ================================================================ TRIBUTAÇÃO */
@@ -496,7 +505,7 @@ export async function documents(el) {
 
 /* ================================================================ CONEXÕES */
 export async function connections(el, r) {
-  if (HAS_API) return connectionsReal(el);
+  if (HAS_API) { await connectionsReal(el); const box = document.createElement("div"); el.appendChild(box); return dataHubSection(box); }
   if (r.sub === "retorno") return connectReturn(el, r);
   const [res, inst] = await Promise.all([api.get("/v1/connections"), api.get("/v1/institutions")]);
   const labels = { accounts: "Contas e saldos", transactions: "Transações", credit_cards: "Cartões de crédito", investments: "Investimentos (Open Investment)" };

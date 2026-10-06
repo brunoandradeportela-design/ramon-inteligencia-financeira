@@ -28,6 +28,7 @@ const RULES = [
   ["Transferências", /\bpix\b|\bted\b|\bdoc\b|transf/],
   ["Tarifas bancárias", /tarifa|anuidade|iof|juros|encargo|mora/],
 ];
+export const CATEGORIES = [...new Set([...RULES.map(r => r[0]), "Outras entradas", "Outros gastos"])];
 export function categorize(description, amount) {
   const d = norm(description);
   for (const [cat, re] of RULES) if (re.test(d)) {
@@ -88,6 +89,8 @@ export function financeSummary(txs, accounts = [], refDate = new Date().toISOStr
     series, by_category, recurring, changes,
     liquidity: { cash: r2(cash), avg_monthly_expense: r2(avgExp), months_covered: avgExp ? cash / avgExp : 0 },
     accounts: (accounts || []).map(a => ({ id: a.id, name: a.name, institution: a.institution, type: a.type, balance: r2(a.balance), balance_date: a.balance_date })),
+    cards: (accounts || []).filter(a => a.type === "cartao").map(a => ({ name: a.name, institution: a.institution, balance: r2(a.balance), month: lastMonth,
+      month_spend: r2(-items.filter(t => (t.account_id === a.external_id || t.account_id === a.id) && month(t.date) === lastMonth && t.amount < 0).reduce((s, t) => s + t.amount, 0)) })),
     reading: items.length
       ? `Calculado a partir de ${items.length} transações importadas por você. Aplicações, resgates e pagamento de fatura não entram como receita ou despesa`
       : "Nenhum extrato importado ainda",
@@ -95,7 +98,8 @@ export function financeSummary(txs, accounts = [], refDate = new Date().toISOStr
 }
 export function transactionsList(txs, limit = 60) {
   const items = (txs || []).map(t => ({ id: t.id, date: t.date, description: t.description, amount: r2(t.amount),
-    category: t.category || categorize(t.description, t.amount), source: t.source })).sort((a, b) => b.date.localeCompare(a.date));
+    category: t.category || categorize(t.description, t.amount), source: t.source, import_id: t.import_id || null,
+    ...(t.original_category ? { original_category: t.original_category, category_overridden: true } : {}) })).sort((a, b) => b.date.localeCompare(a.date));
   return { total: items.length, limit, offset: 0, items: items.slice(0, limit) };
 }
 

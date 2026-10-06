@@ -7,9 +7,9 @@ import { crm } from "./views_crm.js";
 import { payments } from "./views_payments.js";
 
 const NAV = [
-  ["dashboard", "Início", "home"], ["patrimonio", "Patrimônio", "wealth"], ["financas", "Finanças", "finance"],
-  ["tributacao", "Tributação", "tax"], ["simulador", "Simulador", "sim"], ["alertas", "Alertas", "bell"],
-  ["importar", "Importar dados", "doc"], ["documentos", "Documentos", "doc"], ["conexoes", "Conexões", "link"], ["assistente", "Assistente IA", "ai"],
+  ["dashboard", "Visão Geral", "home"], ["financas", "Finanças", "finance"], ["patrimonio", "Patrimônio", "wealth"], ["alocacao", "Minha Alocação", "wealth"],
+  ["tributacao", "Tributação", "tax"], ["simulador", "Simulador", "sim"], ["alertas", "Radar", "bell"],
+  ["assistente", "Inteligência", "ai"], ["documentos", "Documentos", "doc"], ["importar", "Importar dados", "doc"], ["conexoes", "Conexões", "link"],
 ];
 const TITLES = Object.fromEntries(NAV.map(([k, t]) => [k, t]));
 Object.assign(TITLES, { crm: "CRM · Clientes", pagamentos: "Pagamentos", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
@@ -17,7 +17,7 @@ const PUBLIC = { entrar: V.login, cadastro: V.register, recuperar: V.recoverView
 const ROUTES = {
   dashboard: V.dashboard, patrimonio: V.portfolio, financas: V.finance, tributacao: V.tax, simulador: V.simulator,
   alertas: V.alerts, documentos: V.documents, conexoes: V.connections, assistente: V.assistant, planos: V.plans,
-  configuracoes: V.settings, privacidade: V.privacy, importar: importData,
+  configuracoes: V.settings, privacidade: V.privacy, importar: importData, alocacao: V.allocation,
 };
 const ADMIN_ROUTES = { ...ROUTES, crm, pagamentos: payments };
 
@@ -102,7 +102,7 @@ function shell(admin = false) {
       </div>
     </aside>
     <div class="main">
-      ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note"><b>Seus dados:</b> Início, Patrimônio, Finanças, Tributação, Alertas e Simulador mostram seus números quando você envia seus arquivos em <a href="#/importar">Importar dados</a>; até lá, exibem um exemplo.</div>` : ""}
+      ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note"><b>Seus dados:</b> os painéis mostram os seus números quando você envia arquivos em <a href="#/importar">Importar dados</a> ou conecta seu banco em <a href="#/conexoes">Conexões</a>; até lá, exibem um exemplo.</div>` : ""}
       <header class="top">
         <button class="icon-btn burger" data-burger aria-label="Abrir menu">${icon("menu")}</button>
         <h1 data-title>Início</h1>

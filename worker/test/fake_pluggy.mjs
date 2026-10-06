@@ -34,6 +34,10 @@ export function start(port) {
           const k = "key-" + (++st.n); st.keys.add(k); return send(200, { apiKey: k });
         }
         if (!st.keys.has(req.headers["x-api-key"])) return send(401, { message: "unauthorized" });
+        if (p === "/connectors") return send(200, { results: [
+          { id: 201, name: "Banco Teste", type: "PERSONAL_BANK", isOpenFinance: true, products: ["ACCOUNTS", "TRANSACTIONS", "CREDIT_CARDS", "INVESTMENTS"], health: { status: "ONLINE" } },
+          { id: 301, name: "Corretora Teste", type: "INVESTMENT", isOpenFinance: true, products: ["INVESTMENTS"], health: { status: "UNSTABLE" } },
+          { id: 0, name: "Pluggy Bank", type: "PERSONAL_BANK", isSandbox: true, products: ["ACCOUNTS"] }] });
         if (p === "/connect_token") return send(200, { accessToken: "ct-" + (b.options?.clientUserId || "x") });
         let m;
         if ((m = p.match(/^\/items\/(.+)$/))) {

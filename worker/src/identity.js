@@ -362,7 +362,8 @@ export async function privacyExport(db, uid, D) {
     dados_financeiros: fin, documentos: docs.map(d => ({ ...d, conteudo: "baixe pela tela Documentos" })), preferencias_e_registros: kv, auditoria: (await auditList(db, uid, 5000)).items };
 }
 export async function privacyDelete(db, req, uid, D) {
-  const docIds = (await db.prepare("SELECT id FROM docs WHERE user_id=?").bind(uid).all()).results.map(r => r.id);
+  const docIds = [...(await db.prepare("SELECT id FROM docs WHERE user_id=?").bind(uid).all()).results.map(r => r.id),
+    ...(await db.prepare("SELECT id FROM fin_items WHERE user_id=? AND kind='raw'").bind(uid).all()).results.map(r => r.id)];
   const sec = await getSec(db, uid);
   const stmts = [db.prepare("DELETE FROM fin_items WHERE user_id=?").bind(uid), db.prepare("DELETE FROM docs WHERE user_id=?").bind(uid),
     db.prepare("DELETE FROM sessions WHERE user_id=?").bind(uid), db.prepare("DELETE FROM session_meta WHERE user_id=?").bind(uid),

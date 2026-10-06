@@ -14,7 +14,9 @@
  */
 import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
 import { Resp, Problem, nowIso, today, money, enc, b64u, randomToken, sha256, safeEqual, hashPassword, checkPassword, kvGet, kvSet, str, numOrNull, isoDate, ageH } from "./shared.js";
-import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize } from "../../apps/web/app/js/fin_engine.js";
+import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize, CATEGORIES } from "../../apps/web/app/js/fin_engine.js";
+import { dedupeTransactions, reconcilePositions, reconcileAccounts, qualityIndicators } from "../../apps/web/app/js/data_quality.js";
+import { allocationView } from "../../apps/web/app/js/allocation.js";
 import { computeTax, taxDashboard } from "../../apps/web/app/js/tax_engine.js";
 import { buildAlerts } from "../../apps/web/app/js/alert_engine.js";
 import { simulateSale, simulatePgbl } from "../../apps/web/app/js/sim_engine.js";
@@ -305,6 +307,12 @@ async function route(req, env, db, url, ctx) {
 
   /* ---- Open Finance (Pluggy) */
   if (m === "POST" && p === "/v1/webhooks/pluggy") return pluggyWebhook(env, db, body, q, ctx);
+  if (p === "/v1/consents" || p === "/v1/institutions") {
+    const u = await authUser(req, env, db);
+    if (p === "/v1/institutions") return ofInstitutions(env, db);
+    const now = nowIso();
+    return { items: (await kvGet(db, "consents:" + u.me.id, [])).map(c => ({ ...c, status: c.status === "ativo" && c.expires_at < now ? "expirado" : c.status })) };
+  }
   if (p === "/v1/openfinance" || p.startsWith("/v1/openfinance/")) {
     const u = await authUser(req, env, db);
     return ofRoute(m, p, body, u, env, db, url, req);
@@ -320,7 +328,7 @@ async function route(req, env, db, url, ctx) {
 
   /* ---- dados financeiros reais do cliente (importação de arquivos; futuramente Open Finance) */
   if (p.startsWith("/v1/documents")) { const u = await authUser(req, env, db); return docRoute(m, p, body, q, u, db, req); }
-  if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || p.startsWith("/v1/alerts") || p === "/v1/simulations" || p === "/v1/assistant/query" || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
+  if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || p.startsWith("/v1/alerts") || p.startsWith("/v1/finance/") || ["/v1/simulations", "/v1/assistant/query", "/v1/allocation", "/v1/data-quality"].includes(p) || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
     const u = await authUser(req, env, db);
     return finRoute(m, p, body, q, u, db, req);
   }
@@ -521,6 +529,11 @@ const LIMITS = { transaction: 20000, account: 50, holding: 500, trade: 10000 };
 const ASSET_CLASSES = ["acao", "fii", "etf", "bdr", "tesouro", "renda_fixa", "fundo", "previdencia", "cripto", "outro"];
 
 function cleanItem(kind, x, src) {
+  const it = cleanItem0(kind, x, src);
+  if (it && x && x.raw_ref) it.raw_ref = str(x.raw_ref, 40);
+  return it;
+}
+function cleanItem0(kind, x, src) {
   if (!x || typeof x !== "object") return null;
   if (kind === "transaction") {
     const date = isoDate(x.date), amount = numOrNull(x.amount);
@@ -557,25 +570,25 @@ async function itemId(kind, it) {
 }
 async function finStmts(db, uid, importId, src, body) {
   const counts = {}, stmts = [];
-  let total = 0;
+  let total = 0, rejected = 0;
   for (const kind of FIN_KINDS) {
     const raw = Array.isArray(body[kind + "s"]) ? body[kind + "s"] : [];
     if (raw.length > LIMITS[kind]) throw new Problem(422, "Arquivo grande demais", `Máximo de ${LIMITS[kind]} registros do tipo ${kind} por importação.`);
     counts[kind + "s"] = 0;
     for (const x of raw) {
       const it = cleanItem(kind, x, src);
-      if (!it) continue;
+      if (!it) { rejected++; continue; }
       const id = await itemId(kind, it);
       stmts.push(db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET data=excluded.data, import_id=excluded.import_id")
         .bind(uid, kind, id, importId, JSON.stringify(it)));
       counts[kind + "s"]++; total++;
     }
   }
-  return { stmts, counts, total };
+  return { stmts, counts, total, rejected };
 }
 async function finLoad(db, uid, kind) {
-  const { results } = await db.prepare("SELECT id, data FROM fin_items WHERE user_id=? AND kind=?").bind(uid, kind).all();
-  return results.map(r => ({ id: r.id, ...JSON.parse(r.data) }));
+  const { results } = await db.prepare("SELECT id, import_id, data FROM fin_items WHERE user_id=? AND kind=?").bind(uid, kind).all();
+  return results.map(r => ({ id: r.id, import_id: r.import_id, ...JSON.parse(r.data) }));
 }
 
 async function finRoute(m, p, body, q, u, db, req) {
@@ -585,12 +598,13 @@ async function finRoute(m, p, body, q, u, db, req) {
     const src = str(body.source, 60) || "arquivo";
     const filename = str(body.filename, 160) || "arquivo";
     const importId = "imp_" + randomToken(9).replace(/[-_]/g, "");
-    const { stmts, counts, total } = await finStmts(db, uid, importId, src, body);
+    const { stmts, counts, total, rejected } = await finStmts(db, uid, importId, src, body);
     if (!total) throw new Problem(422, "Nada para importar", "Não encontramos registros válidos neste arquivo.");
     // posição é uma foto: uma nova posição da mesma origem substitui a anterior
     if (body.replace_holdings && counts.holdings)
       stmts.unshift(db.prepare("DELETE FROM fin_items WHERE user_id=? AND kind='holding' AND json_extract(data,'$.source')=?").bind(uid, src));
-    const rec = { id: importId, filename, source: src, kind: str(body.kind, 40), counts, created_at: nowIso() };
+    const rec = { id: importId, filename, source: src, kind: str(body.kind, 40), counts, rejected, parser: str(body.parser, 40) || "importers.js@1",
+                  checksum: (await sha256(JSON.stringify([body.transactions, body.accounts, body.holdings, body.trades]))).slice(0, 22), created_at: nowIso() };
     stmts.push(db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?)").bind(uid, "import", importId, importId, JSON.stringify(rec)));
     for (let i = 0; i < stmts.length; i += 90) await db.batch(stmts.slice(i, i + 90));
     await A("importacao.criada", { resource: "import", entity_id: importId, meta: { arquivo: filename, tipo: rec.kind, registros: counts } });
@@ -652,8 +666,39 @@ async function finRoute(m, p, body, q, u, db, req) {
   }
   const ents = u.me.entitlements || [];
   if (p === "/v1/simulations" && m === "GET") return { items: await kvGet(db, "sims:" + uid, []) };
+  /* ---- auditoria de classificação: o lançamento original nunca muda; a correção fica numa camada própria com histórico */
+  const txm = p.match(/^\/v1\/finance\/transactions\/(tra_[A-Za-z0-9_-]+)(\/lineage)?$/);
+  if (txm) {
+    const row = await db.prepare("SELECT import_id, data FROM fin_items WHERE user_id=? AND kind='transaction' AND id=?").bind(uid, txm[1]).first();
+    if (!row) throw new Problem(404, "Lançamento não encontrado", txm[1]);
+    const orig = JSON.parse(row.data);
+    const ovr = await db.prepare("SELECT data FROM fin_items WHERE user_id=? AND kind='tx_override' AND id=?").bind(uid, txm[1]).first();
+    const o = ovr ? JSON.parse(ovr.data) : { history: [] };
+    if (m === "PATCH" && !txm[2]) {
+      const cat = str(body.category, 40).trim(), reason = str(body.reason, 200).trim();
+      if (!cat) throw new Problem(422, "Dados inválidos", "Escolha a nova categoria.");
+      const prevCat = o.category || orig.category;
+      if (cat === prevCat) return { id: txm[1], category: cat, unchanged: true };
+      o.category = cat; o.history = [...(o.history || []), { at: nowIso(), by: uid, from: prevCat, to: cat, reason: reason || null }];
+      await db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET data=excluded.data")
+        .bind(uid, "tx_override", txm[1], "manual", JSON.stringify(o)).run();
+      await A("categoria.corrigida", { resource: "transaction", entity_id: txm[1], meta: { de: prevCat, para: cat, motivo: reason || null, valor: orig.amount } });
+      return { id: txm[1], category: cat, original_category: orig.category, history: o.history };
+    }
+    if (m === "GET" && txm[2]) {
+      const imp = await db.prepare("SELECT data FROM fin_items WHERE user_id=? AND kind='import' AND id=?").bind(uid, row.import_id).first();
+      const raw = orig.raw_ref ? await db.prepare("SELECT data FROM fin_items WHERE user_id=? AND kind='raw' AND id=?").bind(uid, orig.raw_ref).first() : null;
+      return { id: txm[1], original: orig, current_category: o.category || orig.category, corrections: o.history || [],
+        origin: imp ? { type: "importação de arquivo", ...JSON.parse(imp.data) } : row.import_id.startsWith("of_") ? { type: "Open Finance", connection_id: row.import_id.slice(3), ...(raw ? JSON.parse(raw.data) : {}) } : { type: row.import_id },
+        transformation: { parser: imp ? JSON.parse(imp.data).parser || "importers.js@1" : "openfinance.js@1", categorization: orig.category ? "regras de categorização (fin_engine.js)" : "—" } };
+    }
+  }
+  if (m === "GET" && p === "/v1/finance/categories") return { items: CATEGORIES };
   if (m !== "GET" && p !== "/v1/simulations" && p !== "/v1/assistant/query") throw new Problem(405, "Método não permitido", `${m} ${p}`);
-  const [txs, accounts, holdings, trades] = await Promise.all(FIN_KINDS.map(k => finLoad(db, uid, k)));
+  const [txsAll, accounts, holdings, trades, overrides] = await Promise.all([...FIN_KINDS, "tx_override"].map(k => finLoad(db, uid, k)));
+  const ovMap = Object.fromEntries(overrides.map(o => [o.id, o]));
+  const withOv = txsAll.map(t => ovMap[t.id]?.category ? { ...t, original_category: t.category, category: ovMap[t.id].category } : t);
+  const { kept: txs, duplicates: dupTxs } = dedupeTransactions(withOv);
   const fin = financeSummary(txs, accounts);
   if (p === "/v1/finance/summary") return fin;
   if (p === "/v1/finance/transactions") return { has_data: txs.length > 0, ...transactionsList(txs, Math.min(+q.limit || 60, 500)) };
@@ -695,7 +740,18 @@ async function finRoute(m, p, body, q, u, db, req) {
   const port = portfolioSummary(applyQuotes(holdings, quotes, hasRvPosition ? {} : tax.positions_cost), trades);
   port.market = await kvGet(db, "market_indices", null);
   port.quotes_as_of = Object.values(quotes).map(x => x.date).sort().at(-1) || null;
+  if (port.has_data) await db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET data=excluded.data")
+    .bind(uid, "pf_snapshot", ref, "snapshot", JSON.stringify({ date: ref, total: port.total, invested: port.invested, by_group: port.allocation.map(a => [a.group, a.value]) })).run();
   if (p === "/v1/portfolio/consolidated") return port;
+  if (p === "/v1/allocation") return allocationView({ port, snapshots: await finLoad(db, uid, "pf_snapshot"), txs, market: port.market, refDate: ref });
+  if (p === "/v1/data-quality") {
+    const imports = await finLoad(db, uid, "import"), conns = await kvGet(db, "of_items:" + uid, []);
+    const rec = [...reconcilePositions(holdings, tax.positions_cost), ...reconcileAccounts(accounts, txs)];
+    return { ...qualityIndicators({ imports, connections: conns, txs, duplicates: dupTxs, reconciliation: rec, holdings, trades, refDate: ref }),
+      reconciliation_items: rec, duplicate_items: dupTxs.slice(0, 50).map(t => ({ id: t.id, date: t.date, description: t.description, amount: t.amount, source: t.source, duplicate_of: t.duplicate_of })),
+      sources: [...imports.map(i => ({ kind: "arquivo", name: i.filename, at: i.created_at, records: i.counts, rejected: i.rejected || 0, checksum: i.checksum || null, parser: i.parser || "importers.js@1" })),
+        ...conns.map(c => ({ kind: "open_finance", name: c.institution, at: c.last_sync_at, state: c.connection_state || c.state, records: c.counts || null }))] };
+  }
   const alertsFor = async () => buildAlerts({ fin, port, tax, refDate: ref, statuses: await kvGet(db, "alerts_status:" + uid, {}) });
   if (p === "/v1/assistant/query" && m === "POST") {
     if (!ents.includes("assistente_ia")) throw new Problem(402, "Recurso do plano Pro", "O assistente faz parte dos planos Pro e Premium.", { required_plan: "Pro" });
@@ -864,11 +920,24 @@ async function ofSync(env, db, uid, itemId) {
   try { investments = (await pluggy(env, db, "GET", `/investments?itemId=${itemId}`)).results || []; } catch (e) { if (e.upstream !== 404) throw e; }
   const norm = normalizeItem({ item, accounts, transactions, investments });
   const importId = "of_" + itemId.replace(/[^A-Za-z0-9]/g, "").slice(0, 40);
+  // dado bruto preservado (Data Hub: raw separado do normalizado), com checksum e versão do payload; guarda as 3 últimas coletas
+  const rawJson = JSON.stringify({ item: { id: item.id, status: item.status, connector: item.connector }, accounts, transactions, investments });
+  const rawBytes = enc.encode(rawJson), checksum = (await sha256(rawJson)).slice(0, 32);
+  const rawId = "raw_" + checksum.slice(0, 20);
+  const rawMeta = { id: rawId, connection_id: itemId, provider: "pluggy", institution: item.connector?.name || null, collected_at: nowIso(), checksum, payload_version: "pluggy-v1", size: rawBytes.length };
+  const rawStmts = [db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET data=excluded.data").bind(uid, "raw", rawId, "raw_" + importId, JSON.stringify(rawMeta)),
+    db.prepare("DELETE FROM doc_chunks WHERE doc_id=?").bind(rawId)];
+  for (let i = 0, n = 0; i < rawBytes.length; i += 1024 * 1024, n++) rawStmts.push(db.prepare("INSERT INTO doc_chunks (doc_id,n,bytes) VALUES (?,?,?)").bind(rawId, n, rawBytes.slice(i, i + 1024 * 1024)));
+  await db.batch(rawStmts);
+  const olds = (await db.prepare("SELECT id, data FROM fin_items WHERE user_id=? AND kind='raw' AND import_id=?").bind(uid, "raw_" + importId).all()).results
+    .map(r => ({ id: r.id, at: JSON.parse(r.data).collected_at })).sort((a, b) => b.at.localeCompare(a.at)).slice(3);
+  for (const o of olds) await db.batch([db.prepare("DELETE FROM fin_items WHERE user_id=? AND kind='raw' AND id=?").bind(uid, o.id), db.prepare("DELETE FROM doc_chunks WHERE doc_id=?").bind(o.id)]);
+  for (const k of ["accounts", "transactions", "holdings"]) norm[k].forEach(x => { x.raw_ref = rawId; });
   const src = "open_finance:" + (item.connector?.name || "instituicao").toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 30);
   const { stmts, counts } = await finStmts(db, uid, importId, src, norm);
-  stmts.unshift(db.prepare("DELETE FROM fin_items WHERE user_id=? AND import_id=?").bind(uid, importId));
+  stmts.unshift(db.prepare("DELETE FROM fin_items WHERE user_id=? AND import_id=? AND kind IN ('transaction','account','holding','trade')").bind(uid, importId));
   for (let i = 0; i < stmts.length; i += 90) await db.batch(stmts.slice(i, i + 90));
-  await ofUpsertMeta(db, uid, { ...view, counts, last_sync_at: nowIso(), checked_at: nowIso() });
+  await ofUpsertMeta(db, uid, { ...view, counts, last_sync_at: nowIso(), checked_at: nowIso(), last_raw: rawId, error: null });
   return { synced: true, ...view, counts };
 }
 
@@ -893,6 +962,14 @@ async function ofRoute(m, p, body, u, env, db, url, req) {
     if (item.clientUserId && item.clientUserId !== uid) throw new Problem(403, "Acesso negado", "Esta conexão pertence a outra conta.");
     await kvSet(db, "of_owner:" + id, uid);
     await ofUpsertMeta(db, uid, itemView(item));
+    const cons = await kvGet(db, "consents:" + uid, []);
+    if (!cons.some(c => c.connection_id === id && c.status === "ativo")) {
+      cons.unshift({ id: "cns_" + randomToken(8).replace(/[-_]/g, ""), connection_id: id, institution: item.connector?.name || "Instituição", provider: "Pluggy (Open Finance)",
+        scope: ["Contas e saldos", "Lançamentos", "Cartões de crédito", "Investimentos"], purpose: "Consolidar contas, cartões e investimentos para diagnóstico financeiro e tributário",
+        created_at: nowIso(), expires_at: new Date(Date.now() + 365 * 864e5).toISOString(), status: "ativo" });
+      await kvSet(db, "consents:" + uid, cons);
+      await A("consentimento.registrado", { entity_id: cons[0].id, meta: { instituicao: cons[0].institution, escopo: cons[0].scope, validade: cons[0].expires_at } });
+    }
     const res = await ofSync(env, db, uid, id);
     await A("conexao.criada", { entity_id: id, meta: { instituicao: res.institution, sincronizado: res.synced, registros: res.counts || null } });
     return new Resp(201, res);
@@ -904,10 +981,16 @@ async function ofRoute(m, p, body, u, env, db, url, req) {
     if (m === "POST" && mm[2]) { const r = await ofSync(env, db, uid, mm[1]); await A("conexao.sincronizada", { entity_id: mm[1], meta: { registros: r.counts || null } }); return r; }
     if (m === "DELETE" && !mm[2]) {
       try { await pluggy(env, db, "DELETE", `/items/${mm[1]}`); } catch (e) { if (e.upstream !== 404) throw e; }
-      await db.prepare("DELETE FROM fin_items WHERE user_id=? AND import_id=?").bind(uid, "of_" + mm[1].replace(/[^A-Za-z0-9]/g, "").slice(0, 40)).run();
+      const imp = "of_" + mm[1].replace(/[^A-Za-z0-9]/g, "").slice(0, 40);
+      const raws = (await db.prepare("SELECT id FROM fin_items WHERE user_id=? AND kind='raw' AND import_id=?").bind(uid, "raw_" + imp).all()).results;
+      await db.batch([db.prepare("DELETE FROM fin_items WHERE user_id=? AND (import_id=? OR import_id=?)").bind(uid, imp, "raw_" + imp), ...raws.map(r => db.prepare("DELETE FROM doc_chunks WHERE doc_id=?").bind(r.id))]);
       await saveOfItems(db, uid, items.filter(x => x.id !== mm[1]));
       await db.prepare("DELETE FROM kv WHERE k=?").bind("of_owner:" + mm[1]).run();
       await A("conexao.revogada", { entity_id: mm[1] });
+      const cons = await kvGet(db, "consents:" + uid, []);
+      cons.filter(c => c.connection_id === mm[1] && c.status === "ativo").forEach(c => { c.status = "revogado"; c.revoked_at = nowIso(); });
+      await kvSet(db, "consents:" + uid, cons);
+      await A("consentimento.revogado", { entity_id: mm[1] });
       return new Resp(204);
     }
   }
@@ -1004,4 +1087,21 @@ async function docRoute(m, p, body, q, u, db, req) {
     return new Resp(204);
   }
   throw new Problem(405, "Método não permitido", `${m} ${p}`);
+}
+
+/* matriz de cobertura: lista real de instituições do provedor (cache de 24 h); sem provedor, informa que está a validar */
+async function ofInstitutions(env, db) {
+  if (!ofConfigured(env)) return { configured: false, provider: "Pluggy", items: [], note: "A lista de instituições é obtida do provedor de Open Finance quando a conexão automática for ativada." };
+  const c = await kvGet(db, "of_connectors", null);
+  if (c && ageH(c.at) < 24) return c.data;
+  const r = await pluggy(env, db, "GET", "/connectors?countries=BR");
+  const items = (r.results || []).filter(x => !x.isSandbox || env.PLUGGY_SANDBOX === "1").map(x => {
+    const p = x.products || [];
+    return { id: x.id, name: x.name, type: x.type === "INVESTMENT" ? "Corretora/DTVM" : /BANK/.test(x.type || "") ? "Banco" : x.type || "—", open_finance: !!(x.isOpenFinance || x.oauth),
+      accounts: p.includes("ACCOUNTS"), credit_cards: p.includes("CREDIT_CARDS"), transactions: p.includes("TRANSACTIONS"), investments: p.includes("INVESTMENTS") || p.includes("INVESTMENTS_TRANSACTIONS"),
+      status: x.health?.status === "ONLINE" ? "disponível" : x.health?.status ? "instável" : "a validar" };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+  const data = { configured: true, provider: "Pluggy", fetched_at: nowIso(), items };
+  await kvSet(db, "of_connectors", { at: nowIso(), data });
+  return data;
 }

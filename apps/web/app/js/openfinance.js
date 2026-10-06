@@ -2,6 +2,7 @@
  * nos mesmos registros normalizados da importação de arquivos (contas, lançamentos, posições).
  * Assim os painéis, o imposto, o radar e o simulador funcionam igual para dados importados ou conectados. */
 
+import { CONNECTION_STATE } from "./data_quality.js";
 export const PLUGGY_WIDGET = "https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js";
 const r2 = v => Math.round((+v || 0) * 100) / 100;
 const day = v => (v ? String(v).slice(0, 10) : null);
@@ -13,7 +14,7 @@ export const ITEM_STATUS = {
 };
 export function itemView(it) {
   const [state, label] = ITEM_STATUS[it?.status] || ["desconhecido", it?.status || "—"];
-  return { id: it.id, institution: it.connector?.name || "Instituição", logo: it.connector?.imageUrl || null, state, label,
+  return { id: it.id, institution: it.connector?.name || "Instituição", logo: it.connector?.imageUrl || null, state, label, connection_state: CONNECTION_STATE[it?.status] || "DISCOVERED",
            status: it.status, last_updated_at: it.lastUpdatedAt || it.updatedAt || null, error: it.error?.message || null };
 }
 
