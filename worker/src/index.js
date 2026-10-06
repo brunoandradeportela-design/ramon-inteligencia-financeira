@@ -17,9 +17,10 @@ import { Resp, Problem, nowIso, today, money, enc, b64u, randomToken, sha256, sa
 import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize, CATEGORIES } from "../../apps/web/app/js/fin_engine.js";
 import { dedupeTransactions, reconcilePositions, reconcileAccounts, qualityIndicators } from "../../apps/web/app/js/data_quality.js";
 import { allocationView } from "../../apps/web/app/js/allocation.js";
-import { computeTax, taxDashboard } from "../../apps/web/app/js/tax_engine.js";
+import { computeTax, taxDashboard, ENGINE_VERSION } from "../../apps/web/app/js/tax_engine.js";
+import { ruleListing, RULE_VERSIONS } from "../../apps/web/app/js/tax_rules.js";
 import { buildAlerts } from "../../apps/web/app/js/alert_engine.js";
-import { simulateSale, simulatePgbl } from "../../apps/web/app/js/sim_engine.js";
+import { simulateSale, simulatePgbl, simulateScenarios } from "../../apps/web/app/js/sim_engine.js";
 import { normalizeItem, itemView, PLUGGY_WIDGET } from "../../apps/web/app/js/openfinance.js";
 import { answer as assistantAnswer, DISCLAIMER as ASSIST_DISCLAIMER } from "../../apps/web/app/js/assistant_engine.js";
 import { classifyDoc, guessYear, irpfChecklist, sniff, ALLOWED, DOC_KINDS } from "../../apps/web/app/js/doc_engine.js";
@@ -717,8 +718,9 @@ async function finRoute(m, p, body, q, u, db, req) {
         const quotes = await loadQuotes(db, tickersFrom([...holdings, ...trades]));
         const hasRv = holdings.some(h => ["acao", "fii", "etf", "bdr"].includes(h.asset_class));
         const positions = applyQuotes(holdings, quotes, hasRv ? {} : tax.positions_cost);
-        const ops = (body.scenarios?.[0]?.operations || []).slice(0, 10).map(o => ({ ticker: str(o.ticker, 20), quantity: numOrNull(o.quantity), date: isoDate(o.date), price: numOrNull(String(o.price ?? "").replace(",", ".")) }));
-        res = simulateSale({ trades, positions, ops, opts: { refDate: ref, knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs } });
+        const scenarios = (body.scenarios || []).slice(0, 3).map(sc => ({ name: str(sc.name, 80) || null,
+          operations: (sc.operations || []).slice(0, 10).map(o => ({ ticker: str(o.ticker, 20), quantity: numOrNull(o.quantity), date: isoDate(o.date), price: numOrNull(String(o.price ?? "").replace(",", ".")) })) }));
+        res = simulateScenarios({ trades, positions, scenarios, opts: { refDate: ref, knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs } });
       }
     } catch (e) { if (e.status === 422) throw new Problem(422, "Simulação inválida", e.message); throw e; }
     res = { id: "sim_" + randomToken(8).replace(/[-_]/g, ""), created_at: nowIso(), ...res };
@@ -730,8 +732,33 @@ async function finRoute(m, p, body, q, u, db, req) {
   if (p.startsWith("/v1/tax/")) {
     if (!(u.me.entitlements || []).includes("inteligencia_tributaria"))
       throw new Problem(402, "Recurso do plano Pro", "A apuração de imposto sobre as suas negociações faz parte dos planos Pro e Premium.", { required_plan: "Pro" });
-    if (p === "/v1/tax/summary") { const { events, ...rest } = tax; return rest; }
+    if (p === "/v1/tax/summary") {
+      const { events, ...rest } = tax;
+      if (tax.has_data) rest.calculation_id = (await persistTaxCalc(db, uid, tax, { trades, year, refDate: ref, knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs })).calculation_id;
+      return rest;
+    }
+    if (p === "/v1/tax/calculations") {
+      const items = (await finLoad(db, uid, "tax_calc")).sort((a, b) => b.created_at.localeCompare(a.created_at)).map(({ import_id, ...c }) => c);
+      return { items: items.slice(0, 50) };
+    }
+    const tc = p.match(/^\/v1\/tax\/calculations\/(tcal_[A-Za-z0-9_-]+)(\/verify|\/artifact)?$/);
+    if (tc) {
+      const row = await db.prepare("SELECT data FROM fin_items WHERE user_id=? AND kind='tax_calc' AND id=?").bind(uid, tc[1]).first();
+      if (!row) throw new Problem(404, "Cálculo não encontrado", tc[1]);
+      const calc = JSON.parse(row.data);
+      if (!tc[2]) return calc;
+      const input = JSON.parse(await readChunks(db, tc[1]));
+      const again = computeTax(input.trades, input.options);
+      const same = again.snapshot_hash === calc.input_snapshot_hash && again.total_tax_due === calc.result.total_tax_due && again.engine_version === calc.calculation_engine_version;
+      if (tc[2] === "/verify") {
+        await A("tributacao.calculo_verificado", { resource: "tax_calculation", entity_id: tc[1], meta: { reproduzido: same } });
+        return { calculation_id: tc[1], reproducible: same, recomputed: { input_snapshot_hash: again.snapshot_hash, total_tax_due: again.total_tax_due, engine_version: again.engine_version }, stored: { input_snapshot_hash: calc.input_snapshot_hash, total_tax_due: calc.result.total_tax_due, engine_version: calc.calculation_engine_version } };
+      }
+      await A("tributacao.artefato_excel", { resource: "tax_calculation", entity_id: tc[1] });
+      return taxArtifact(calc, again, input, RULE_VERSIONS, same);
+    }
     if (p === "/v1/tax/events") return { has_data: tax.has_data, year, items: tax.events };
+    if (p === "/v1/tax/rules") return ruleListing();
     throw new Problem(404, "Não encontrado", p);
   }
   const quotes = await loadQuotes(db, tickersFrom([...holdings, ...trades]));
@@ -802,6 +829,7 @@ async function getJson(url, headers = {}, timeout = 9000) {
 const marketState = db => kvGet(db, "market_state", { indices_at: null, quotes_at: null, quotes_ok: 0, quotes_fail: 0, errors: [] });
 
 async function refreshMarket(env, db, { force = false } = {}) {
+  if (env.MARKET_OFFLINE === "1") return { indices: false, quotes: 0, offline: true };   // testes determinísticos (CI/local)
   const st = await marketState(db), errors = [];
   const done = { indices: false, quotes: 0 };
   // índices do Banco Central (4 consultas leves; o SGS costuma ser lento — guarda o que vier e tenta o resto depois)
@@ -1104,4 +1132,58 @@ async function ofInstitutions(env, db) {
   const data = { configured: true, provider: "Pluggy", fetched_at: nowIso(), items };
   await kvSet(db, "of_connectors", { at: nowIso(), data });
   return data;
+}
+
+/* ------------------------------------------------------------------ Tax: cálculo reproduzível (v6.0 §13) e artefato de auditoria */
+async function readChunks(db, id) {
+  const { results } = await db.prepare("SELECT bytes FROM doc_chunks WHERE doc_id=? ORDER BY n").bind(id).all();
+  const parts = results.map(r => new Uint8Array(r.bytes)), out = new Uint8Array(parts.reduce((s, x) => s + x.length, 0));
+  let off = 0; parts.forEach(x => { out.set(x, off); off += x.length; });
+  return new TextDecoder().decode(out);
+}
+async function persistTaxCalc(db, uid, tax, { trades, ...options }) {
+  const id = "tcal_" + tax.snapshot_hash.slice(0, 24);
+  const exists = await db.prepare("SELECT 1 FROM fin_items WHERE user_id=? AND kind='tax_calc' AND id=?").bind(uid, id).first();
+  if (exists) return { calculation_id: id };
+  const input = JSON.stringify({ trades: trades.map(({ id, import_id, raw_ref, ...t }) => t), options });
+  const bytes = enc.encode(input);
+  const calc = { calculation_id: id, tax_year: tax.year, reference_date: tax.reference_date, input_snapshot_hash: tax.snapshot_hash, rule_versions: tax.rule_versions,
+    calculation_engine_version: tax.engine_version, reproducibility_key: `${tax.snapshot_hash}:${Object.entries(tax.rule_versions).map(([k, v]) => k + "@" + v).join(",")}:${tax.engine_version}`,
+    result: { total_tax_due: tax.total_tax_due, total_irrf: tax.total_irrf, total_exempt_gain: tax.total_exempt_gain, months: tax.months.length, losses_available: tax.losses_available },
+    assumptions: tax.premises, limitations: tax.limitations, quality_score: tax.confidence, input_size: bytes.length, created_at: nowIso() };
+  const stmts = [db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO NOTHING").bind(uid, "tax_calc", id, "tax", JSON.stringify(calc)),
+    db.prepare("DELETE FROM doc_chunks WHERE doc_id=?").bind(id)];
+  for (let i = 0, n = 0; i < bytes.length; i += 1024 * 1024, n++) stmts.push(db.prepare("INSERT INTO doc_chunks (doc_id,n,bytes) VALUES (?,?,?)").bind(id, n, bytes.slice(i, i + 1024 * 1024)));
+  await db.batch(stmts);
+  // guarda os 20 cálculos mais recentes
+  const old = (await finLoad(db, uid, "tax_calc")).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(20);
+  for (const o of old) await db.batch([db.prepare("DELETE FROM fin_items WHERE user_id=? AND kind='tax_calc' AND id=?").bind(uid, o.id), db.prepare("DELETE FROM doc_chunks WHERE doc_id=?").bind(o.id)]);
+  return { calculation_id: id };
+}
+/* conteúdo das 8 abas do Excel auditável (v5.0 §8.3); o arquivo é montado no navegador a partir destes dados, sem recalcular */
+function taxArtifact(calc, t, input, rules, verified) {
+  const used = rules.filter(r => calc.rule_versions[r.code] === r.version);
+  return {
+    file_name: `aurion-auditoria-ir-${calc.tax_year}-${calc.calculation_id.slice(5, 13)}.xlsx`,
+    resumo: [["Ano-calendário", calc.tax_year], ["Data de referência", calc.reference_date], ["Imposto estimado no ano (R$)", +t.total_tax_due], ["IRRF no ano (R$)", +t.total_irrf],
+      ["Ganhos isentos (R$)", +t.total_exempt_gain], ["Qualidade do cálculo", t.confidence], ["Natureza", "Estimativa — não substitui a apuração oficial nem a revisão de um contador"]],
+    entradas: input.trades.map(x => [x.date, x.ticker, x.side === "C" ? "Compra" : "Venda", +x.quantity, +x.price, +x.value || +x.quantity * +x.price, +x.fees || 0, x.daytrade ? "sim" : "", x.source || ""]),
+    entradas_header: ["Data", "Ativo", "Lado", "Quantidade", "Preço", "Valor", "Custos", "Day trade (nota)", "Origem"],
+    premissas: [...t.premises.map(p => ["Premissa", p]), ...t.limitations.map(l => ["Limitação", l]), ...t.quality.factors.map(f => ["Qualidade · " + f.factor, f.detail + (f.improve ? " → " + f.improve : "")])],
+    regras: used.map(r => [r.code, r.version, r.title, r.validity.start, r.validity.end || "", JSON.stringify(r.parameters), r.formula, r.exceptions.join(" | "), r.sources.map(s => s.id).join(", ")]),
+    regras_header: ["Código", "Versão", "Título", "Vigência início", "Vigência fim", "Parâmetros", "Fórmula", "Exceções", "Fontes"],
+    calculos: t.months.map(m => [m.month, +m.sales_acoes, m.exempt ? "sim" : "não", +m.result_acoes, +m.exempt_gain, +m.result_comum, +m.base_comum, +m.result_daytrade, +m.base_daytrade, +m.result_fii, +m.base_fii,
+      +m.irrf, +m.carry_in, +m.tax_due_gross]),
+    calculos_header: ["Mês", "Vendas de ações", "Isento (≤ 20 mil)", "Resultado ações", "Ganho isento", "Resultado comum", "Base comum (após prejuízo)", "Resultado day trade", "Base day trade", "Resultado FII", "Base FII",
+      "IRRF", "Acumulado < R$ 10", "IR bruto (motor)"],
+    aliquotas: { comum: +used.find(r => r.code === "BR-IRPF-RV-COMUM").parameters.aliquota, daytrade: +used.find(r => r.code === "BR-IRPF-RV-DAYTRADE").parameters.aliquota, fii: +used.find(r => r.code === "BR-IRPF-FII").parameters.aliquota },
+    resultado: t.months.map(m => [m.month, +m.tax_due, m.darf ? m.darf.codigo : "", m.darf ? m.darf.vencimento : "", m.darf ? m.darf.status : (+m.tax_due_gross > 0 ? "acumula" : "—"), m.darf?.valor_pago ? +m.darf.valor_pago : ""]),
+    resultado_header: ["Mês", "DARF estimado", "Código", "Vencimento", "Situação", "Valor pago informado"],
+    eventos: t.events.map(e => [e.date, e.ticker, e.modality, e.status, e.sale_value === "?" ? "" : +e.sale_value, e.cost_basis === "?" ? "" : +e.cost_basis, e.result === "?" ? "" : +e.result, e.rule.code + "@" + e.rule.version, e.notes.join(" ")]),
+    eventos_header: ["Data", "Ativo", "Modalidade", "Situação", "Venda", "Custo", "Resultado", "Regra", "Notas"],
+    fontes: [...new Map(used.flatMap(r => r.sources.map(s => [s.id, [s.id, s.title, s.url, r.code]]))).values()],
+    auditoria: [["calculation_id", calc.calculation_id], ["input_snapshot_hash", calc.input_snapshot_hash], ["calculation_engine_version", calc.calculation_engine_version],
+      ["rule_versions", Object.entries(calc.rule_versions).map(([k, v]) => k + "@" + v).join(", ")], ["reproducibility_key", calc.reproducibility_key], ["calculado em", calc.created_at],
+      ["artefato gerado em", nowIso()], ["reprocessado agora e conferido", verified ? "sim — mesmo resultado" : "NÃO conferiu: revisar"], ["fonte de verdade", "Tax Engine (o Excel é artefato de auditoria, não fonte primária)"]],
+  };
 }

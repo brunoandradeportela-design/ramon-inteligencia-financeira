@@ -9,7 +9,7 @@ export const DEMO = !BASE;
 /* Modo híbrido (API na nuvem): contas, CRM e pagamentos são reais; os módulos de análise
    (finanças, impostos, carteira, simulações) usam o snapshot de demonstração até o Open Finance. */
 export const ANALYTICS_DEMO = true;
-const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing|imports|market|tax\/settings|tax\/darfs|simulations|openfinance|documents|assistant|security|sessions|audit|privacy|consents|institutions|data-quality|allocation|finance\/categories|finance\/transactions\/tra_[A-Za-z0-9_-]+|alerts\/alr_[a-f0-9]+)(\/|\?|$)/.test(p);
+const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing|imports|market|tax\/settings|tax\/darfs|tax\/rules|tax\/calculations|simulations|openfinance|documents|assistant|security|sessions|audit|privacy|consents|institutions|data-quality|allocation|finance\/categories|finance\/transactions\/tra_[A-Za-z0-9_-]+|alerts\/alr_[a-f0-9]+)(\/|\?|$)/.test(p);
 /* painéis que usam os dados importados pelo cliente; sem dados próprios, mostram o exemplo */
 const HYBRID_DATA = p => !!BASE && /^\/v1\/(finance\/summary|finance\/transactions|portfolio\/consolidated|dashboard|tax\/summary|tax\/events|alerts)(\?|$)/.test(p);
 async function hybridGet(p) {

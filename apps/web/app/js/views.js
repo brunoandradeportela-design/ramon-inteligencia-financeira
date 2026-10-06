@@ -4,6 +4,7 @@ import { connectionsReal } from "./views_openfinance.js";
 import { documentsReal } from "./views_docs.js";
 import { loginReal, recoverView, resetView, securitySection, privacyReal } from "./views_identity.js";
 import { wireTxEdits, allocation, dataHubSection } from "./views_finance2.js";
+import { taxExtras } from "./views_tax2.js";
 export { allocation };
 export { recoverView, resetView };
 import { onLogin, themeSwitch, theme } from "./app.js";
@@ -310,6 +311,7 @@ export async function tax(el, r) {
         <section class="card"><h3>Limitações</h3><ul class="stack small" style="margin-top:10px">${t.limitations.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul>
           <p class="note">Snapshot ${esc(t.snapshot_hash.slice(0, 16))}… · mesmo snapshot + mesma versão de regra = mesmo resultado.</p></section>
       </div>
+      ${real ? `<div id="taxextra"></div>` : ""}
       ${real ? `<section class="card section"><h3>Ajustes da apuração</h3>
         <p class="small muted" style="margin-top:6px">Prejuízos acumulados até 31/12 do ano anterior (veja na sua declaração, ficha Renda Variável, ou no controle do seu contador). Eles abatem os ganhos da mesma modalidade.</p>
         <form id="prior" class="row wrap" style="gap:10px;margin-top:12px;align-items:flex-end">
@@ -317,6 +319,7 @@ export async function tax(el, r) {
             <input class="input" id="pl_${k}" inputmode="decimal" value="${esc(String(prefs.prior_losses[k] || "").replace(".", ","))}" placeholder="0,00"></div>`).join("")}
           <button class="btn btn--primary">Salvar e recalcular</button></form></section>` : ""}`;
     el.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { tab = b.dataset.tab; draw(); });
+    if (real) taxExtras(el.querySelector("#taxextra"), t);
     const f = el.querySelector("#prior");
     if (f) f.onsubmit = async e => {
       e.preventDefault();
@@ -373,7 +376,8 @@ export async function simulator(el) {
   let tab = "venda";
   const draw = () => {
     el.innerHTML = `
-      <div class="tabs" role="tablist">${[["venda", "Venda de ativos"], ["pgbl", "Aporte em PGBL"]].map(([k, l]) => `<button role="tab" aria-selected="${tab === k}" data-tab="${k}">${l}</button>`).join("")}</div>
+      <p class="small muted" style="margin-bottom:10px">Planejamento tributário simulado: compare o cenário atual com cenários hipotéticos. Impacto estimado, com premissas e limites — não há promessa de economia.</p>
+      <div class="tabs" role="tablist">${[["venda", "Venda de ativos"], ["pgbl", "Aporte em PGBL/VGBL"]].map(([k, l]) => `<button role="tab" aria-selected="${tab === k}" data-tab="${k}">${l}</button>`).join("")}</div>
       ${realSim ? "" : `<div class="card" style="margin-bottom:16px;border-color:var(--brand-2)"><p class="small"><b>Exemplo ilustrativo.</b> ${HAS_API ? 'Importe suas negociações da B3 em <a href="#/importar">Importar dados</a> para simular sobre a sua carteira real.' : "Modo demonstração."}</p></div>`}
       <div class="grid g-dash2"><section class="card">${tab === "venda" ? saleForm() : pgblForm()}<p class="err" id="err" role="alert"></p></section>
         <section class="card"><h3>Como funciona</h3><p class="small muted" style="margin-top:8px">O simulador compara o <b>cenário atual</b> com uma alternativa e mostra imposto estimado, liquidez gerada, diferença e premissas.
@@ -392,7 +396,8 @@ export async function simulator(el) {
       <div class="field"><label for="tk">Ativo</label><select class="input" id="tk">${rv.map(p => `<option value="${esc(realSim ? p.ticker || p.name : p.asset_id)}" data-q="${p.quantity}">${esc(p.name)} · ${num(p.quantity)} un.</option>`).join("")}</select>${realSim && !rv.length ? `<span class="small muted">Nenhuma posição em bolsa importada.</span>` : ""}</div>
       <div class="field"><label for="fr">Quantidade</label><select class="input" id="fr">${[25, 50, 75, 100].map(f => `<option value="${f}">${f}% da posição</option>`).join("")}</select><span class="small muted" id="qh"></span></div>
       <div class="field"><label for="dd">Data da venda</label>${realSim ? `<input class="input" type="date" id="dd" min="${today}" value="${today}">` : `<select class="input" id="dd"><option value="2026-09-29">29/09/2026 (mês atual)</option><option value="2026-10-15">15/10/2026 (próximo mês)</option></select>`}</div>
-      ${realSim ? `<div class="field"><label for="pr">Preço (opcional)</label><input class="input" id="pr" inputmode="decimal" placeholder="última cotação"></div>` : ""}
+      ${realSim ? `<div class="field"><label for="pr">Preço (opcional)</label><input class="input" id="pr" inputmode="decimal" placeholder="última cotação"></div>
+      <div class="field"><label for="fr2">Comparar com cenário C (opcional)</label><select class="input" id="fr2"><option value="">sem cenário C</option>${[25, 50, 75, 100].map(f => `<option value="${f}">vender ${f}% da posição</option>`).join("")}</select></div>` : ""}
     </div><button class="btn btn--primary">Simular impacto</button></form>`;
   const pgblForm = () => `<h3>Cenário: aporte adicional em PGBL</h3>
     <form id="pf" class="stack" style="margin-top:12px"><div class="form-grid">
@@ -414,7 +419,10 @@ export async function simulator(el) {
     const tk = el.querySelector("#tk").value, fr = +el.querySelector("#fr").value, date = el.querySelector("#dd").value;
     const q = Math.floor(+el.querySelector("#tk").selectedOptions[0].dataset.q * fr / 100);
     const price = el.querySelector("#pr")?.value.replace(/\./g, "").replace(",", ".");
-    await run({ kind: "venda_ativos", scenarios: [{ name: `Vender ${q} ${tk} em ${dt(date)}`, operations: [{ ticker: tk, quantity: q, fraction: fr, date, ...(price ? { price } : {}) }] }] });
+    const fr2 = +el.querySelector("#fr2")?.value || 0, q2 = Math.floor(+el.querySelector("#tk").selectedOptions[0].dataset.q * fr2 / 100);
+    const sc = [{ name: `Cenário B: vender ${q} ${tk} em ${dt(date)}`, operations: [{ ticker: tk, quantity: q, fraction: fr, date, ...(price ? { price } : {}) }] }];
+    if (realSim && fr2 && q2 > 0 && fr2 !== fr) sc.push({ name: `Cenário C: vender ${q2} ${tk} em ${dt(date)}`, operations: [{ ticker: tk, quantity: q2, fraction: fr2, date, ...(price ? { price } : {}) }] });
+    await run({ kind: "venda_ativos", scenarios: sc });
   }
   async function runPgbl(e) {
     e.preventDefault();

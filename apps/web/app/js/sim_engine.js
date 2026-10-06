@@ -2,7 +2,7 @@
  * Venda de ativos: recalcula a apuração do ano com as vendas hipotéticas e compara com o cenário atual.
  * PGBL: dedução de até 12% dos rendimentos tributáveis (modelo completo + contribuição à previdência oficial).
  * Mostra consequências estimadas; não recomenda comprar ou vender. */
-import { computeTax } from "./tax_engine.js";
+import { computeTax, ENGINE_VERSION } from "./tax_engine.js";
 
 const r2 = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
 const DISCLAIMER = "Simulação informativa. Mostra consequências estimadas de cenários; não é recomendação de investimento nem substitui a análise de um contador.";
@@ -75,7 +75,22 @@ export function simulatePgbl(b) {
               { name: "Cenário com aporte adicional", contributions: r2(cur + ext), deductible: r2(after), tax_effect_estimate: r2(eff), liquidity_committed: r2(cur + ext) }],
     premises: [`Alíquota marginal informada: ${(rate * 100).toFixed(1).replace(".", ",")}%`,
                "Efeito é diferimento: o valor deduzido será tributado no resgate ou benefício conforme o regime escolhido.",
-               "Tabela progressiva anual não é recalculada.", ...notes],
+               "Tabela progressiva anual não é recalculada.", "VGBL não é dedutível: o IR incide só sobre os rendimentos no resgate.", ...notes],
     rule: { code: PGBL_RULE.code, version: PGBL_RULE.version, title: PGBL_RULE.title, sources: PGBL_RULE.sources },
     confidence: eligible ? 0.8 : 0.5, disclaimer: DISCLAIMER };
+}
+
+/* vários cenários (B, C…) contra o mesmo cenário atual — estrutura de cenário da v5.0 §9.2 */
+export function simulateScenarios({ trades = [], positions = [], scenarios = [], opts = {} }) {
+  const list = scenarios.filter(sc => sc && (sc.operations || []).length).slice(0, 3);
+  if (!list.length) throw Object.assign(new Error("Informe ao menos uma venda."), { status: 422 });
+  const runs = list.map((sc, i) => ({ sc, i, r: simulateSale({ trades, positions, ops: sc.operations, opts }) }));
+  const base = runs[0].r.results[0];
+  const results = [base, ...runs.map(({ sc, i, r }) => ({ ...r.results[1], key: "alt" + (i + 1), name: sc.name || r.results[1].name,
+    scenario: { name: sc.name || r.results[1].name, inputs: sc.operations, assumptions: r.premises.slice(-3), rule_versions: r.rule_versions, calculation_version: ENGINE_VERSION,
+      result: { tax_year: r.results[1].tax_year, liquidity_generated: r.results[1].liquidity_generated }, delta_vs_baseline: r.results[1].tax_difference_vs_base,
+      confidence: r.results[1].confidence, limitations: r.limitations, audit_artifact: r.reproducibility_hash } }))];
+  const first = runs[0].r;
+  return { ...first, results, scenarios_count: list.length, calculation_version: ENGINE_VERSION,
+    reproducibility_hash: runs.map(x => x.r.reproducibility_hash).join(":") };
 }

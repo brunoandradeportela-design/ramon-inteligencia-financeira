@@ -7,13 +7,23 @@
  *     abaixo de R$ 10 o imposto acumula para o mês seguinte.
  * Funções puras: nada de rede, nada de DOM. Todo valor é ESTIMATIVA. */
 
-export const RULES = {
-  "BR-IRPF-RV-COMUM": { version: "2026.1", title: "Renda variável — operações comuns (ações e ETFs de ações)", sources: ["R6", "L11033-3-I", "IN1585"],
-    aliquota: 0.15, limite_isencao: 20000, irrf_venda: 0.00005, darf_codigo: "6015", darf_minimo: 10 },
-  "BR-IRPF-RV-DAYTRADE": { version: "2026.1", title: "Renda variável — day trade", sources: ["R6", "IN1585"], aliquota: 0.20, irrf_ganho: 0.01 },
-  "BR-IRPF-FII": { version: "2026.1", title: "Fundos imobiliários — ganho na alienação de cotas", sources: ["L8668-18", "R6"], aliquota: 0.20, irrf_venda: 0.00005 },
-};
-const ref = code => ({ code, version: RULES[code].version, title: RULES[code].title, sources: RULES[code].sources });
+import { ruleAt, RULE_VERSIONS } from "./tax_rules.js";
+export const ENGINE_VERSION = "tax-engine-js@1.1.0";
+/* parâmetros vêm do registro de regras versionadas (tax_rules.js) — o motor não guarda alíquota ou limite próprios */
+function buildRules(pick) {
+  const c = pick("BR-IRPF-RV-COMUM"), d = pick("BR-IRPF-RV-DAYTRADE"), f = pick("BR-IRPF-FII");
+  if (!c || !d || !f) return null;
+  const meta = r => ({ version: r.version, title: r.title, sources: r.sources.map(s => s.id), effective_from: r.validity.start });
+  return {
+    "BR-IRPF-RV-COMUM": { ...meta(c), aliquota: +c.parameters.aliquota, limite_isencao: +c.parameters.limite_isencao_vendas_mes, irrf_venda: +c.parameters.irrf_aliquota_sobre_venda,
+      darf_codigo: c.parameters.darf_codigo, darf_minimo: +c.parameters.darf_valor_minimo },
+    "BR-IRPF-RV-DAYTRADE": { ...meta(d), aliquota: +d.parameters.aliquota, irrf_ganho: +d.parameters.irrf_aliquota_sobre_ganho },
+    "BR-IRPF-FII": { ...meta(f), aliquota: +f.parameters.aliquota, irrf_venda: +f.parameters.irrf_aliquota_sobre_venda },
+  };
+}
+const latest = code => RULE_VERSIONS.filter(r => r.code === code && r.status === "validated").sort((a, b) => b.validity.start.localeCompare(a.validity.start))[0];
+export const RULES = buildRules(latest);
+export const rulesForYear = year => buildRules(code => ruleAt(code, `${year}-12-31`));
 const r2 = v => (Math.round((+v || 0) * 100 + Number.EPSILON) / 100).toFixed(2);
 const brn = v => (+v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -73,7 +83,10 @@ export function computeTax(trades, opts = {}) {
   const prior = opts.priorLosses || {};
   const loss = { comum: +prior.comum || 0, daytrade: +prior.daytrade || 0, fii: +prior.fii || 0 };
   const known = opts.knownClasses || {};
-  const C = RULES["BR-IRPF-RV-COMUM"], DT = RULES["BR-IRPF-RV-DAYTRADE"], F = RULES["BR-IRPF-FII"];
+  let R = rulesForYear(year), ruleNote = null;
+  if (!R) { R = RULES; ruleNote = `Não há versão de regra validada com vigência em ${year}; usados os parâmetros da versão ${RULES["BR-IRPF-RV-COMUM"].version} como referência.`; }
+  const ref = code => ({ code, version: R[code].version, title: R[code].title, sources: R[code].sources });
+  const C = R["BR-IRPF-RV-COMUM"], DT = R["BR-IRPF-RV-DAYTRADE"], F = R["BR-IRPF-FII"];
 
   const skipped = { fora_escopo: 0, futuro: 0 };
   const rows = [];
@@ -202,7 +215,18 @@ export function computeTax(trades, opts = {}) {
 
   const positions = Object.fromEntries(Object.entries(pos).filter(([, v]) => v.qty > 1e-9).map(([k, v]) =>
     [k, { quantidade: String(+v.qty.toFixed(6)), custo_total: r2(v.cost), preco_medio: r2(v.cost / v.qty), classe: v.cls }]));
-  const confidence = Math.round(Math.min(1, ...months.map(x => x.confidence)) * 100) / 100;
+  const confidence = Math.round(Math.min(ruleNote ? 0.5 : 1, ...months.map(x => x.confidence)) * 100) / 100;
+  /* qualidade do cálculo (v5.0 §7.5): o que reduz a confiança e o que fazer para elevar — não é garantia jurídica */
+  const sells = events.filter(e => e.kind !== "daytrade").length;
+  const quality = { score: rows.length ? confidence : 0, factors: [
+    { factor: "Custo de aquisição", ok: !issues.has("sem_custo"), detail: issues.has("sem_custo") ? `${events.filter(e => e.status === "pendente_dado").length} de ${sells} venda(s) sem compras registradas.` : "Todas as vendas têm custo pelas negociações importadas.",
+      improve: issues.has("sem_custo") ? "Importe o relatório de Negociação da B3 desde a primeira compra." : null },
+    { factor: "Classe dos ativos", ok: !issues.has("classe"), detail: issues.has("classe") ? "Algumas classes foram inferidas pelo código." : "Classes confirmadas pela posição ou por lista conhecida.",
+      improve: issues.has("classe") ? "Importe a posição da B3 para confirmar ações, FIIs e ETFs." : null },
+    { factor: "Versão da regra", ok: !ruleNote, detail: ruleNote || `Regras com vigência no ano (${Object.values(R).map(r => r.version).join(", ")}).`, improve: ruleNote ? "Aguardar a versão validada da regra para o ano." : null },
+    { factor: "Escopo", ok: !skipped.fora_escopo, detail: skipped.fora_escopo ? `${skipped.fora_escopo} operação(ões) fora do escopo do motor.` : "Todas as operações estão no escopo do motor.",
+      improve: skipped.fora_escopo ? "Opções, termo, futuros e ETFs de renda fixa exigem apuração com seu contador." : null },
+  ], note: "Qualidade e completude dos dados e do processamento; não representa garantia jurídica ou fiscal." };
   const limitations = [
     "Estimativa: não substitui a apuração oficial nem a revisão de um contador.",
     "Não cobre opções, termo, futuros, aluguel de ações, ETFs de renda fixa, proventos e eventos corporativos (desdobramentos, grupamentos, bonificações, subscrições).",
@@ -211,7 +235,8 @@ export function computeTax(trades, opts = {}) {
   if (issues.has("sem_custo")) limitations.unshift("Há vendas sem o histórico de compras: o resultado desses meses fica incompleto até você importar as negociações anteriores.");
   if (issues.has("classe")) limitations.push("Alguns ativos tiveram a classe (ação, FII, ETF) inferida pelo código; importe a posição da B3 para confirmar.");
   if (skipped.fora_escopo) limitations.push(`${skipped.fora_escopo} operação(ões) fora do escopo foram ignoradas (derivativos, renda fixa ou ativos não reconhecidos).`);
-  const snapshot = JSON.stringify({ year, refDate, prior, paid, rules: Object.fromEntries(Object.entries(RULES).map(([k, v]) => [k, v.version])),
+  if (ruleNote) limitations.unshift(ruleNote);
+  const snapshot = JSON.stringify({ engine: ENGINE_VERSION, year, refDate, prior, paid, rules: Object.fromEntries(Object.entries(R).map(([k, v]) => [k, v.version])),
     trades: rows.map(r => [r.date, r.ticker, r.cls, r.side, r.q, r2(r.gross), r2(r.fees), !!r.daytrade]) });
   return {
     has_data: rows.length > 0, year, reference_date: refDate, months, events: events.sort((a, b) => b.date.localeCompare(a.date)),
@@ -225,7 +250,7 @@ export function computeTax(trades, opts = {}) {
       "Vencimento do DARF 6015: último dia útil do mês seguinte, considerando feriados nacionais.",
       `Prejuízos de anos anteriores informados: ${Object.entries(prior).filter(([, v]) => +v > 0).map(([k, v]) => `${k} R$ ${brn(v)}`).join(", ") || "nenhum"}.`,
     ],
-    limitations, rule_versions: Object.fromEntries(Object.entries(RULES).map(([k, v]) => [k, v.version])),
+    limitations, rule_versions: Object.fromEntries(Object.entries(R).map(([k, v]) => [k, v.version])), engine_version: ENGINE_VERSION, quality,
     snapshot_hash: fnv(snapshot) + fnv(snapshot.split("").reverse().join("")), kind: "estimativa",
   };
 }
