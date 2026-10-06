@@ -5,6 +5,7 @@
  *   RESEND_API_KEY + MAIL_FROM   envio do e-mail de recuperação (desligado sem eles; o dono gera link manual no CRM)
  * Chaves internas (geradas na primeira vez e guardadas no D1, nunca no código): app_key (cifra do segredo MFA), cpf_pepper.
  */
+import { count as metric } from "./metrics.js";
 import { Resp, Problem, nowIso, enc, b64u, randomToken, sha256, safeEqual, hashPassword, checkPassword, kvGet, kvSet, str } from "./shared.js";
 
 export const IDENTITY_SCHEMA = [
@@ -177,6 +178,7 @@ export async function identityRoute(m, p, body, q, req, env, db, D) {
     const who = await resolve(ident);
     const fail = async () => {
       await D.loginFailed(db, key);
+      metric("auth.login_falhou");
       if (who.uid) await audit(db, req, { user_id: who.uid, actor: "anônimo", action: "login.falhou", resource: "session", meta: { via: who.kind } });
       throw new Problem(401, "Não autenticado", `${who.kind === "cpf" ? "CPF" : "E-mail"} ou senha incorretos.`);
     };

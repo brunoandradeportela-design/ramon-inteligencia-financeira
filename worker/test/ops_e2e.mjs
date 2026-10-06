@@ -1,0 +1,24 @@
+// Observabilidade: métricas por rota (latência, 4xx/5xx), eventos de domínio e painel do administrador.
+import assert from "node:assert/strict";
+const B = process.env.AURION_TEST_URL || "http://localhost:8799";
+const call = async (method, path, body, token) => { const r = await fetch(B + path, { method, body: body ? JSON.stringify(body) : undefined, headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) } });
+  return { status: r.status, body: r.status === 204 ? null : await r.json() }; };
+const st = Date.now();
+const u = (await call("POST", "/v1/auth/register", { name: "Paula Reis Gomes", email: `ops.${st}@exemplo.com`, profession: "Analista", phone: "(69) 99888-" + String(st).slice(-4), password: "senhaSegura123", accept_terms: true, plan: "pro" })).body;
+await call("POST", "/v1/auth/login", { identifier: `ops.${st}@exemplo.com`, password: "errada-errada-1" });
+await call("POST", "/v1/assistant/query", { question: "Devo comprar PETR4 agora?" }, u.token);
+await call("GET", "/v1/documents/doc_naoexiste123", null, u.token);
+for (let i = 0; i < 3; i++) await call("GET", "/v1/me", null, u.token);
+assert.equal((await call("GET", "/v1/admin/ops", null, u.token)).status, 403, "só o administrador");
+const own = (await call("POST", "/v1/auth/login", { email: "RamonJunio07@gmail.com", password: "senhaDonoTeste2026" })).body.token;
+const d = (await call("GET", "/v1/admin/ops?hours=1", null, own)).body;
+assert.ok(d.requests >= 6, JSON.stringify(d).slice(0, 300));
+const me = d.api.find(a => a.route === "GET /v1/me"); assert.ok(me && me.requests >= 3 && me.p95_ms > 0);
+assert.ok(d.api.some(a => a.route === "GET /v1/documents/:id" && a.errors_4xx >= 1), "id normalizado e 4xx contado");
+assert.ok(!d.api.some(a => /doc_naoexiste/.test(a.route)), "rota sem identificadores");
+assert.ok(d.events.some(e => e.key === "auth.login_falhou"));
+assert.ok(d.events.some(e => e.key === "ai.bloqueio.recomendacao"));
+assert.ok(d.security.login_failures >= 1); assert.equal(d.slo.p95_target_ms, 500);
+assert.ok(d.health.some(h => h.id === "cotacoes") && d.health.some(h => h.id === "integracoes"));
+assert.ok(!JSON.stringify(d).includes(u.user.email), "sem dados pessoais nas métricas");
+console.log("OPS E2E OK — métricas por rota normalizada, 4xx, p95 por histograma, eventos de segurança e IA, SLOs, saúde dos jobs, sem dados pessoais");

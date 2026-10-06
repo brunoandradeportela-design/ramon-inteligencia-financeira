@@ -45,7 +45,7 @@ Como reproduzir:
 | 18 | Acessibilidade | ✅ Rótulos ARIA, alternativa textual em gráficos, foco no conteúdo; sem rolagem horizontal a 390 px |
 | 19 | Temas | ✅ Claro, Escuro e Sistema conferidos por captura de tela |
 | 20 | Backup e restauração | ✅ `backup_e2e` em todo CI: backup criptografado, ambiente vazio restaurado, login, mesmo hash de cálculo, documento binário idêntico e auditoria íntegra. Em produção: D1 Time Travel e rotina semanal criptografada (liga com segredos). Ver `docs/BACKUP-RESTAURACAO.md` |
-| 21 | Observabilidade | ✅ `[observability] enabled`, `X-Correlation-ID` em toda resposta, trilha de auditoria |
+| 21 | Observabilidade | ✅ Painel **Operações** do administrador: requisições, disponibilidade e p95 contra os SLOs (§26), latência e erros por rota, saúde dos jobs e eventos de segurança, IA, Tax e Trader. Métricas sem dados pessoais (`ops_e2e`). Também: `[observability] enabled`, `X-Correlation-ID` e trilha de auditoria |
 | 22 | Resultado e riscos | Este documento |
 
 ## Integrações prontas e desligadas (ligam ao cadastrar o segredo no Cloudflare)

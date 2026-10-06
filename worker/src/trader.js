@@ -1,6 +1,7 @@
 /* AURION Trader Intelligence (API). Registro e análise de operações, estratégias, diário, watchlists, mercado,
  * backtest, paper analysis e risco. NÃO existe rota de envio, cancelamento ou alteração de ordens (ADR-0009).
  * O mesmo TradeRecord (fin_items kind "trade") alimenta Finanças, Tributação e Trader — sem recadastro. */
+import { count as metric } from "./metrics.js";
 import { Resp, Problem, nowIso, today, randomToken, sha256, kvGet, kvSet, str, numOrNull, isoDate, ageH } from "./shared.js";
 import { audit } from "./identity.js";
 import { tradeAnalytics, riskAnalytics, runBacktest, marketSnapshot, STRATEGY_TEMPLATES, TRADER_ENGINE_VERSION, traderRadar } from "../../apps/web/app/js/trader_engine.js";
@@ -189,6 +190,7 @@ export async function traderRoute(m, p, body, q, req, u, db, env, D) {
     catch (e) { if (e.status === 422) throw new Problem(422, "Backtest inválido", e.message); throw e; }
     const rec = { ...r, strategy_id: str(body.strategy_id, 40) || null, created_at: nowIso() };
     await put("backtest", r.backtest_id, rec, "backtest");
+    metric("trader.backtest", r.result?.bars ?? candles.length);
     await A("trader.backtest_executado", { resource: "backtest", entity_id: r.backtest_id, meta: { ativo: r.ticker, modelo: r.strategy.template, dataset: r.dataset.id, chave: r.reproducibility_key } });
     return new Resp(201, rec);
   }

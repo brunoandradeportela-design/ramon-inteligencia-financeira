@@ -18,6 +18,7 @@ import { integrationsRoute } from "./integrations.js";
 import { mailCron, notifItems, cacheForMail } from "./mailer.js";
 import { extract as extractDoc, notaToTrades, normTitle } from "../../apps/web/app/js/doc_extract.js";
 import { backupRoute } from "./backup.js";
+import { METRICS_SCHEMA, recordRequest, routeGroup, count as metric, flush as flushMetrics, prune as pruneMetrics, summary as metricsSummary } from "./metrics.js";
 import { eventsView as buildEvents, personalEvents } from "../../apps/web/app/js/event_engine.js";
 import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
 import { Resp, Problem, nowIso, today, money, enc, b64u, randomToken, sha256, safeEqual, hashPassword, checkPassword, kvGet, kvSet, str, numOrNull, isoDate, ageH } from "./shared.js";
@@ -70,7 +71,7 @@ const SCHEMA = [
 let schemaReady = false;
 async function ensureSchema(db) {
   if (schemaReady) return;
-  await db.batch(SCHEMA.map(s => db.prepare(s)));
+  await db.batch([...SCHEMA, ...METRICS_SCHEMA].map(s => db.prepare(s)));
   schemaReady = true;
 }
 async function getCustomer(db, id) { const r = await db.prepare("SELECT data FROM users WHERE id=?").bind(id).first(); return r ? JSON.parse(r.data) : null; }
@@ -346,6 +347,24 @@ async function route(req, env, db, url, ctx) {
     return r;
   }
 
+  if (m === "GET" && p === "/v1/admin/ops") {
+    const u = await authUser(req, env, db);
+    if (!u.owner) throw new Problem(403, "Acesso negado", "Apenas o administrador.");
+    await flushMetrics(db, { force: true });
+    const hours = Math.min(Math.max(+q.hours || 24, 1), 168);
+    const [sum, ms, mi, mail, users, docs, fails] = await Promise.all([metricsSummary(db, hours), kvGet(db, "market_state", null), kvGet(db, "market_indices", null), kvGet(db, "mail_last", null),
+      db.prepare("SELECT COUNT(*) n FROM users").first(), db.prepare("SELECT COUNT(*) n, COALESCE(SUM(size),0) s FROM docs").first(),
+      db.prepare("SELECT COUNT(*) n FROM audit_log WHERE action='login.falhou' AND at >= ?").bind(new Date(Date.now() - hours * 36e5).toISOString()).first()]);
+    const age = iso => iso ? Math.round((Date.now() - Date.parse(iso)) / 36e5 * 10) / 10 : null;
+    const health = [
+      { id: "cotacoes", label: "Cotações", last: ms?.quotes_at || null, age_h: age(ms?.quotes_at), ok: ms?.quotes_at ? age(ms.quotes_at) <= 30 : null, detail: ms?.quotes_at ? `${ms.quotes_ok || 0} ok · ${ms.quotes_fail || 0} falhas na última rodada` : "sem coleta ainda" },
+      { id: "indices", label: "Índices do Banco Central", last: ms?.indices_at || null, age_h: age(ms?.indices_at), ok: ms?.indices_at ? age(ms.indices_at) <= 48 : null, detail: mi?.source || "sem coleta ainda" },
+      { id: "emails", label: "Envio de e-mails", last: mail?.at || null, age_h: age(mail?.at), ok: mail ? !mail.errors : null, detail: mail ? (mail.skipped ? `pulado: ${mail.skipped}` : `${mail.sent || 0} enviados · ${mail.errors || 0} falhas`) : "ainda não rodou" },
+      { id: "integracoes", label: "Integrações contratadas", ok: null, detail: ["ASAAS_API_KEY", "PLUGGY_CLIENT_ID", "RESEND_API_KEY", "TTS_API_KEY", "PBI_CLIENT_ID", "BACKUP_TOKEN"].map(k => `${k.split("_")[0].toLowerCase()}: ${env[k] ? "ligada" : "desligada"}`).join(" · ") },
+    ];
+    return { ...sum, health, security: { login_failures: fails.n }, business: { users: users.n, documents: docs.n, documents_bytes: docs.s }, generated_at: nowIso() };
+  }
+
   if (m === "POST" && p === "/v1/admin/mail/run") {
     const u = await authUser(req, env, db);
     if (!u.owner) throw new Problem(403, "Acesso negado", "Apenas o administrador.");
@@ -557,16 +576,17 @@ export default {
     const url = new URL(req.url);
     const cid = req.headers.get("X-Correlation-ID") || randomToken(8);
     REQ.set(req, { cid });
+    const t0 = Date.now(), done = res => { try { recordRequest(routeGroup(req.method, url.pathname), Date.now() - t0, res.status); ctx.waitUntil(flushMetrics(env.DB)); } catch {} return res; };
     try {
       await ensureSchema(env.DB);
       const out = await route(req, env, env.DB, url, ctx);
-      if (out instanceof Response) { const h = new Headers(out.headers); Object.entries(cors).forEach(([k, v]) => h.set(k, v)); return new Response(out.body, { status: out.status, headers: h }); }
-      if (out instanceof Resp) return json(out.body, out.status, { ...cors, "X-Correlation-ID": cid });
-      return json(out, 200, { ...cors, "X-Correlation-ID": cid });
+      if (out instanceof Response) { const h = new Headers(out.headers); Object.entries(cors).forEach(([k, v]) => h.set(k, v)); return done(new Response(out.body, { status: out.status, headers: h })); }
+      if (out instanceof Resp) return done(json(out.body, out.status, { ...cors, "X-Correlation-ID": cid }));
+      return done(json(out, 200, { ...cors, "X-Correlation-ID": cid }));
     } catch (e) {
       if (!(e instanceof Problem)) { console.error("erro interno", cid, e && e.stack || e); e = new Problem(500, "Erro interno", "Falha inesperada. Tente novamente."); }
-      return json({ type: "about:blank", title: e.title, status: e.status, detail: e.detail, instance: url.pathname, correlation_id: cid, ...e.extra },
-                  e.status, { ...cors, "X-Correlation-ID": cid });
+      return done(json({ type: "about:blank", title: e.title, status: e.status, detail: e.detail, instance: url.pathname, correlation_id: cid, ...e.extra },
+                  e.status, { ...cors, "X-Correlation-ID": cid }));
     }
   },
   // rede de segurança: sincroniza todas as cobranças do Asaas a cada 15 min (caso algum webhook se perca)
@@ -575,9 +595,10 @@ export default {
     ctx.waitUntil((async () => {
       await ensureSchema(env.DB);
       if (env.ASAAS_API_KEY) { try { await sync(env, env.DB); } catch (e) { console.error("sync falhou", e.detail || e); } }
-      try { await refreshMarket(env, env.DB); } catch (e) { console.error("mercado falhou", e.message || e); }
+      try { await refreshMarket(env, env.DB); } catch (e) { metric("job.falha.mercado"); console.error("mercado falhou", e.message || e); }
       if (ofConfigured(env)) { try { await ofCron(env, env.DB); } catch (e) { console.error("open finance falhou", e.message || e); } }
-      try { const r = await mailCron(env, env.DB, { getCustomer, finLoad, computeTax }); if (r.sent || r.errors) console.log("e-mails", JSON.stringify(r)); } catch (e) { console.error("e-mails falharam", e.message || e); }
+      try { const r = await mailCron(env, env.DB, { getCustomer, finLoad, computeTax }); await kvSet(env.DB, "mail_last", { at: nowIso(), ...r }); if (r.sent) metric("mail.enviados", r.sent); if (r.errors) metric("mail.falhas", r.errors); } catch (e) { metric("job.falha.email"); console.error("e-mails falharam", e.message || e); }
+      try { if (new Date().getUTCHours() === 6 && new Date().getUTCMinutes() < 15) await pruneMetrics(env.DB); await flushMetrics(env.DB, { force: true }); } catch (e) { console.error("métricas falharam", e.message || e); }
     })());
   },
 };
@@ -795,6 +816,7 @@ async function finRoute(m, p, body, q, u, db, req) {
       throw new Problem(402, "Recurso do plano Pro", "A apuração de imposto sobre as suas negociações faz parte dos planos Pro e Premium.", { required_plan: "Pro" });
     if (p === "/v1/tax/summary") {
       const { events, ...rest } = tax;
+      if (tax.has_data) metric("tax.calculo", tax.quality?.score ?? tax.confidence);
       if (tax.has_data) rest.calculation_id = (await persistTaxCalc(db, uid, tax, { trades, year, refDate: ref, knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs })).calculation_id;
       return rest;
     }
@@ -853,6 +875,7 @@ async function finRoute(m, p, body, q, u, db, req) {
     const a = assistantAnswer(qtext, { fin, port, tax, alerts: await alertsFor(), name: u.me.name, trades, positions, refDate: ref, documents: docsMeta, checklist, holdings, watchlists: await finLoad(db, uid, "watchlist"),
       taxOpts: { knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs } });
     a.tool_calls.forEach(t => { t.latency_ms = Date.now() - t0; });
+    metric("ai.pergunta." + a.intent, Date.now() - t0); if (a.guardrail) metric("ai.bloqueio." + a.guardrail);
     return { id: "ans_" + randomToken(8).replace(/[-_]/g, ""), thread_id: str(body.thread_id, 40) || "thr_" + randomToken(6).replace(/[-_]/g, ""), question: qtext, created_at: nowIso(),
              provider: "motor determinístico sobre os seus dados", disclaimer: ASSIST_DISCLAIMER, has_data: fin.has_data || port.has_data || tax.has_data, ...a };
   }
