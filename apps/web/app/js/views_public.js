@@ -37,7 +37,7 @@ export async function disclosuresView(el) {
         <label class="small row" style="gap:6px"><input type="checkbox" id="do" ${only ? "checked" : ""}> Só os meus ativos</label>
       </div>
       <div id="dl" class="section"></div>
-      <p class="note">Fonte pública e rastreável: ${esc(d.source || "CVM — Portal de Dados Abertos (IPE)")}. O AURION organiza e liga ao documento original; não interpreta como sinal de compra ou venda.</p></section>`;
+      <p class="note">Fonte pública e rastreável: ${esc(d.source || "CVM — Portal de Dados Abertos (IPE)")}. O AURION organiza e liga ao documento original; não interpreta como sinal de compra ou venda. Divulgação pública não é indício nem prova de informação privilegiada: o AURION só usa informação já tornada pública pela companhia.</p></section>`;
   el.querySelector("#dq").oninput = draw; el.querySelector("#dc").onchange = draw;
   el.querySelector("#do").onchange = e => { only = e.target.checked; draw(); };
   draw();

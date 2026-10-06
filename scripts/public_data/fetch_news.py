@@ -81,7 +81,9 @@ def build(fixture_dir=None, days=45):
         try:
             raw = get(url, fixture_dir, key)
             got = parse(raw) if raw else []
-            sources.append({"id": key, "name": name, "url": url, "status": "ok" if got else "vazio", "items": len(got)})
+            dates = sorted(g["published_at"] for g in got if g["published_at"])
+            sources.append({"id": key, "name": name, "url": url, "status": "ok" if got else "vazio", "items": len(got),
+                            "newest": dates[-1] if dates else None, "undated": sum(1 for g in got if not g["published_at"])})
         except Exception as e:
             print(f"aviso: {name}: {e}", file=sys.stderr)
             sources.append({"id": key, "name": name, "url": url, "status": "indisponivel", "items": 0})

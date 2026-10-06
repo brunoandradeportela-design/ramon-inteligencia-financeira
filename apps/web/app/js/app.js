@@ -11,7 +11,7 @@ import { news, notifications } from "./views_hub.js";
 const NAV = [
   ["dashboard", "Visão Geral", "home"], ["financas", "Finanças", "finance"], ["patrimonio", "Patrimônio", "wealth"], ["alocacao", "Minha Alocação", "wealth"],
   ["tributacao", "Tributação", "tax"], ["simulador", "Simulador", "sim"], ["alertas", "Radar", "bell"],
-  ["assistente", "Inteligência", "ai"], ["noticias", "Notícias", "doc"], ["trader", "Trader Intelligence", "sim"], ["documentos", "Documentos", "doc"], ["importar", "Importar dados", "doc"], ["conexoes", "Conexões", "link"],
+  ["noticias", "Notícias", "doc"], ["trader", "Trader Intelligence", "sim"], ["assistente", "Inteligência", "ai"], ["documentos", "Documentos", "doc"], ["importar", "Importar dados", "doc"], ["conexoes", "Conexões", "link"],
 ];
 const TITLES = Object.fromEntries(NAV.map(([k, t]) => [k, t]));
 Object.assign(TITLES, { notificacoes: "Notificações", crm: "CRM · Clientes", pagamentos: "Pagamentos", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });

@@ -81,5 +81,7 @@ assert.ok((await call("GET", "/v1/audit", null, tk)).body.items.some(i => i.acti
 const evs = (await call("GET", "/v1/events", null, tk)).body;
 assert.ok(evs.exposure.length > 0); assert.match(evs.disclaimer, /não é recomendação/);
 assert.deepEqual((await call("GET", "/v1/events", null, b.token)).body.exposure, []);
+const rad = (await call("GET", "/v1/trader/radar", null, tk)).body;
+assert.ok(Array.isArray(rad.items)); assert.match(rad.note, /Não é recomendação/);
 mkt.close();
 console.log("TRADER E2E OK — registro idempotente, Trade-to-Tax, versões, analytics, diário, watchlist, mercado, risco, backtest reproduzível, paper fora do imposto, isolamento, sem rotas de ordem");

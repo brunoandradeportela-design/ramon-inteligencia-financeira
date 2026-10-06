@@ -5,7 +5,7 @@ import { areaChart, brl, dt, dtm, empty, esc, num, pct, toast } from "./ui.js";
 
 const msg = e => e instanceof ApiError ? (e.problem.detail || e.problem.title) + (e.problem.errors?.length ? " — " + e.problem.errors.map(x => x.msg).join("; ") : "") : String(e.message || e);
 const TABS = [["visao", "Visão Trader"], ["mercado", "Mercado"], ["watchlist", "Watchlist"], ["operacoes", "Operações"], ["estrategias", "Estratégias"], ["backtest", "Backtest"],
-  ["performance", "Performance"], ["impostos", "Análise Tributária"], ["risco", "Risco"], ["divulgacoes", "Divulgações públicas"], ["eventos", "Eventos"], ["diario", "Journal"], ["paper", "Paper"]];
+  ["performance", "Performance"], ["impostos", "Análise Tributária"], ["divulgacoes", "Divulgações públicas"], ["eventos", "Eventos"], ["radar", "Radar Trader"], ["diario", "Journal"], ["risco", "Risco"], ["paper", "Paper"]];
 const sign = v => `<span class="${+v < 0 ? "neg" : +v > 0 ? "pos" : ""}">${brl(v)}</span>`;
 const kpi = (t, v, sub = "") => `<div class="card"><h3>${t}</h3><div class="kpi" style="font-size:24px">${v}</div>${sub ? `<p class="small muted">${sub}</p>` : ""}</div>`;
 const today = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
@@ -200,6 +200,14 @@ const VIEWS = {
       <section class="card section"><h3>Registros</h3>${p.items.length ? `<ul class="stack small" style="margin-top:8px">${p.items.map(x => `<li class="row between"><span>${dt(x.date)} · ${x.side === "C" ? "compra" : "venda"} ${esc(x.ticker)} ${num(x.quantity)} a ${brl(x.price)}</span><button class="btn btn--ghost btn--sm" data-pdel="${esc(x.id)}">Remover</button></li>`).join("")}</ul>` : empty("Nenhuma simulação.")}</section>`;
     el.querySelector("#pf").onsubmit = async e => { e.preventDefault(); try { await api.post("/v1/trader/paper", { ticker: el.querySelector("#pt").value, side: el.querySelector("#ps").value, quantity: el.querySelector("#pq").value.replace(",", "."), price: el.querySelector("#pp").value.replace(",", "."), executed_at: el.querySelector("#pd").value }); VIEWS.paper(el); } catch (x) { toast(msg(x)); } };
     el.querySelectorAll("[data-pdel]").forEach(b => b.onclick = async () => { await api.del(`/v1/trader/paper/${b.dataset.pdel}`); VIEWS.paper(el); });
+  },
+
+  async radar(el) {
+    const r = await api.get("/v1/trader/radar");
+    const SEV = { critico: "Crítico", alto: "Alto", atencao: "Atenção", informativo: "Informativo" };
+    el.innerHTML = `<section class="card"><h3>Radar Trader</h3>${r.items.length ? `<ul class="stack section">${r.items.map(i => `<li class="row wrap" style="gap:10px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:8px">
+        <span class="pill">${SEV[i.severity]}</span><div style="flex:1;min-width:200px"><b>${esc(i.title)}</b><div class="small">${esc(i.detail)}</div></div>${i.action ? `<a class="btn btn--ghost btn--sm" href="#${esc(i.action.route)}">${esc(i.action.label)}</a>` : ""}</li>`).join("")}</ul>`
+      : empty("Nenhum ponto de atenção nas suas operações agora.")}<p class="note">${esc(r.note)}</p></section>`;
   },
 
   async divulgacoes(el) { const m = await import("./views_public.js"); return m.disclosuresView(el); },

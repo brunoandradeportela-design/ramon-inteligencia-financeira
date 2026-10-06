@@ -192,3 +192,34 @@ export function runBacktest({ ticker, candles, template, params = {}, capital = 
     warnings: ["Resultado passado não garante resultado futuro.", "Não é recomendação de compra ou venda.", "Viés de sobrevivência não controlado: o histórico é do ativo escolhido hoje.",
       oos.stats.total_return < ins.stats.total_return - 0.1 ? "Desempenho fora da amostra bem pior que dentro da amostra: sinal de sobreajuste." : "Compare sempre dentro e fora da amostra; não otimize parâmetros no mesmo período que valida."] };
 }
+
+/* ------------------------------------------------------------------ Radar Trader (v5.0 §21.2): pontos de atenção sobre as próprias operações.
+ * Descreve fatos do histórico e prazos; não sugere entrar, sair ou ajustar posição. */
+export function traderRadar({ analytics, tax = null, journal = [], refDate }) {
+  const out = [], push = (id, severity, title, detail, action = null) => out.push({ id: "trd_" + id, severity, title, detail, action });
+  const brl = v => "R$ " + (+v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  for (const m of tax?.months || []) {
+    const d = m.darf; if (!d || d.status === "pago") continue;
+    if (d.status === "vencido") push("darf_" + d.competencia, "critico", `DARF ${d.competencia.split("-").reverse().join("/")} vencido`, `Valor estimado ${brl(d.valor)}, venceu em ${d.vencimento.split("-").reverse().join("/")}. Pagamento em atraso tem multa e juros.`, { label: "Ver apuração", route: "/tributacao" });
+    else if (d.dias_para_vencimento <= 10) push("darf_" + d.competencia, "alto", `DARF vence em ${d.dias_para_vencimento} dia(s)`, `Valor estimado ${brl(d.valor)} (competência ${d.competencia.split("-").reverse().join("/")}).`, { label: "Ver apuração", route: "/tributacao" });
+  }
+  const closed = [...(analytics?.closed || [])].sort((a, b) => a.exit_date.localeCompare(b.exit_date));
+  let cur = 0; for (let i = closed.length - 1; i >= 0 && closed[i].net_pnl < 0; i--) cur++;
+  if (cur >= 3) push("streak", "atencao", `${cur} operações seguidas com prejuízo`, "Sequência atual de resultados negativos nas operações registradas. Revise o journal e as regras da estratégia.", { label: "Abrir journal", route: "/trader?tab=diario" });
+  const curve = analytics?.equity_curve || [];
+  if (curve.length) { const peak = Math.max(0, ...curve.map(x => +x.value)), last = +curve.at(-1).value, dd = last - peak;
+    if (dd < 0 && Math.abs(dd) >= 2 * (+analytics.avg_loss || Infinity)) push("drawdown", "atencao", "Resultado abaixo do pico", `O resultado acumulado está ${brl(-dd)} abaixo do melhor momento.`, { label: "Ver performance", route: "/trader?tab=performance" }); }
+  const t = analytics?.totals || {};
+  if (+t.costs > 0 && Math.abs(+t.gross_pnl) > 0 && +t.costs / Math.abs(+t.gross_pnl) >= 0.3)
+    push("custos", "atencao", "Custos relevantes", +t.costs > Math.abs(+t.gross_pnl) ? `Corretagem e emolumentos somam ${brl(t.costs)}, mais que o resultado bruto de ${brl(t.gross_pnl)}.` : `Corretagem e emolumentos somam ${brl(t.costs)}, ${Math.round(+t.costs / Math.abs(+t.gross_pnl) * 100)}% do resultado bruto.`, { label: "Ver operações", route: "/trader?tab=operacoes" });
+  const la = tax?.losses_available || {}, totalLoss = (+la.comum || 0) + (+la.daytrade || 0) + (+la.fii || 0);
+  if (totalLoss > 0) push("prejuizo", "informativo", "Prejuízo a compensar", `Saldo de prejuízo acumulado: comum ${brl(la.comum)}, day trade ${brl(la.daytrade)}, FII ${brl(la.fii)}. Ele reduz o imposto de ganhos futuros da mesma modalidade.`, { label: "Ver apuração", route: "/tributacao" });
+  const noStrat = closed.filter(x => !x.strategy_id).length;
+  if (closed.length >= 5 && noStrat / closed.length > 0.5) push("estrategia", "informativo", "Operações sem estratégia", `${noStrat} de ${closed.length} operações encerradas não estão ligadas a uma estratégia; a comparação por estratégia fica incompleta.`, { label: "Estratégias", route: "/trader?tab=estrategias" });
+  const since = new Date(Date.parse(refDate) - 30 * 864e5).toISOString().slice(0, 10);
+  const recent = closed.filter(x => x.exit_date >= since).length, notes = journal.filter(j => !j.archived && (j.date || "") >= since).length;
+  if (recent >= 3 && notes === 0) push("journal", "informativo", "Journal sem registros recentes", `${recent} operações encerradas nos últimos 30 dias e nenhum registro no journal.`, { label: "Abrir journal", route: "/trader?tab=diario" });
+  const order = { critico: 0, alto: 1, atencao: 2, informativo: 3 };
+  return { items: out.sort((a, b) => order[a.severity] - order[b.severity]), ref_date: refDate, engine_version: TRADER_ENGINE_VERSION,
+    note: "Fatos sobre o seu histórico e prazos. Não é recomendação de compra, venda ou ajuste de posição." };
+}

@@ -65,3 +65,16 @@ test("AURION Daily determinístico, sem recomendação, voz em reais; notícias 
   assert.deepEqual(n.map(x => x.url), ["u2", "u1", "u3"]); assert.equal(n[2].relevance, 0);
   assert.match(dailyBriefing({ date: "2026-10-06" }).sections[0].text, /Importe/);
 });
+
+import { traderRadar } from "../../apps/web/app/js/trader_engine.js";
+test("Radar Trader: DARF vencido, sequência de perdas, custos e prejuízo a compensar, sem recomendação", () => {
+  const T = []; let d = 1;
+  for (const [buy, sell] of [[10, 12], [10, 9], [10, 9.5], [10, 9.8]]) { T.push({ ticker: "ABCD3", side: "C", quantity: 100, price: buy, fees: 30, executed_at: `2026-09-${String(d).padStart(2, "0")}T10:00` }, { ticker: "ABCD3", side: "V", quantity: 100, price: sell, fees: 30, executed_at: `2026-09-${String(d + 1).padStart(2, "0")}T10:00` }); d += 2; }
+  const a = tradeAnalytics(T);
+  const tax = { months: [{ darf: { codigo: "6015", competencia: "2026-08", valor: "50.00", vencimento: "2026-09-30", status: "vencido", dias_para_vencimento: -6 } }], losses_available: { comum: "120.00", daytrade: "0.00", fii: "0.00" } };
+  const r = traderRadar({ analytics: a, tax, journal: [], refDate: "2026-10-01" });
+  const ids = r.items.map(i => i.id);
+  assert.equal(ids[0], "trd_darf_2026-08"); assert.ok(ids.includes("trd_streak")); assert.ok(ids.includes("trd_custos")); assert.ok(ids.includes("trd_prejuizo")); assert.ok(ids.includes("trd_journal"));
+  assert.ok(!/(compre|venda agora|recomend)/i.test(JSON.stringify(r.items))); assert.match(r.note, /Não é recomendação/);
+  assert.equal(traderRadar({ analytics: tradeAnalytics([]), tax: null, refDate: "2026-10-06" }).items.length, 0);
+});

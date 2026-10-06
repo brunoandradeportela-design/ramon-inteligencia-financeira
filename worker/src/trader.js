@@ -3,7 +3,7 @@
  * O mesmo TradeRecord (fin_items kind "trade") alimenta Finanças, Tributação e Trader — sem recadastro. */
 import { Resp, Problem, nowIso, today, randomToken, sha256, kvGet, kvSet, str, numOrNull, isoDate, ageH } from "./shared.js";
 import { audit } from "./identity.js";
-import { tradeAnalytics, riskAnalytics, runBacktest, marketSnapshot, STRATEGY_TEMPLATES, TRADER_ENGINE_VERSION } from "../../apps/web/app/js/trader_engine.js";
+import { tradeAnalytics, riskAnalytics, runBacktest, marketSnapshot, STRATEGY_TEMPLATES, TRADER_ENGINE_VERSION, traderRadar } from "../../apps/web/app/js/trader_engine.js";
 import { isB3Ticker } from "../../apps/web/app/js/market.js";
 
 export const TRADER_SCHEMA = ["CREATE TABLE IF NOT EXISTS candles (ticker TEXT PRIMARY KEY, data TEXT NOT NULL, fetched_at TEXT NOT NULL, provider TEXT, dataset TEXT)"];
@@ -160,6 +160,7 @@ export async function traderRoute(m, p, body, q, req, u, db, env, D) {
   if (p === "/v1/trader/tax" && m === "GET") return { year: tax.year, months: tax.months, total_tax_due: tax.total_tax_due, losses_available: tax.losses_available, quality: tax.quality,
     per_trade: analytics.closed.map(x => ({ ticker: x.ticker, exit_date: x.exit_date, type: x.daytrade ? "day trade" : "swing", gross_pnl: x.gross_pnl, costs: x.costs, net_pnl: x.net_pnl, tax_rate: x.tax_rate, tax_estimate: x.tax_estimate, after_tax: x.after_tax })),
     note: "Por operação: estimativa pela alíquota da modalidade e isenção do mês. O valor de referência é a apuração mensal do Tax Engine (Tributação)." };
+  if (p === "/v1/trader/radar" && m === "GET") return traderRadar({ analytics, tax, journal: await load("journal"), refDate: today() });
   if (p === "/v1/trader/risk" && m === "GET") {
     const positions = await D.positionsFor(uid);
     const candlesBy = {};
