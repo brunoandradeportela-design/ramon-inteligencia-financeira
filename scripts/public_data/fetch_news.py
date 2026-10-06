@@ -19,7 +19,6 @@ import xml.etree.ElementTree as ET
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "apps", "web", "app", "data", "public", "news.json")
 FEEDS = [
     ("agencia_brasil", "Agência Brasil — Economia", "https://agenciabrasil.ebc.com.br/rss/economia/feed.xml"),
-    ("bcb", "Banco Central do Brasil — Notas", "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/notas"),
     ("cvm", "CVM — Notícias", "https://www.gov.br/cvm/pt-br/assuntos/noticias/RSS"),
     ("receita", "Receita Federal — Notícias", "https://www.gov.br/receitafederal/pt-br/assuntos/noticias/RSS"),
 ]
@@ -75,7 +74,7 @@ def parse(raw):
     return [x for x in out if x["title"] and x["url"]]
 
 
-def build(fixture_dir=None, days=21):
+def build(fixture_dir=None, days=45):
     since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)).isoformat()
     items, sources = [], []
     for key, name, url in FEEDS:

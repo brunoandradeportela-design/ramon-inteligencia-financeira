@@ -103,22 +103,24 @@ def build(days=60, fixture_dir=None, today=None):
                 continue
             seen.add(key)
             cat = category(r)
+            if cat == "outro":  # posições de administradores, formulários cadastrais etc.: fora do escopo de eventos
+                continue
             items.append({
                 "id": f"ipe_{proto}_{r.get('Versao') or '1'}", "date": (r.get("Data_Referencia") or entrega)[:10], "published_at": entrega,
-                "company": (r.get("Nome_Companhia") or "").strip(), "cnpj": cnpj, "tickers": tks,
+                "company": (r.get("Nome_Companhia") or "").strip(), "tickers": tks,
                 "category": cat, "category_label": LABEL[cat] if cat != "outro" else (r.get("Categoria") or "Outro").strip(),
-                "subject": " · ".join(x for x in [(r.get("Tipo") or "").strip(), (r.get("Assunto") or "").strip()] if x)[:280],
-                "protocol": proto, "version": r.get("Versao"), "url": (r.get("Link_Download") or "").strip() or None, "source": SOURCE,
+                "subject": " · ".join(x for x in [(r.get("Tipo") or "").strip(), " ".join((r.get("Assunto") or "").replace("||", "; ").split())] if x)[:200],
+                "protocol": proto, "url": (r.get("Link_Download") or "").strip() or None, "source": SOURCE,
             })
     items.sort(key=lambda x: (x["published_at"], x["protocol"]), reverse=True)
     return {"generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "source": SOURCE,
             "source_url": "https://dados.cvm.gov.br/dataset/cia_aberta-doc-ipe", "window_days": days,
-            "companies_with_tickers": len(tick), "items": items[:4000]}
+            "companies_with_tickers": len(tick), "items": items[:3000]}
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--days", type=int, default=60)
+    ap.add_argument("--days", type=int, default=45)
     ap.add_argument("--fixture-dir")
     ap.add_argument("--out", default=OUT)
     a = ap.parse_args()

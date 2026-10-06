@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Divulgações (CVM — IPE + FCA)
-        run: python scripts/public_data/fetch_disclosures.py --days 60
+        run: python scripts/public_data/fetch_disclosures.py --days 45
       - name: Notícias (RSS públicos)
         run: python scripts/public_data/fetch_news.py
       - id: commit
