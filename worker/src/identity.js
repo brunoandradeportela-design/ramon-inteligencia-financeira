@@ -107,6 +107,22 @@ export async function newSession(db, userId, req) {
     db.prepare("INSERT INTO session_meta (token_hash,user_id,created_at,last_seen_at,device,place) VALUES (?,?,?,?,?,?)").bind(th, userId, now, now, info.device, info.place)]);
   return token;
 }
+/* acesso de navegador/aparelho e região novos: avisa no app (sino) e por e-mail, se configurado (v6.0 §24) */
+export async function checkNewDevice(db, env, req, uid, user, first = false) {
+  const info = reqInfo(req), region = (info.place || "").split(",").slice(-2).map(x => x.trim()).join(", ") || "local desconhecido";
+  const fp = `${info.device || "?"}|${region}`, key = "known_devices:" + uid, list = await kvGet(db, key, []);
+  if (list.includes(fp)) return false;
+  await kvSet(db, key, [fp, ...list].slice(0, 20));
+  if (first || !list.length) return false;
+  const notice = { id: randomToken(6).replace(/[-_]/g, ""), at: nowIso(), device: info.device, place: info.place || region };
+  await kvSet(db, "sec_notices:" + uid, [notice, ...(await kvGet(db, "sec_notices:" + uid, []))].slice(0, 10));
+  await audit(db, req, { user_id: uid, actor: uid, action: "login.novo_dispositivo", resource: "session", meta: { dispositivo: info.device, local: notice.place } });
+  if (mailConfigured(env) && user?.email) {
+    const first = String(user.name || "").split(" ")[0] || "Olá";
+    await sendMail(env, user.email, "AURION: novo acesso à sua conta", `<p>Olá, ${first}.</p><p>Houve um acesso à sua conta AURION em <b>${String(info.device || "").replace(/[<>&]/g, "")}</b>, ${String(notice.place).replace(/[<>&]/g, "")}, em ${new Date(notice.at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.</p><p>Se foi você, não precisa fazer nada. Se não foi, troque a senha e encerre as outras sessões em Configurações → Segurança: <a href="${appUrl(env)}#/configuracoes">${appUrl(env)}#/configuracoes</a>.</p>`).catch(e => console.error("e-mail de novo acesso falhou", e.message || e));
+  }
+  return true;
+}
 export async function touchSession(db, th) {
   try { await db.prepare("UPDATE session_meta SET last_seen_at=? WHERE token_hash=? AND last_seen_at < ?").bind(nowIso(), th, new Date(Date.now() - 10 * 60e3).toISOString()).run(); } catch { /* opcional */ }
 }
@@ -145,9 +161,10 @@ export async function identityRoute(m, p, body, q, req, env, db, D) {
     if (email === D.ownerEmail(env)) return { kind: "email", uid: D.OWNER_ID, email };
     const c = await D.getCustomerByEmail(db, email); return { kind: "email", uid: c?.id || null, email };
   }
-  async function issue(uid) {
+  async function issue(uid, { first = false } = {}) {
     const token = await newSession(db, uid, req);
     const user = uid === D.OWNER_ID ? D.ownerMe(env, await kvGet(db, "owner_theme", "system")) : D.meFromCustomer(await D.getCustomer(db, uid));
+    try { await checkNewDevice(db, env, req, uid, user, first); } catch (e) { console.error("aviso de novo acesso falhou", e.message || e); }
     return { token, user };
   }
 
@@ -168,7 +185,7 @@ export async function identityRoute(m, p, body, q, req, env, db, D) {
     await db.prepare("INSERT INTO users (id,email,pw,data,created_at) VALUES (?,?,?,?,?)").bind(c.id, c.email, await hashPassword(body.password), JSON.stringify(c), c.created_at).run();
     if (ch) { await kvSet(db, "cpf_idx:" + ch, c.id); await setSec(db, c.id, { mfa: null, cpf_hash: ch, cpf_masked: maskCpf(cpf) }); }
     await audit(db, req, { user_id: c.id, actor: c.id, action: "conta.criada", resource: "user", entity_id: c.id, meta: { plano: c.plan, cpf: !!ch } });
-    return new Resp(201, await issue(c.id));
+    return new Resp(201, await issue(c.id, { first: true }));
   }
 
   if (m === "POST" && p === "/v1/auth/login") {

@@ -18,6 +18,7 @@ import { integrationsRoute } from "./integrations.js";
 import { mailCron, notifItems, cacheForMail } from "./mailer.js";
 import { extract as extractDoc, notaToTrades, normTitle } from "../../apps/web/app/js/doc_extract.js";
 import { backupRoute } from "./backup.js";
+import { checkRate } from "./ratelimit.js";
 import { METRICS_SCHEMA, recordRequest, routeGroup, count as metric, flush as flushMetrics, prune as pruneMetrics, summary as metricsSummary } from "./metrics.js";
 import { eventsView as buildEvents, personalEvents } from "../../apps/web/app/js/event_engine.js";
 import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
@@ -578,6 +579,8 @@ export default {
     REQ.set(req, { cid });
     const t0 = Date.now(), done = res => { try { recordRequest(routeGroup(req.method, url.pathname), Date.now() - t0, res.status); ctx.waitUntil(flushMetrics(env.DB)); } catch {} return res; };
     try {
+      const rl = checkRate(req.headers.get("CF-Connecting-IP") || "local", req.method, url.pathname, { scale: env.RATE_LIMIT_SCALE });
+      if (!rl.ok) { metric("seguranca.limite_" + rl.policy); return done(json({ type: "about:blank", title: "Muitas requisições", status: 429, detail: `Limite de ${rl.limit} por minuto atingido. Tente de novo em ${rl.retry_after} s.`, instance: url.pathname, correlation_id: cid }, 429, { ...cors, "X-Correlation-ID": cid, "Retry-After": String(rl.retry_after) })); }
       await ensureSchema(env.DB);
       const out = await route(req, env, env.DB, url, ctx);
       if (out instanceof Response) { const h = new Headers(out.headers); Object.entries(cors).forEach(([k, v]) => h.set(k, v)); return done(new Response(out.body, { status: out.status, headers: h })); }
@@ -893,7 +896,9 @@ async function finRoute(m, p, body, q, u, db, req) {
     }
     const base = notifItems({ alerts: await alertsFor(), tax, holdings, ref });
     if (!u.me.acting) await cacheForMail(db, uid, { items: base, dash: null, events: personalEvents({ tax, holdings, refDate: ref }) });
-    const items = base.map(n => ({ ...n, read: read.includes(n.id) }));
+    const sec = (await kvGet(db, "sec_notices:" + uid, [])).filter(n => Date.now() - Date.parse(n.at) < 14 * 864e5)
+      .map(n => ({ id: "ntf_sec_" + n.id, kind: "seguranca", severity: "alto", title: "Novo acesso à sua conta", detail: `${n.device || "navegador"} · ${n.place || "local desconhecido"} · se não foi você, troque a senha e encerre sessões.`, at: n.at.slice(0, 10), link: "#/configuracoes" }));
+    const items = [...sec, ...base].map(n => ({ ...n, read: read.includes(n.id) }));
     return { items, unread: items.filter(n => !n.read).length };
   }
   if (p === "/v1/dashboard") {
