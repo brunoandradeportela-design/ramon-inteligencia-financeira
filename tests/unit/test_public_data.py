@@ -54,11 +54,15 @@ def test_news_rss_e_atom_somente_titulo_link_e_etiquetas(tmp_path):
     atom = f"""<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Receita abre consulta ao lote de restituição do IRPF</title>
       <link href="https://ex.gov.br/c"/><updated>{now.isoformat()}</updated></entry></feed>"""
     (tmp_path / "agencia_brasil.xml").write_text(rss)
-    (tmp_path / "receita.xml").write_text(atom)
+    hoje = dt.date.today()
+    (tmp_path / f"receita_{hoje.year}_{hoje.month:02d}.xml").write_text(atom)
     out = m.build(str(tmp_path))
     assert {i["url"] for i in out["items"]} == {"https://ex.gov.br/a", "https://ex.gov.br/c"}
     a = next(i for i in out["items"] if i["url"].endswith("/a"))
     assert "juros" in a["tags"] and a["tickers"] == ["PETR4"] and "description" not in a and "summary" not in a
     assert "imposto" in next(i for i in out["items"] if i["url"].endswith("/c"))["tags"]
     st = {s["id"]: s["status"] for s in out["sources"]}
-    assert st["agencia_brasil"] == "ok" and st["cvm"] == "vazio"
+    assert st["agencia_brasil"] == "ok" and st[f"cvm_{hoje.year}"] == "vazio"
+    urls = [s["url"] for s in out["sources"]]
+    assert f"https://www.gov.br/cvm/pt-br/assuntos/noticias/{hoje.year}/RSS" in urls
+    assert any(u.endswith(f"/noticias/{hoje.year}/{m.MESES[hoje.month - 1]}/RSS") for u in urls)

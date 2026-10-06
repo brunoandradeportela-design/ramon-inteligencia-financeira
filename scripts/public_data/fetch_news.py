@@ -17,11 +17,22 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "apps", "web", "app", "data", "public", "news.json")
-FEEDS = [
-    ("agencia_brasil", "Agência Brasil — Economia", "https://agenciabrasil.ebc.com.br/rss/economia/feed.xml"),
-    ("cvm", "CVM — Notícias", "https://www.gov.br/cvm/pt-br/assuntos/noticias/RSS"),
-    ("receita", "Receita Federal — Notícias", "https://www.gov.br/receitafederal/pt-br/assuntos/noticias/RSS"),
-]
+MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+
+
+def feeds(today=None):
+    """Fontes oficiais. CVM e Receita publicam por pasta de ano/mês (o RSS da raiz traz itens antigos),
+    então as URLs acompanham a data. Verificado pela sonda de feeds em 06/10/2026."""
+    d = today or dt.date.today()
+    prev = (d.replace(day=1) - dt.timedelta(days=1))
+    out = [("agencia_brasil", "Agência Brasil — Economia", "https://agenciabrasil.ebc.com.br/rss/economia/feed.xml"),
+           ("bcb", "Banco Central do Brasil — Notícias", "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/noticias"),
+           ("bcb_copom", "Banco Central do Brasil — Comunicados do Copom", "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/comunicadoscopom")]
+    for y in sorted({d.year, prev.year}, reverse=True):
+        out.append((f"cvm_{y}", "CVM — Notícias", f"https://www.gov.br/cvm/pt-br/assuntos/noticias/{y}/RSS"))
+    for m in (d, prev):
+        out.append((f"receita_{m.year}_{m.month:02d}", "Receita Federal — Notícias", f"https://www.gov.br/receitafederal/pt-br/assuntos/noticias/{m.year}/{MESES[m.month - 1]}/RSS"))
+    return out
 TAGS = {
     "juros": r"\bselic\b|\bcopom\b|taxa de juros|\bjuros\b", "inflacao": r"infla[çc][ãa]o|\bipca\b|\bigp-?m\b",
     "imposto": r"imposto|\birpf\b|\bir\b|tribut|receita federal|declara[çc][ãa]o|\bdarf\b|\bcome-cotas\b",
@@ -77,7 +88,7 @@ def parse(raw):
 def build(fixture_dir=None, days=45):
     since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)).isoformat()
     items, sources = [], []
-    for key, name, url in FEEDS:
+    for key, name, url in feeds():
         try:
             raw = get(url, fixture_dir, key)
             got = parse(raw) if raw else []

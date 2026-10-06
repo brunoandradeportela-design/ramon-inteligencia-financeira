@@ -38,9 +38,10 @@ export function marketSnapshot(candles) {
 }
 
 /* ------------------------------------------------------------------ operações → operações fechadas (FIFO, compradas e vendidas) */
+const cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0;   // datas ISO: ordem de código, sem colação ICU (mais barato)
 export function roundTrips(trades) {
   const active = (trades || []).filter(t => !t.superseded_by && t.status !== "voided" && +t.quantity > 0);
-  const sorted = [...active].sort((a, b) => (a.executed_at || a.date).localeCompare(b.executed_at || b.date) || (a.side === "C" ? -1 : 1));
+  const sorted = [...active].sort((a, b) => cmp(a.executed_at || a.date, b.executed_at || b.date) || (a.side === "C" ? -1 : 1));
   const book = {}, closed = [];
   for (const t of sorted) {
     const tk = String(t.ticker).toUpperCase(), q0 = +t.quantity, price = (+t.value || q0 * +t.price) / q0, feePer = (+t.fees || 0) / q0;
@@ -64,7 +65,7 @@ export function roundTrips(trades) {
     const q = l.reduce((s, x) => s + x.q, 0), cost = l.reduce((s, x) => s + x.q * x.price, 0);
     return { ticker: tk, quantity: q, side: q > 0 ? "long" : "short", avg_price: r2(cost / q) };
   });
-  return { closed: closed.sort((a, b) => a.exit_date.localeCompare(b.exit_date)), open };
+  return { closed: closed.sort((a, b) => cmp(a.exit_date, b.exit_date)), open };
 }
 
 /* ------------------------------------------------------------------ Trade Analytics (v5.0 §12.1) */
@@ -203,7 +204,7 @@ export function traderRadar({ analytics, tax = null, journal = [], refDate }) {
     if (d.status === "vencido") push("darf_" + d.competencia, "critico", `DARF ${d.competencia.split("-").reverse().join("/")} vencido`, `Valor estimado ${brl(d.valor)}, venceu em ${d.vencimento.split("-").reverse().join("/")}. Pagamento em atraso tem multa e juros.`, { label: "Ver apuração", route: "/tributacao" });
     else if (d.dias_para_vencimento <= 10) push("darf_" + d.competencia, "alto", `DARF vence em ${d.dias_para_vencimento} dia(s)`, `Valor estimado ${brl(d.valor)} (competência ${d.competencia.split("-").reverse().join("/")}).`, { label: "Ver apuração", route: "/tributacao" });
   }
-  const closed = [...(analytics?.closed || [])].sort((a, b) => a.exit_date.localeCompare(b.exit_date));
+  const closed = [...(analytics?.closed || [])].sort((a, b) => cmp(a.exit_date, b.exit_date));
   let cur = 0; for (let i = closed.length - 1; i >= 0 && closed[i].net_pnl < 0; i--) cur++;
   if (cur >= 3) push("streak", "atencao", `${cur} operações seguidas com prejuízo`, "Sequência atual de resultados negativos nas operações registradas. Revise o journal e as regras da estratégia.", { label: "Abrir journal", route: "/trader?tab=diario" });
   const curve = analytics?.equity_curve || [];

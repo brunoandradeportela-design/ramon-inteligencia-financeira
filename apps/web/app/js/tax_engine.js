@@ -25,7 +25,16 @@ const latest = code => RULE_VERSIONS.filter(r => r.code === code && r.status ===
 export const RULES = buildRules(latest);
 export const rulesForYear = year => buildRules(code => ruleAt(code, `${year}-12-31`));
 const r2 = v => (Math.round((+v || 0) * 100 + Number.EPSILON) / 100).toFixed(2);
-const brn = v => (+v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/* formatação pt-BR com 2 casas sem Intl (toLocaleString é caro e o motor roda no limite de CPU do Worker) */
+const brn = v => {
+  const n = +v, a = Math.abs(n), str = String(a);
+  if (!Number.isFinite(n) || /e/i.test(str) || a >= 1e13) return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const [ip, fp = ""] = str.split("."), f = (fp + "000").slice(0, 3);
+  const cents = +ip * 100 + +f.slice(0, 2) + (f[2] >= "5" ? 1 : 0);          // arredondamento "half-expand" sobre a representação decimal, como o Intl
+  const i = String(Math.floor(cents / 100)), d = String(cents % 100).padStart(2, "0");
+  return (n < 0 || Object.is(n, -0) ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + d;
+};
+const cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0;   // ordem de código (datas ISO e chaves ASCII), sem colação ICU
 
 /* ------------------------------------------------------------------ classe do ativo */
 const ETF_ACOES = new Set(["BOVA11", "BOVV11", "BOVB11", "BOVX11", "XBOV11", "BRAX11", "IVVB11", "SPXI11", "SPXB11", "SMAL11", "SMAC11", "DIVO11", "ECOO11",
@@ -73,6 +82,12 @@ function fnv(s) {
   for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 ^ c, 2246822519) >>> 0; }
   return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
 }
+/* mesmo que fnv(s.split("").reverse().join("")), sem alocar o texto invertido */
+function fnvRev(s) {
+  let h1 = 0x811c9dc5, h2 = 0x01000193 ^ 0x9e3779b9;
+  for (let i = s.length - 1; i >= 0; i--) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 ^ c, 2246822519) >>> 0; }
+  return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
+}
 
 /* ------------------------------------------------------------------ cálculo
  * trades: [{ id?, date, ticker, side:"C"|"V", quantity, price, value?, fees?, market?, daytrade?, asset_class?, source? }]
@@ -95,13 +110,13 @@ export function computeTax(trades, opts = {}) {
     if (/opc|termo|futur|exerc/.test(market)) { skipped.fora_escopo++; continue; }
     if (!t.date || t.date > refDate) { skipped.futuro++; continue; }
     const ticker = String(t.ticker || "").toUpperCase().replace(/F$/, "");
-    const { cls, inferred } = assetClassOf(ticker, { ...known, ...(t.asset_class ? { [ticker]: t.asset_class } : {}) });
+    const { cls, inferred } = assetClassOf(ticker, t.asset_class ? { [ticker]: t.asset_class } : known);
     if (!["acao", "etf", "bdr", "fii"].includes(cls)) { skipped.fora_escopo++; continue; }
     const q = +t.quantity, gross = +t.value || q * +t.price;
     if (!(q > 0) || !(gross > 0)) continue;
     rows.push({ ...t, ticker, cls, inferred, q, gross, fees: +t.fees || 0 });
   }
-  rows.sort((a, b) => a.date.localeCompare(b.date) || (a.side === b.side ? 0 : a.side === "C" ? -1 : 1));
+  rows.sort((a, b) => cmp(a.date, b.date) || (a.side === b.side ? 0 : a.side === "C" ? -1 : 1));
 
   // agrupa por dia+ativo: compra e venda no mesmo dia formam day trade (a quantidade casada); o excedente é operação comum
   const days = new Map();
@@ -113,7 +128,7 @@ export function computeTax(trades, opts = {}) {
   const M = mk => per[mk] || (per[mk] = { sales_acoes: 0, acoes: 0, etf: 0, daytrade: 0, fii: 0, irrf_venda: 0, irrf_dt: 0, conf: 1 });
   const issues = new Set();
 
-  for (const [, g] of [...days.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+  for (const [, g] of [...days.entries()].sort((a, b) => cmp(a[0], b[0]))) {
     const { date, ticker, cls, inferred } = g[0];
     const mk = date.slice(0, 7), inYear = +date.slice(0, 4) === year;
     const buys = g.filter(r => r.side === "C"), sells = g.filter(r => r.side === "V");
@@ -251,7 +266,7 @@ export function computeTax(trades, opts = {}) {
       `Prejuízos de anos anteriores informados: ${Object.entries(prior).filter(([, v]) => +v > 0).map(([k, v]) => `${k} R$ ${brn(v)}`).join(", ") || "nenhum"}.`,
     ],
     limitations, rule_versions: Object.fromEntries(Object.entries(R).map(([k, v]) => [k, v.version])), engine_version: ENGINE_VERSION, quality,
-    snapshot_hash: fnv(snapshot) + fnv(snapshot.split("").reverse().join("")), kind: "estimativa",
+    snapshot_hash: fnv(snapshot) + fnvRev(snapshot), kind: "estimativa",
   };
 }
 

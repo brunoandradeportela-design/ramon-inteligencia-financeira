@@ -15,6 +15,7 @@
 import { TRADER_SCHEMA, traderRoute } from "./trader.js";
 import { actAs, sharingRoute } from "./pro_hub.js";
 import { integrationsRoute } from "./integrations.js";
+import { mailCron, notifItems, cacheForMail } from "./mailer.js";
 import { eventsView as buildEvents, personalEvents } from "../../apps/web/app/js/event_engine.js";
 import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
 import { Resp, Problem, nowIso, today, money, enc, b64u, randomToken, sha256, safeEqual, hashPassword, checkPassword, kvGet, kvSet, str, numOrNull, isoDate, ageH } from "./shared.js";
@@ -335,6 +336,14 @@ async function route(req, env, db, url, ctx) {
     return { refreshed: await refreshMarket(env, db, { force: true }) };
   }
 
+  if (m === "POST" && p === "/v1/admin/mail/run") {
+    const u = await authUser(req, env, db);
+    if (!u.owner) throw new Problem(403, "Acesso negado", "Apenas o administrador.");
+    const r = await mailCron(env, db, { getCustomer, finLoad, computeTax }, { force: true });
+    await audit(db, req, { user_id: u.me.id, actor: u.me.id, action: "admin.emails_disparados", meta: r });
+    return r;
+  }
+
   /* ---- Professional Hub (acesso somente leitura concedido pelo cliente) e integrações contratadas (desligadas sem segredo) */
   if (p.startsWith("/v1/sharing/")) { const u = await authUser(req, env, db); return sharingRoute(m, p, body, req, u, db, getCustomer); }
   if (["/v1/integrations", "/v1/voice/tts", "/v1/analytics/embed", "/v1/notifications/preferences", "/v1/notifications/test-email"].includes(p)) {
@@ -558,6 +567,7 @@ export default {
       if (env.ASAAS_API_KEY) { try { await sync(env, env.DB); } catch (e) { console.error("sync falhou", e.detail || e); } }
       try { await refreshMarket(env, env.DB); } catch (e) { console.error("mercado falhou", e.message || e); }
       if (ofConfigured(env)) { try { await ofCron(env, env.DB); } catch (e) { console.error("open finance falhou", e.message || e); } }
+      try { const r = await mailCron(env, env.DB, { getCustomer, finLoad, computeTax }); if (r.sent || r.errors) console.log("e-mails", JSON.stringify(r)); } catch (e) { console.error("e-mails falharam", e.message || e); }
     })());
   },
 };
@@ -848,9 +858,9 @@ async function finRoute(m, p, body, q, u, db, req) {
       const ids = (Array.isArray(body.ids) ? body.ids : []).map(x => str(x, 80)).filter(Boolean);
       await kvSet(db, rk, [...new Set([...ids, ...read])].slice(0, 400)); return { read: ids.length };
     }
-    const al = (await alertsFor()).filter(a => a.status !== "resolvido" && ["critico", "alto"].includes(a.severity)).map(a => ({ id: "ntf_" + a.id, kind: "alerta", severity: a.severity, title: a.title, detail: a.detail || a.description || "", at: a.due_date || ref, link: "#/alertas" }));
-    const ev = personalEvents({ tax, holdings, refDate: ref, horizonDays: 7, pastDays: 0 }).map(e => ({ id: ("ntf_" + e.kind + "_" + e.date + "_" + e.title.normalize("NFD").replace(/[^A-Za-z0-9]+/g, "")).slice(0, 72), kind: e.kind, severity: e.impact === "atenção" ? "alto" : "medio", title: e.title, detail: e.detail, at: e.date, link: e.link }));
-    const items = [...al, ...ev].map(n => ({ ...n, read: read.includes(n.id) }));
+    const base = notifItems({ alerts: await alertsFor(), tax, holdings, ref });
+    if (!u.me.acting) await cacheForMail(db, uid, { items: base, dash: null, events: personalEvents({ tax, holdings, refDate: ref }) });
+    const items = base.map(n => ({ ...n, read: read.includes(n.id) }));
     return { items, unread: items.filter(n => !n.read).length };
   }
   if (p === "/v1/dashboard") {
@@ -858,6 +868,9 @@ async function finRoute(m, p, body, q, u, db, req) {
     if (tax.has_data) d.tax = taxDashboard(tax);
     const open = (await alertsFor()).filter(a => a.status !== "resolvido");
     d.alerts = { open: open.length, critical: open.filter(a => a.severity === "critico").length };
+    if (!u.me.acting) await cacheForMail(db, uid, { items: notifItems({ alerts: open, tax, holdings, ref }), events: personalEvents({ tax, holdings, refDate: ref }),
+      dash: { has_data: d.has_data, greeting: d.greeting, net_worth: { total: d.net_worth.total, variation_pct: d.net_worth.variation_pct, series: d.net_worth.series.slice(-2) },
+        liquidity: { months_covered: d.liquidity.months_covered }, tax: d.tax ? { estimated: d.tax.estimated, next_darf: d.tax.next_darf || null } : null, alerts: d.alerts } });
     return d;
   }
   throw new Problem(404, "Não encontrado", p);

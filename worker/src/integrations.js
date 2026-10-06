@@ -5,6 +5,7 @@
  * Nenhuma chave aparece em resposta, log ou front-end. */
 import { Problem, kvGet, kvSet, nowIso, today, str } from "./shared.js";
 import { audit, mailConfigured, sendMail } from "./identity.js";
+import { syncMailIndex } from "./mailer.js";
 
 export const ttsConfigured = env => !!env.TTS_API_KEY;
 export const pbiConfigured = env => !!(env.PBI_TENANT_ID && env.PBI_CLIENT_ID && env.PBI_CLIENT_SECRET && env.PBI_WORKSPACE_ID && env.PBI_REPORT_ID);
@@ -70,7 +71,7 @@ export async function integrationsRoute(m, p, body, req, u, db, env) {
     if (m === "GET") return { ...cur, email_enabled: mailConfigured(env) };
     if (m === "PUT") {
       const next = { email_alerts: !!body.email_alerts, email_daily: !!body.email_daily, in_app: true, updated_at: nowIso() };
-      await kvSet(db, key, next); await audit(db, req, { user_id: uid, actor: uid, action: "notificacoes.preferencias", meta: next });
+      await kvSet(db, key, next); await syncMailIndex(db, uid, next.email_alerts || next.email_daily); await audit(db, req, { user_id: uid, actor: uid, action: "notificacoes.preferencias", meta: next });
       return { ...next, email_enabled: mailConfigured(env) };
     }
   }
