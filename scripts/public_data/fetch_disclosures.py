@@ -5,7 +5,15 @@ Tickers vêm do FCA (valores mobiliários negociados). Saída: apps/web/app/data
 Executado pelo GitHub Actions (ADR-0012); o Worker não faz esse processamento pesado.
 Uso: python fetch_disclosures.py [--days 60] [--fixture-dir DIR]  (fixture para testes offline)
 """
-import argparse, csv, datetime as dt, io, json, os, sys, urllib.request, zipfile
+import argparse
+import csv
+import datetime as dt
+import io
+import json
+import os
+import sys
+import urllib.request
+import zipfile
 
 BASE = "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC"
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "apps", "web", "app", "data", "public", "disclosures.json")
@@ -36,7 +44,8 @@ def read_csv(zf, endswith):
             raw = zf.read(n)
             for enc in ("utf-8-sig", "latin-1"):
                 try:
-                    txt = raw.decode(enc); break
+                    txt = raw.decode(enc)
+                    break
                 except UnicodeDecodeError:
                     continue
             return list(csv.DictReader(io.StringIO(txt), delimiter=";"))
@@ -115,7 +124,8 @@ if __name__ == "__main__":
     a = ap.parse_args()
     data = build(a.days, a.fixture_dir)
     if not data["items"] and not a.fixture_dir and os.path.exists(a.out):
-        print("nenhum item novo coletado; mantendo o arquivo anterior", file=sys.stderr); sys.exit(0)
+        print("nenhum item novo coletado; mantendo o arquivo anterior", file=sys.stderr)
+        sys.exit(0)
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))

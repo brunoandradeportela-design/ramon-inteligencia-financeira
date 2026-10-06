@@ -5,7 +5,15 @@ A personalização por exposição é feita no app, sem enviar a carteira a terc
 Notícia licenciada (agência paga) entra por adaptador desligado — ADR-0013.
 Uso: python fetch_news.py [--fixture-dir DIR]
 """
-import argparse, datetime as dt, email.utils, hashlib, json, os, re, sys, urllib.request
+import argparse
+import datetime as dt
+import email.utils
+import hashlib
+import json
+import os
+import re
+import sys
+import urllib.request
 import xml.etree.ElementTree as ET
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "apps", "web", "app", "data", "public", "news.json")
@@ -77,7 +85,8 @@ def build(fixture_dir=None, days=21):
             sources.append({"id": key, "name": name, "url": url, "status": "ok" if got else "vazio", "items": len(got)})
         except Exception as e:
             print(f"aviso: {name}: {e}", file=sys.stderr)
-            sources.append({"id": key, "name": name, "url": url, "status": "indisponivel", "items": 0}); got = []
+            sources.append({"id": key, "name": name, "url": url, "status": "indisponivel", "items": 0})
+            got = []
         for g in got:
             if g["published_at"] and g["published_at"] < since:
                 continue
@@ -93,10 +102,14 @@ def build(fixture_dir=None, days=21):
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("--fixture-dir"); ap.add_argument("--out", default=OUT); a = ap.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--fixture-dir")
+    ap.add_argument("--out", default=OUT)
+    a = ap.parse_args()
     data = build(a.fixture_dir)
     if not data["items"] and not a.fixture_dir and os.path.exists(a.out):
-        print("nenhuma notícia coletada; mantendo o arquivo anterior", file=sys.stderr); sys.exit(0)
+        print("nenhuma notícia coletada; mantendo o arquivo anterior", file=sys.stderr)
+        sys.exit(0)
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
