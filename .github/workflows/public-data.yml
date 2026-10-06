@@ -1,0 +1,43 @@
+name: Dados públicos (CVM e notícias)
+
+# Coleta fontes públicas e rastreáveis fora do Worker (ADR-0012): divulgações da CVM (IPE) e RSS oficiais.
+# Grava JSON estático em apps/web/app/data/public e publica o site. Não usa segredos.
+on:
+  schedule:
+    - cron: "17 11,15,19,23 * * 1-5"   # 08:17, 12:17, 16:17 e 20:17 (Brasília), dias úteis
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: public-data
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Divulgações (CVM — IPE + FCA)
+        run: python scripts/public_data/fetch_disclosures.py --days 60
+      - name: Notícias (RSS públicos)
+        run: python scripts/public_data/fetch_news.py
+      - id: commit
+        name: Gravar se mudou
+        run: |
+          git config user.name "aurion-bot"; git config user.email "aurion-bot@users.noreply.github.com"
+          git add apps/web/app/data/public
+          if git diff --cached --quiet; then echo "changed=0" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git commit -m "dados públicos: atualização automática" && git push && echo "changed=1" >> "$GITHUB_OUTPUT"
+  publish:
+    needs: collect
+    if: needs.collect.outputs.changed == '1'
+    uses: ./.github/workflows/pages.yml

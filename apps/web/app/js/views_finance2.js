@@ -66,7 +66,8 @@ export async function allocation(el) {
     <section class="card section"><h3>Detalhamento por ativo</h3><div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Ativo</th><th>Classe</th><th>Instituição</th><th class="num">Aplicado</th><th class="num">Valor</th><th class="num">Resultado</th><th class="num">Peso</th></tr></thead>
       <tbody>${a.positions.map(p => `<tr><td><b>${esc(p.name)}</b></td><td>${esc(p.group)}</td><td>${esc(p.custodian)}</td><td class="num">${p.invested == null ? "—" : brl(p.invested)}</td><td class="num">${brl(p.value)}</td>
         <td class="num ${+p.result < 0 ? "neg" : "pos"}">${p.result == null ? "—" : brl(p.result)}</td><td class="num">${pct(p.weight)}</td></tr>`).join("")}</tbody></table></div>
-      <p class="trust-line" style="margin-top:12px"><span>${esc(a.disclaimer)}</span></p></section>`;
+      <p class="trust-line" style="margin-top:12px"><span>${esc(a.disclaimer)}</span></p></section><div id="pbibox"></div>`;
+  import("./views_hub.js").then(m => m.analyticsEmbed(el.querySelector("#pbibox"))).catch(() => {});
 }
 
 export async function dataHubSection(el) {

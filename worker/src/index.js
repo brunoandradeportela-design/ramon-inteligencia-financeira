@@ -13,7 +13,9 @@
  * Variáveis (wrangler.toml): OWNER_EMAIL, OWNER_NAME, ALLOWED_ORIGINS
  */
 import { TRADER_SCHEMA, traderRoute } from "./trader.js";
-import { eventsView as buildEvents } from "../../apps/web/app/js/event_engine.js";
+import { actAs, sharingRoute } from "./pro_hub.js";
+import { integrationsRoute } from "./integrations.js";
+import { eventsView as buildEvents, personalEvents } from "../../apps/web/app/js/event_engine.js";
 import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
 import { Resp, Problem, nowIso, today, money, enc, b64u, randomToken, sha256, safeEqual, hashPassword, checkPassword, kvGet, kvSet, str, numOrNull, isoDate, ageH } from "./shared.js";
 import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize, CATEGORIES } from "../../apps/web/app/js/fin_engine.js";
@@ -239,7 +241,10 @@ async function authUser(req, env, db, { required = true } = {}) {
       await touchSession(db, sid);
       if (s.user_id === OWNER_ID) return { owner: true, sid, me: ownerMe(env, await kvGet(db, "owner_theme", "system")) };
       const c = await getCustomer(db, s.user_id);
-      if (c) return { owner: false, sid, c, me: meFromCustomer(c) };
+      if (c) {
+        const u = { owner: false, sid, c, me: meFromCustomer(c) }, asId = req.headers.get("X-Act-As");
+        return asId && asId !== c.id ? actAs(db, req, u, asId, { getCustomer, meFromCustomer }) : u;
+      }
     }
   }
   if (required) throw new Problem(401, "Não autenticado", "Sessão ausente ou expirada. Entre novamente.");
@@ -330,6 +335,13 @@ async function route(req, env, db, url, ctx) {
     return { refreshed: await refreshMarket(env, db, { force: true }) };
   }
 
+  /* ---- Professional Hub (acesso somente leitura concedido pelo cliente) e integrações contratadas (desligadas sem segredo) */
+  if (p.startsWith("/v1/sharing/")) { const u = await authUser(req, env, db); return sharingRoute(m, p, body, req, u, db, getCustomer); }
+  if (["/v1/integrations", "/v1/voice/tts", "/v1/analytics/embed", "/v1/notifications/preferences", "/v1/notifications/test-email"].includes(p)) {
+    const u = await authUser(req, env, db); if (u.me.acting && m !== "GET") throw new Problem(403, "Somente leitura", "Acesso delegado é somente leitura.");
+    return integrationsRoute(m, p, body, req, u, db, env);
+  }
+
   /* ---- Event Intelligence: prazos pessoais + exposição (divulgações públicas são mescladas no app) */
   if (m === "GET" && p === "/v1/events") {
     const u = await authUser(req, env, db), uid = u.me.id;
@@ -357,7 +369,7 @@ async function route(req, env, db, url, ctx) {
 
   /* ---- dados financeiros reais do cliente (importação de arquivos; futuramente Open Finance) */
   if (p.startsWith("/v1/documents")) { const u = await authUser(req, env, db); return docRoute(m, p, body, q, u, db, req); }
-  if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || p.startsWith("/v1/alerts") || p.startsWith("/v1/finance/") || ["/v1/simulations", "/v1/assistant/query", "/v1/allocation", "/v1/data-quality"].includes(p) || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
+  if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || p.startsWith("/v1/alerts") || p.startsWith("/v1/finance/") || ["/v1/simulations", "/v1/assistant/query", "/v1/allocation", "/v1/data-quality", "/v1/notifications", "/v1/notifications/read"].includes(p) || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
     const u = await authUser(req, env, db);
     return finRoute(m, p, body, q, u, db, req);
   }
@@ -510,7 +522,7 @@ function corsHeaders(req, env) {
   const ok = allowed.includes(origin);
   return { "Access-Control-Allow-Origin": ok ? origin : allowed[0] || "*", Vary: "Origin",
            "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-           "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Correlation-ID,Idempotency-Key,X-Filename,X-Doc-Kind,X-Doc-Year",
+           "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Correlation-ID,Idempotency-Key,X-Filename,X-Doc-Kind,X-Doc-Year,X-Act-As",
            "Access-Control-Expose-Headers": "X-Correlation-ID,Content-Disposition", "Access-Control-Max-Age": "86400" };
 }
 function json(data, status, extra) {
@@ -723,7 +735,7 @@ async function finRoute(m, p, body, q, u, db, req) {
     }
   }
   if (m === "GET" && p === "/v1/finance/categories") return { items: CATEGORIES };
-  if (m !== "GET" && p !== "/v1/simulations" && p !== "/v1/assistant/query") throw new Problem(405, "Método não permitido", `${m} ${p}`);
+  if (m !== "GET" && p !== "/v1/simulations" && p !== "/v1/assistant/query" && p !== "/v1/notifications/read") throw new Problem(405, "Método não permitido", `${m} ${p}`);
   const [txsAll, accounts, holdings, tradesAll, overrides] = await Promise.all([...FIN_KINDS, "tx_override"].map(k => finLoad(db, uid, k)));
   const trades = tradesAll.filter(t => !t.superseded_by && t.status !== "voided");      // versões substituídas e anuladas ficam guardadas, fora dos cálculos
   const ovMap = Object.fromEntries(overrides.map(o => [o.id, o]));
@@ -818,7 +830,7 @@ async function finRoute(m, p, body, q, u, db, req) {
     const hasRv = holdings.some(h => ["acao", "fii", "etf", "bdr"].includes(h.asset_class));
     const positions = applyQuotes(holdings, quotes, hasRv ? {} : tax.positions_cost);
     const checklist = irpfChecklist({ year: +ref.slice(0, 4), accounts, holdings, txs, tax, docs: docsMeta, hasTrades: trades.some(t => t.date.startsWith(ref.slice(0, 4))), trades });
-    const a = assistantAnswer(qtext, { fin, port, tax, alerts: await alertsFor(), name: u.me.name, trades, positions, refDate: ref, documents: docsMeta, checklist,
+    const a = assistantAnswer(qtext, { fin, port, tax, alerts: await alertsFor(), name: u.me.name, trades, positions, refDate: ref, documents: docsMeta, checklist, holdings, watchlists: await finLoad(db, uid, "watchlist"),
       taxOpts: { knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs } });
     a.tool_calls.forEach(t => { t.latency_ms = Date.now() - t0; });
     return { id: "ans_" + randomToken(8).replace(/[-_]/g, ""), thread_id: str(body.thread_id, 40) || "thr_" + randomToken(6).replace(/[-_]/g, ""), question: qtext, created_at: nowIso(),
@@ -827,6 +839,19 @@ async function finRoute(m, p, body, q, u, db, req) {
   if (p === "/v1/alerts") {
     const items = await alertsFor(), limited = !ents.includes("radar");
     return { has_data: fin.has_data || port.has_data || tax.has_data, limited, items: limited ? items.slice(0, 3) : items };
+  }
+  /* central de notificações: alertas abertos + prazos pessoais próximos; lidas guardadas por id */
+  if (p === "/v1/notifications" || p === "/v1/notifications/read") {
+    const rk = "notif_read:" + uid, read = await kvGet(db, rk, []);
+    if (p === "/v1/notifications/read" && m === "POST") {
+      if (u.me.acting) throw new Problem(403, "Somente leitura", "Acesso delegado é somente leitura.");
+      const ids = (Array.isArray(body.ids) ? body.ids : []).map(x => str(x, 80)).filter(Boolean);
+      await kvSet(db, rk, [...new Set([...ids, ...read])].slice(0, 400)); return { read: ids.length };
+    }
+    const al = (await alertsFor()).filter(a => a.status !== "resolvido" && ["critico", "alto"].includes(a.severity)).map(a => ({ id: "ntf_" + a.id, kind: "alerta", severity: a.severity, title: a.title, detail: a.detail || a.description || "", at: a.due_date || ref, link: "#/alertas" }));
+    const ev = personalEvents({ tax, holdings, refDate: ref, horizonDays: 7, pastDays: 0 }).map(e => ({ id: ("ntf_" + e.kind + "_" + e.date + "_" + e.title.normalize("NFD").replace(/[^A-Za-z0-9]+/g, "")).slice(0, 72), kind: e.kind, severity: e.impact === "atenção" ? "alto" : "medio", title: e.title, detail: e.detail, at: e.date, link: e.link }));
+    const items = [...al, ...ev].map(n => ({ ...n, read: read.includes(n.id) }));
+    return { items, unread: items.filter(n => !n.read).length };
   }
   if (p === "/v1/dashboard") {
     const d = dashboardSummary({ name: u.me.name, fin, port, refDate: ref });

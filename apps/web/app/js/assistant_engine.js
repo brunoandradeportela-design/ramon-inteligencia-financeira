@@ -2,8 +2,10 @@
  * consulta o motor certo (finanças, patrimônio, imposto, radar, simulação) e escreve a resposta
  * só com números calculados — cada número vem com a evidência e a fonte. Não recomenda compra ou venda. */
 import { simulateSale } from "./sim_engine.js";
+import { tradeAnalytics } from "./trader_engine.js";
+import { eventsView } from "./event_engine.js";
 
-export const PATTERNS = {"injection": ["ignore (as |todas as |suas )?(instru|regras)", "ignore (all|previous|the above)", "system prompt", "prompt do sistema", "modo desenvolvedor", "developer mode", "jailbreak", "aja como (um )?consultor", "finja (que|ser)", "sem (as )?restri", "desative (o|os) (guardrail|filtro)", "revele (suas|as) instru"], "credential": ["\\bsenha\\b.*\\b(banco|conta|corretora)", "\\btoken\\b.*\\b(banco|seguranca)", "\\bminha senha\\b"], "advice": ["\\b(devo|deveria|vale a pena|compensa) (comprar|vender|investir|aplicar|resgatar|sair|entrar)", "\\b(qual|quais|que) (acao|acoes|ativo|ativos|fundo|fundos|fii|fiis|etf|cripto|investimento)s? (devo|deveria|comprar|vender|recomenda|indica|e melhor|sao melhores)", "\\b(recomend|indic|sugir|sugest)\\w* .*(acao|acoes|ativo|fundo|fii|carteira|investimento|compra|venda)", "\\bmonte (uma|minha) carteira", "\\bcarteira recomendada", "\\bonde (devo )?investir", "\\b(compro|vendo) (agora|hoje|ou)", "\\bmelhor (acao|investimento|fundo|ativo)", "\\bpreco[- ]alvo", "\\bvai (subir|cair|valorizar)", "\\bhora (certa|de) (comprar|vender)"], "intents": {"tributaria": ["impost", "\\bir\\b", "irpf", "darf", "tribut", "isen", "prejuiz", "aliquota", "day ?trade", "ganho de capital", "imposto de renda", "receita federal", "pgbl", "vgbl", "dedu"], "simulacao": ["simul", "cenario", "e se ", "what if", "comparar cenario", "compare"], "alertas": ["alerta", "atencao", "pendenc", "radar", "o que (merece|preciso)", "prioridade"], "patrimonio": ["patrimon", "carteira", "aloca", "posic", "concentra", "liquidez", "quanto (eu )?tenho", "onde esta", "investimento"], "financeira": ["gasto", "despes", "receita", "fluxo", "categoria", "orcamento", "saldo", "conta", "cartao", "recorren", "mudou", "economi"], "documento": ["document", "informe", "nota de corretagem", "comprovante", "upload", "arquivo"]}};
+export const PATTERNS = {"injection": ["ignore (as |todas as |suas )?(instru|regras)", "ignore (all|previous|the above)", "system prompt", "prompt do sistema", "modo desenvolvedor", "developer mode", "jailbreak", "aja como (um )?consultor", "finja (que|ser)", "sem (as )?restri", "desative (o|os) (guardrail|filtro)", "revele (suas|as) instru"], "credential": ["\\bsenha\\b.*\\b(banco|conta|corretora)", "\\btoken\\b.*\\b(banco|seguranca)", "\\bminha senha\\b"], "advice": ["\\b(devo|deveria|vale a pena|compensa) (comprar|vender|investir|aplicar|resgatar|sair|entrar)", "\\b(qual|quais|que) (acao|acoes|ativo|ativos|fundo|fundos|fii|fiis|etf|cripto|investimento)s? (devo|deveria|comprar|vender|recomenda|indica|e melhor|sao melhores)", "\\b(recomend|indic|sugir|sugest)\\w* .*(acao|acoes|ativo|fundo|fii|carteira|investimento|compra|venda)", "\\bmonte (uma|minha) carteira", "\\bcarteira recomendada", "\\bonde (devo )?investir", "\\b(compro|vendo) (agora|hoje|ou)", "\\bmelhor (acao|investimento|fundo|ativo)", "\\bpreco[- ]alvo", "\\bvai (subir|cair|valorizar)", "\\bhora (certa|de) (comprar|vender)"], "intents": {"tributaria": ["impost", "\\bir\\b", "irpf", "darf", "tribut", "isen", "prejuiz", "aliquota", "day ?trade", "ganho de capital", "imposto de renda", "receita federal", "pgbl", "vgbl", "dedu"], "simulacao": ["simul", "cenario", "e se ", "what if", "comparar cenario", "compare"], "alertas": ["alerta", "atencao", "pendenc", "radar", "o que (merece|preciso)", "prioridade"], "patrimonio": ["patrimon", "carteira", "aloca", "posic", "concentra", "liquidez", "quanto (eu )?tenho", "onde esta", "investimento"], "financeira": ["gasto", "despes", "receita", "fluxo", "categoria", "orcamento", "saldo", "conta", "cartao", "recorren", "mudou", "economi"], "documento": ["document", "informe", "nota de corretagem", "comprovante", "upload", "arquivo"], "trader": ["\\btrade", "trader", "operac", "taxa de acerto", "win rate", "payoff", "drawdown", "backtest", "estrategia", "resultado das (minhas )?operac"], "eventos": ["evento", "divulga", "fato relevante", "comunicado", "noticia", "agenda", "prazo", "vencimento", "aconteceu", "daily", "resumo do dia"]}};
 const DISCLAIMER = "Informação educativa calculada sobre os seus dados; não é recomendação de investimento nem substitui seu contador.";
 const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const brl = v => "R$ " + (+v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -20,7 +22,7 @@ export function classify(q) {
   if (/document|comprovante|recibo|informe de rend/.test(t)) return "documento";
   if (/vend\w*\s+(de\s+)?\d/.test(t) && /[a-z]{4}\d{1,2}/.test(t)) return "simulacao";
   let best = "geral", score = 0;
-  for (const k of ["simulacao", "tributaria", "alertas", "patrimonio", "financeira", "documento"]) {
+  for (const k of ["simulacao", "tributaria", "alertas", "patrimonio", "financeira", "documento", "trader", "eventos"]) {
     const n = PATTERNS.intents[k].filter(p => new RegExp(p).test(t)).length;
     if (n > score) { best = k; score = n; }
   }
@@ -40,7 +42,7 @@ export function parseSaleQuestion(q, refDate) {
 }
 
 export function answer(question, ctx) {
-  const { fin, port, tax, alerts = [], name = "", trades = [], positions = [], taxOpts = {}, refDate, documents = [], checklist = null } = ctx;
+  const { fin, port, tax, alerts = [], name = "", trades = [], positions = [], taxOpts = {}, refDate, documents = [], checklist = null, holdings = [], watchlists = [] } = ctx;
   const intent = classify(question);
   const out = { intent, guardrail: null, evidence: [], tool_calls: [], suggestions: [], confidence: 1, consistency_ok: true };
   const tool = (t, ms = 0) => out.tool_calls.push({ tool: t, status: "ok", latency_ms: ms });
@@ -137,6 +139,26 @@ export function answer(question, ctx) {
     }
     return say(documents.length ? `Você tem ${documents.length} documento(s) guardado(s): ${documents.slice(0, 5).map(d => d.title).join(", ")}. Notas de corretagem e extratos devem ser enviados em Importar dados para entrarem nos cálculos.`
       : "Nenhum documento guardado ainda. Em Documentos você guarda informes de rendimentos, notas de corretagem, recibos e comprovantes; extratos e relatórios da B3 vão em Importar dados para entrarem nos cálculos.");
+  }
+
+  if (intent === "trader") {
+    tool("trade_analytics");
+    const a = tradeAnalytics(trades, { tax });
+    out.suggestions = ["Quanto imposto pago se vender?", "Quais eventos vêm por aí?", "Quais alertas existem?"];
+    if (!a.totals.trades) return say(a.open.length ? `Você tem ${a.open.length} posição(ões) aberta(s) registrada(s) e nenhuma operação encerrada ainda. Em Trader Intelligence você acompanha resultado, custos e impacto tributário.` : "Ainda não há operações registradas. Importe notas de corretagem ou registre operações em Trader Intelligence.");
+    out.evidence = [ev("Operações encerradas", a.totals.trades, String(a.totals.trades), "Trader Engine"), ev("Resultado líquido", a.totals.net_pnl, brl(a.totals.net_pnl), "Trader Engine"),
+      ev("Custos", a.totals.costs, brl(a.totals.costs), "Trader Engine"), ev("Imposto estimado das operações", a.totals.tax_estimate, brl(a.totals.tax_estimate), "Trader Engine (estimativa)"),
+      ev("Drawdown máximo", a.max_drawdown, brl(a.max_drawdown), "Trader Engine")];
+    return say(`Nas ${a.totals.trades} operações encerradas: resultado bruto ${brl(a.totals.gross_pnl)}, custos ${brl(a.totals.costs)}, líquido ${brl(a.totals.net_pnl)}. Taxa de acerto ${Math.round(a.win_rate * 100)}%${a.payoff ? `, payoff ${a.payoff.toFixed(2).replace(".", ",")}` : ""}, drawdown máximo ${brl(a.max_drawdown)}. Impacto tributário estimado ${brl(a.totals.tax_estimate)} — o valor definitivo é o da Tributação. Isto descreve o passado; não é recomendação.`);
+  }
+
+  if (intent === "eventos") {
+    tool("events");
+    const e = eventsView({ tax, holdings, trades, watchlists, refDate });
+    out.evidence = e.items.slice(0, 6).map(i => ev(i.title, i.date, i.date.split("-").reverse().join("/"), i.source));
+    out.suggestions = ["Quanto imposto pago se vender?", "Quais alertas existem?", "Como está minha concentração?"];
+    const tail = e.exposure.length ? ` Divulgações públicas (CVM) e notícias dos seus ${e.exposure.length} ativo(s) ficam em Trader Intelligence → Divulgações e em Notícias, com link para a fonte original.` : "";
+    return say(e.items.length ? `Próximos eventos seus: ${e.items.slice(0, 4).map(i => `${i.date.split("-").reverse().join("/")} — ${i.title}`).join("; ")}.${tail}` : `Nenhum prazo pessoal (DARF ou vencimento de título) nos próximos dias.${tail}`);
   }
 
   // visão geral

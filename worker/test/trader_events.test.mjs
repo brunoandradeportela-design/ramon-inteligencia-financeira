@@ -47,3 +47,21 @@ test("eventos: DARF aberto, vencimento de título, exposição e divulgações s
   assert.equal(personalEvents({ tax: null, holdings: [], refDate: "2026-10-06" }).length, 0);
   assert.deepEqual(exposureOf({}), []);
 });
+
+import { dailyBriefing, personalizeNews } from "../../apps/web/app/js/daily_engine.js";
+test("AURION Daily determinístico, sem recomendação, voz em reais; notícias personalizadas", () => {
+  const inp = { date: "2026-10-06", dashboard: { has_data: true, greeting: "Ana", net_worth: { total: "125000.50", variation_pct: 0.031, series: [1, 2] }, liquidity: { months_covered: 4.2 },
+    tax: { estimated: "300.00", next_darf: { codigo: "6015", competencia: "2026-09", valor: "300.00", vencimento: "2026-10-30", status: "aberto" } }, alerts: { open: 2, critical: 1 } },
+    events: { items: [{ date: "2026-10-10", kind: "vencimento", title: "Vencimento: CDB", impact: "liquidez" }], exposure: ["PETR4"] },
+    indices: { selic_meta: { value: 0.15 }, source: "Banco Central do Brasil — SGS" },
+    news: [{ title: "Copom e juros", tags: ["juros"], source: "Agência Brasil", url: "u1" }, { title: "PETR4 anuncia", tags: [], tickers: ["PETR4"], source: "CVM", url: "u2" }, { title: "Futebol", tags: [], source: "X", url: "u3" }],
+    disclosures: [{ company: "Petrobras", tickers: ["PETR4"], published_at: "2026-10-05", category_label: "Fato relevante", subject: "Dividendos" }], classes: ["renda_fixa"] };
+  const a = dailyBriefing(inp), b = dailyBriefing(inp);
+  assert.deepEqual(a, b);
+  assert.deepEqual(a.sections.map(s => s.id), ["patrimonio", "tributos", "agenda", "alertas", "mercado", "divulgacoes", "noticias"]);
+  assert.match(a.opening, /Bom dia, Ana/); assert.match(a.voice_script, /125\.000,50 reais/); assert.ok(!/R\$/.test(a.voice_script));
+  assert.ok(!/(compre|venda|recomendamos)/i.test(a.sections.map(s => s.text).join(" "))); assert.match(a.disclaimer, /não é recomendação/i);
+  const n = personalizeNews(inp.news, { exposure: ["PETR4"], classes: ["renda_fixa"] });
+  assert.deepEqual(n.map(x => x.url), ["u2", "u1", "u3"]); assert.equal(n[2].relevance, 0);
+  assert.match(dailyBriefing({ date: "2026-10-06" }).sections[0].text, /Importe/);
+});

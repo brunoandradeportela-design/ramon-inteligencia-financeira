@@ -118,7 +118,7 @@ async function revokeAll(db, uid, exceptTh = null) {
 
 /* ------------------------------------------------------------------ e-mail (adapter; desligado sem credencial) */
 export const mailConfigured = env => !!(env.RESEND_API_KEY && env.MAIL_FROM);
-async function sendMail(env, to, subject, html) {
+export async function sendMail(env, to, subject, html) {
   const r = await fetch((env.RESEND_BASE_URL || "https://api.resend.com") + "/emails", { method: "POST", signal: AbortSignal.timeout(10000),
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: env.MAIL_FROM, to: [to], subject, html }) });
   if (!r.ok) throw new Error("falha no envio de e-mail: HTTP " + r.status);

@@ -5,6 +5,7 @@ import { documentsReal } from "./views_docs.js";
 import { loginReal, recoverView, resetView, securitySection, privacyReal } from "./views_identity.js";
 import { wireTxEdits, allocation, dataHubSection } from "./views_finance2.js";
 import { taxExtras } from "./views_tax2.js";
+import { settingsExtras } from "./views_hub.js";
 export { allocation };
 export { recoverView, resetView };
 import { onLogin, themeSwitch, theme } from "./app.js";
@@ -652,11 +653,13 @@ export async function settings(el, r, { me }) {
       <div style="margin-top:14px">${themeSwitch()}</div></section>
     <section class="card"><h3>Perfil</h3><ul class="stack small" style="margin-top:10px"><li><b>Nome:</b> ${esc(me.name)}</li><li><b>E-mail:</b> ${esc(me.email)}</li><li><b>Profissão:</b> ${esc(me.profession || "—")}</li>${me.roles?.includes("owner") ? `<li><b>Papel:</b> dono e administrador</li><li><b>CPF:</b> ${me.profile?.cpf_configured ? esc(me.profile.cpf_masked) + " (configurado no servidor)" : "configurado apenas no servidor (variável RAMON_OWNER_CPF)"}</li>` : ""}<li><b>Telefone:</b> ${esc(me.phone || "—")}</li><li><b>Plano:</b> ${esc(me.plan)}</li>
       <li><b>Objetivos:</b> ${esc((me.profile?.objetivos || []).join(", ") || "—")}</li></ul></section>
-    <section class="card"><h3>Notificações</h3><label class="check" style="margin-top:10px"><input type="checkbox" checked> Alertas no aplicativo</label>
-      <label class="check" style="margin-top:8px"><input type="checkbox"> Resumo semanal por e-mail</label><p class="note">Apenas alertas de severidade “atenção” ou maior; alertas repetidos não são reenviados.</p></section>
+    ${HAS_API ? "" : `<section class="card"><h3>Notificações</h3><label class="check" style="margin-top:10px"><input type="checkbox" checked> Alertas no aplicativo</label>
+      <label class="check" style="margin-top:8px"><input type="checkbox"> Resumo semanal por e-mail</label><p class="note">Apenas alertas de severidade “atenção” ou maior; alertas repetidos não são reenviados.</p></section>`}
     <section class="card"><h3>Sobre</h3><p class="small muted" style="margin-top:8px">AURION · Inteligência Financeira e Tributária. Consolida, analisa, simula, alerta e explica. Não é corretora, não executa ordens e não faz recomendação individualizada de investimento.</p></section></div>
-    <div id="secbox"></div>`;
+    <div id="hubbox"></div><div id="secbox"></div>`;
   theme.apply();
+  if (me.acting) return;
+  settingsExtras(el.querySelector("#hubbox"), me).catch(() => {});
   securitySection(el.querySelector("#secbox"));
 }
 

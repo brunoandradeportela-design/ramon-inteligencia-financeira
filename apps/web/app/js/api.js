@@ -9,7 +9,7 @@ export const DEMO = !BASE;
 /* Modo híbrido (API na nuvem): contas, CRM e pagamentos são reais; os módulos de análise
    (finanças, impostos, carteira, simulações) usam o snapshot de demonstração até o Open Finance. */
 export const ANALYTICS_DEMO = true;
-const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing|imports|market|tax\/settings|tax\/darfs|tax\/rules|tax\/calculations|simulations|openfinance|documents|assistant|security|sessions|audit|privacy|consents|institutions|data-quality|allocation|trader|events|finance\/categories|finance\/transactions\/tra_[A-Za-z0-9_-]+|alerts\/alr_[a-f0-9]+)(\/|\?|$)/.test(p);
+const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing|imports|market|tax\/settings|tax\/darfs|tax\/rules|tax\/calculations|simulations|openfinance|documents|assistant|security|sessions|audit|privacy|consents|institutions|data-quality|allocation|trader|events|notifications|sharing|integrations|voice|analytics|finance\/categories|finance\/transactions\/tra_[A-Za-z0-9_-]+|alerts\/alr_[a-f0-9]+)(\/|\?|$)/.test(p);
 /* painéis que usam os dados importados pelo cliente; sem dados próprios, mostram o exemplo */
 const HYBRID_DATA = p => !!BASE && /^\/v1\/(finance\/summary|finance\/transactions|portfolio\/consolidated|dashboard|tax\/summary|tax\/events|alerts)(\?|$)/.test(p);
 async function hybridGet(p) {
@@ -30,11 +30,17 @@ export const session = {
   set(t) { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {} },
 };
 
+/* leitura delegada (Professional Hub): o profissional vê os dados de um cliente que concedeu acesso */
+export const actAs = {
+  get id() { try { return sessionStorage.getItem("aurion.actas"); } catch { return null; } },
+  get name() { try { return sessionStorage.getItem("aurion.actas.name"); } catch { return null; } },
+  set(id, name) { try { if (id) { sessionStorage.setItem("aurion.actas", id); sessionStorage.setItem("aurion.actas.name", name || ""); } else { sessionStorage.removeItem("aurion.actas"); sessionStorage.removeItem("aurion.actas.name"); } } catch {} },
+};
 async function http(method, path, body, headers = {}) {
   const res = await fetch(BASE + path, {
     method, body: body !== undefined ? JSON.stringify(body) : undefined,
     headers: { "Content-Type": "application/json", "X-Correlation-ID": cid(),
-               ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}), ...headers },
+               ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}), ...(actAs.id && !/^\/v1\/(auth|sharing)/.test(path) ? { "X-Act-As": actAs.id } : {}), ...headers },
   });
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({ title: "Erro", detail: res.statusText, status: res.status }));
@@ -57,7 +63,7 @@ function classify(q, pats) {
   const any = list => list.some(p => new RegExp(p.replace(/\\b/g, "\\b")).test(t));
   if (any(pats.injection) || any(pats.credential)) return any(pats.injection) ? "bloqueado" : "credencial";
   if (any(pats.advice)) return "investimento_individual";
-  const order = ["simulacao", "tributaria", "alertas", "patrimonio", "financeira", "documento"];
+  const order = ["simulacao", "tributaria", "alertas", "patrimonio", "financeira", "documento"].filter(k => pats.intents[k]);
   let best = "geral", score = 0;
   for (const k of order) { const n = pats.intents[k].filter(p => new RegExp(p).test(t)).length; if (n > score) { best = k; score = n; } }
   return best;
@@ -295,7 +301,7 @@ export const api = {
     return data;
   },
   download: async p => {
-    const res = await fetch(BASE + p, { headers: session.token ? { Authorization: `Bearer ${session.token}` } : {} });
+    const res = await fetch(BASE + p, { headers: { ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}), ...(actAs.id ? { "X-Act-As": actAs.id } : {}) } });
     if (!res.ok) throw new ApiError(await res.json().catch(() => ({ title: "Erro", detail: res.statusText, status: res.status })));
     return res.blob();
   },   // simulador de vendas: continua sobre a grade pré-calculada do exemplo

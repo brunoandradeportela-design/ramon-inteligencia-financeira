@@ -1,24 +1,25 @@
 import { importData } from "./views_import.js";
 /* Shell da aplicação: roteamento por hash, sessão, tema (Claro/Escuro/Sistema) e navegação. */
-import { api, DEMO, ANALYTICS_DEMO, session, ApiError } from "./api.js";
+import { api, DEMO, ANALYTICS_DEMO, HAS_API, session, ApiError, actAs } from "./api.js";
 import { esc, icon, errorBox, loading } from "./ui.js";
 import * as V from "./views.js";
 import { crm } from "./views_crm.js";
 import { payments } from "./views_payments.js";
 import { trader } from "./views_trader.js";
+import { news, notifications } from "./views_hub.js";
 
 const NAV = [
   ["dashboard", "Visão Geral", "home"], ["financas", "Finanças", "finance"], ["patrimonio", "Patrimônio", "wealth"], ["alocacao", "Minha Alocação", "wealth"],
   ["tributacao", "Tributação", "tax"], ["simulador", "Simulador", "sim"], ["alertas", "Radar", "bell"],
-  ["assistente", "Inteligência", "ai"], ["trader", "Trader Intelligence", "sim"], ["documentos", "Documentos", "doc"], ["importar", "Importar dados", "doc"], ["conexoes", "Conexões", "link"],
+  ["assistente", "Inteligência", "ai"], ["noticias", "Notícias", "doc"], ["trader", "Trader Intelligence", "sim"], ["documentos", "Documentos", "doc"], ["importar", "Importar dados", "doc"], ["conexoes", "Conexões", "link"],
 ];
 const TITLES = Object.fromEntries(NAV.map(([k, t]) => [k, t]));
-Object.assign(TITLES, { crm: "CRM · Clientes", pagamentos: "Pagamentos", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
+Object.assign(TITLES, { notificacoes: "Notificações", crm: "CRM · Clientes", pagamentos: "Pagamentos", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
 const PUBLIC = { entrar: V.login, cadastro: V.register, recuperar: V.recoverView, redefinir: V.resetView };
 const ROUTES = {
   dashboard: V.dashboard, patrimonio: V.portfolio, financas: V.finance, tributacao: V.tax, simulador: V.simulator,
   alertas: V.alerts, documentos: V.documents, conexoes: V.connections, assistente: V.assistant, planos: V.plans,
-  configuracoes: V.settings, privacidade: V.privacy, importar: importData, alocacao: V.allocation, trader,
+  configuracoes: V.settings, privacidade: V.privacy, importar: importData, alocacao: V.allocation, trader, noticias: news, notificacoes: notifications,
 };
 const ADMIN_ROUTES = { ...ROUTES, crm, pagamentos: payments };
 
@@ -46,8 +47,11 @@ document.addEventListener("click", e => {
   if (b) theme.set(b.dataset.themeBtn);
   if (e.target.closest("[data-burger]")) document.body.classList.toggle("nav-open");
   if (e.target.closest(".navi")) document.body.classList.remove("nav-open");
-  if (e.target.closest("[data-logout]")) { api.post("/v1/auth/logout").catch(() => {}); session.set(null); me = null; location.hash = "#/entrar"; }
+  if (e.target.closest("[data-exit-actas]")) { e.preventDefault(); actAs.set(null); location.hash = "#/configuracoes"; location.reload(); }
+  if (e.target.closest("[data-logout]")) { actAs.set(null); api.post("/v1/auth/logout").catch(() => {}); session.set(null); me = null; location.hash = "#/entrar"; }
 });
+
+document.addEventListener("aurion:notif", async () => { alertsOpen = (await api.get("/v1/notifications").catch(() => ({ unread: 0 }))).unread; updateShell(parse().name); });
 
 /* ------------------------------------------------------------ roteador */
 let me = null, alertsOpen = 0;
@@ -71,7 +75,8 @@ async function render() {
     const view = admin ? ADMIN_ROUTES[r.name] : (ROUTES[r.name] || ROUTES.dashboard);
     const sh = document.querySelector(".shell");
     if (!sh || sh.dataset.role !== (admin ? "admin" : "client")) root.innerHTML = shell(admin);
-    alertsOpen = (await api.get("/v1/alerts").catch(() => ({ items: [] }))).items.filter(a => a.status === "novo").length;
+    alertsOpen = HAS_API && !admin ? (await api.get("/v1/notifications").catch(() => ({ unread: 0 }))).unread
+      : (await api.get("/v1/alerts").catch(() => ({ items: [] }))).items.filter(a => a.status === "novo").length;
     updateShell(r.name);
     const main = document.getElementById("view");
     main.innerHTML = loading();
@@ -104,13 +109,14 @@ function shell(admin = false) {
     </aside>
     <div class="main">
       ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note"><b>Seus dados:</b> os painéis mostram os seus números quando você envia arquivos em <a href="#/importar">Importar dados</a> ou conecta seu banco em <a href="#/conexoes">Conexões</a>; até lá, exibem um exemplo.</div>` : ""}
+      ${actAs.id ? `<div class="demo-bar" role="note"><b>Somente leitura:</b> você está vendo os dados de ${esc(actAs.name || "um cliente")}, que concedeu acesso. Cada consulta fica registrada na auditoria do cliente. <a href="#" data-exit-actas>Voltar à minha conta</a></div>` : ""}
       <header class="top">
         <button class="icon-btn burger" data-burger aria-label="Abrir menu">${icon("menu")}</button>
         <h1 data-title>Início</h1>
         <div class="top__spacer"></div>
         <span class="chip hide-m" title="Data de referência dos cálculos">${DEMO ? "Set 2026" : (() => { const s = new Date(Date.now() - 3 * 3600e3).toLocaleDateString("pt-BR", { month: "short", year: "numeric", timeZone: "UTC" }).replace(".", "").replace(" de ", " "); return s.charAt(0).toUpperCase() + s.slice(1); })()}</span>
         ${themeSwitch()}
-        <a class="icon-btn" href="#/alertas" aria-label="Alertas">${icon("bell")}<span class="dot" data-dot hidden></span></a>
+        <a class="icon-btn" href="${HAS_API && !admin ? "#/notificacoes" : "#/alertas"}" aria-label="Notificações">${icon("bell")}<span class="dot" data-dot hidden></span></a>
         <div class="avatar" title="${esc(me?.name || "")}" aria-label="Usuário ${esc(me?.name || "")}">${esc((me?.name || "?")[0])}</div>
         <button class="icon-btn" data-logout aria-label="Sair">${icon("logout")}</button>
       </header>
