@@ -76,7 +76,14 @@ Como reproduzir:
   - A nota só é importada depois da conferência do cliente.
   - Testes: `doc_extract.test.mjs`, `docextract_e2e` e um teste com PDF real lido pelo pdf.js no navegador.
 
+- **Segurança (§24).**
+  - Limite de requisições por IP e grupo de rota, com resposta 429.
+  - Aviso de acesso de aparelho novo no sino, na auditoria e por e-mail (`security_e2e`).
+  - Plano de incidentes em `docs/INCIDENTES.md`.
+- **Observabilidade (§25–26).** Painel Operações com os SLOs (`ops_e2e`).
+
 ### Ainda abertos
+- **Limite de requisições global.** O limitador atual conta por instância do Worker; o limite global entre regiões exige o Rate Limiting do Cloudflare no plano pago.
 - **OCR de documentos escaneados (imagem).** Ainda não é feito; depende de provedor ou plano pago.
 - **Limite de CPU do plano gratuito do Workers (10 ms).** Contas com mais de cerca de 2.000 negociações ficam no limite. A solução definitiva é o Workers Paid (5 dólares por mês, até 30 s de CPU), sem mudança de código.
 - **Escala dos e-mails.** O lote atual atende até cerca de 140 clientes por manhã (6 por rodada, a cada 15 minutos, das 7h às 13h). Acima disso, é preciso o Workers Paid ou o Cloudflare Queues.
