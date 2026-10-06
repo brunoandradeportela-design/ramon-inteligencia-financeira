@@ -3,9 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fintechs — Plataforma</title>
+<title>AURION — Plataforma</title>
 <meta name="robots" content="noindex">
 <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-180.png">
+<meta name="theme-color" content="#020b16">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="../css/fonts.css">
 <link rel="stylesheet" href="css/app.css">
 <script>
@@ -17,6 +21,7 @@
 </head>
 <body>
 <div id="root" aria-live="polite"><div class="content"><div class="skeleton" style="width:40%"></div></div></div>
+<script>if ("serviceWorker" in navigator && location.protocol === "https:") addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));</script>
 <noscript>Esta aplicação requer JavaScript.</noscript>
 </body>
 </html>

@@ -12,6 +12,8 @@
  *   BRAPI_TOKEN            (opcional) token gratuito da brapi.dev — reserva para as cotações se o Yahoo falhar
  * Variáveis (wrangler.toml): OWNER_EMAIL, OWNER_NAME, ALLOWED_ORIGINS
  */
+import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
+import { Resp, Problem, nowIso, today, money, enc, b64u, randomToken, sha256, safeEqual, hashPassword, checkPassword, kvGet, kvSet, str, numOrNull, isoDate, ageH } from "./shared.js";
 import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize } from "../../apps/web/app/js/fin_engine.js";
 import { computeTax, taxDashboard } from "../../apps/web/app/js/tax_engine.js";
 import { buildAlerts } from "../../apps/web/app/js/alert_engine.js";
@@ -39,33 +41,6 @@ const SESSION_DAYS = 30;
 const OWNER_ID = "usr_owner";
 
 /* ------------------------------------------------------------------ utilitários */
-class Resp { constructor(status, body = null) { this.status = status; this.body = body; } }
-class Problem extends Error {
-  constructor(status, title, detail, extra = {}) { super(detail); this.status = status; this.title = title; this.detail = detail; this.extra = extra; }
-}
-const nowIso = () => new Date().toISOString();
-const today = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);   // data de Brasília
-const money = v => (Math.round(Number(v || 0) * 100) / 100).toFixed(2);
-const enc = new TextEncoder();
-const b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const randomToken = (n = 32) => b64u(crypto.getRandomValues(new Uint8Array(n)));
-async function sha256(s) { return b64u(await crypto.subtle.digest("SHA-256", enc.encode(s))); }
-function safeEqual(a, b) {
-  a = String(a || ""); b = String(b || "");
-  let diff = a.length ^ b.length;
-  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
-  return diff === 0;
-}
-async function hashPassword(pw, salt = randomToken(16), iter = 100000) {
-  const key = await crypto.subtle.importKey("raw", enc.encode(pw), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: enc.encode(salt), iterations: iter }, key, 256);
-  return `pbkdf2$${iter}$${salt}$${b64u(bits)}`;
-}
-async function checkPassword(pw, stored) {
-  const [, iter, salt] = String(stored || "").split("$");
-  if (!iter) return false;
-  return safeEqual(await hashPassword(pw, salt, +iter), stored);
-}
 
 /* ------------------------------------------------------------------ banco (D1) */
 const SCHEMA = [
@@ -79,6 +54,7 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS doc_chunks (doc_id TEXT NOT NULL, n INTEGER NOT NULL, bytes BLOB NOT NULL, PRIMARY KEY (doc_id, n))",
   "CREATE TABLE IF NOT EXISTS quotes (ticker TEXT PRIMARY KEY, data TEXT NOT NULL, fetched_at TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS fin_items_import ON fin_items (user_id, import_id)",
+  ...IDENTITY_SCHEMA,
 ];
 let schemaReady = false;
 async function ensureSchema(db) {
@@ -86,8 +62,6 @@ async function ensureSchema(db) {
   await db.batch(SCHEMA.map(s => db.prepare(s)));
   schemaReady = true;
 }
-const kvGet = async (db, k, d = null) => { const r = await db.prepare("SELECT v FROM kv WHERE k=?").bind(k).first(); return r ? JSON.parse(r.v) : d; };
-const kvSet = (db, k, v) => db.prepare("INSERT INTO kv (k,v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v").bind(k, JSON.stringify(v)).run();
 async function getCustomer(db, id) { const r = await db.prepare("SELECT data FROM users WHERE id=?").bind(id).first(); return r ? JSON.parse(r.data) : null; }
 async function getCustomerByEmail(db, email) { const r = await db.prepare("SELECT data FROM users WHERE email=?").bind(email).first(); return r ? JSON.parse(r.data) : null; }
 async function allCustomers(db) { const { results } = await db.prepare("SELECT data FROM users").all(); return results.map(r => JSON.parse(r.data)); }
@@ -255,9 +229,11 @@ async function authUser(req, env, db, { required = true } = {}) {
   if (token) {
     const s = await db.prepare("SELECT user_id, expires_at FROM sessions WHERE token_hash=?").bind(await sha256(token)).first();
     if (s && s.expires_at > nowIso()) {
-      if (s.user_id === OWNER_ID) return { owner: true, me: ownerMe(env, await kvGet(db, "owner_theme", "system")) };
+      const sid = await sha256(token);
+      await touchSession(db, sid);
+      if (s.user_id === OWNER_ID) return { owner: true, sid, me: ownerMe(env, await kvGet(db, "owner_theme", "system")) };
       const c = await getCustomer(db, s.user_id);
-      if (c) return { owner: false, c, me: meFromCustomer(c) };
+      if (c) return { owner: false, sid, c, me: meFromCustomer(c) };
     }
   }
   if (required) throw new Problem(401, "Não autenticado", "Sessão ausente ou expirada. Entre novamente.");
@@ -268,12 +244,7 @@ async function requireOwner(req, env, db) {
   if (!u.owner) throw new Problem(403, "Acesso negado", "Área exclusiva do administrador.");
   return u;
 }
-async function newSession(db, userId) {
-  const token = randomToken();
-  const exp = new Date(Date.now() + SESSION_DAYS * 864e5).toISOString();
-  await db.prepare("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").bind(await sha256(token), userId, exp).run();
-  return token;
-}
+const newSession = (db, userId, req) => idNewSession(db, userId, req);
 async function throttle(db, email) {
   const r = await db.prepare("SELECT n, until FROM login_fails WHERE email=?").bind(email).first();
   if (r?.until && r.until > nowIso()) throw new Problem(429, "Muitas tentativas", "Muitas tentativas de login. Aguarde 15 minutos.");
@@ -295,38 +266,20 @@ async function route(req, env, db, url, ctx) {
 
   if (p === "/health" || p === "/") return { status: "ok", service: "aurion-api", time: nowIso(), gateway: !!env.ASAAS_API_KEY };
 
-  /* ---- autenticação */
-  if (m === "POST" && p === "/v1/auth/register") {
-    const errors = validateSignup(body);
-    if (errors.length) throw new Problem(422, "Dados inválidos", "Cadastro inválido", { errors });
-    const email = body.email.trim().toLowerCase();
-    if (email === ownerEmail(env) || await getCustomerByEmail(db, email)) throw new Problem(409, "Conflito", "Já existe uma conta com este e-mail.");
-    const c = localCustomer({ ...body, plan: ["pro", "premium"].includes(body.plan) ? body.plan : "free" });
-    c.id = "usr_" + randomToken(12).replace(/[-_]/g, "").slice(0, 16).toLowerCase();
-    c.origin = body.origin || "site"; c.tags = [];
-    c.timeline = [{ at: c.created_at, kind: "cadastro", text: `Cadastro no plano ${c.plan_name} (origem: ${c.origin})` }];
-    recompute(c);
-    await db.prepare("INSERT INTO users (id,email,pw,data,created_at) VALUES (?,?,?,?,?)")
-      .bind(c.id, c.email, await hashPassword(body.password), JSON.stringify(c), c.created_at).run();
-    return new Resp(201, { token: await newSession(db, c.id), user: meFromCustomer(c) });
+  /* ---- identidade: login por e-mail/CPF, MFA, recuperação, sessões, auditoria (identity.js) */
+  const D = { OWNER_ID, ownerEmail, ownerMe, getCustomer, getCustomerByEmail, saveCustomer, meFromCustomer, validateSignup, localCustomer, recompute, docValid, throttle, loginFailed, authUser };
+  if (/^\/v1\/(auth\/(register|login|mfa\/verify|recover|reset|logout|password)|security|sessions|audit$|admin\/users\/[^/]+\/reset-link$|admin\/audit$)/.test(p)) {
+    const out = await identityRoute(m, p, body, q, req, env, db, D);
+    if (out !== null) return out;
   }
-  if (m === "POST" && p === "/v1/auth/login") {
-    const email = String(body.email || "").trim().toLowerCase(), pw = String(body.password || "");
-    await throttle(db, email);
-    if (email === ownerEmail(env)) {
-      const stored = await kvGet(db, "owner_pw");                       // senha definida pelo próprio Ramon no primeiro acesso
-      if (!env.OWNER_PASSWORD && !stored)
-        throw new Problem(409, "Primeiro acesso do administrador", "Defina sua senha com o código de ativação.", { code: "owner_setup_required" });
-      const ok = stored ? await checkPassword(pw, stored) : safeEqual(pw, env.OWNER_PASSWORD);
-      if (!ok) { await loginFailed(db, email); throw new Problem(401, "Não autenticado", "E-mail ou senha incorretos."); }
-      await db.prepare("DELETE FROM login_fails WHERE email=?").bind(email).run();
-      return { token: await newSession(db, OWNER_ID), user: ownerMe(env, await kvGet(db, "owner_theme", "system")) };
-    }
-    const row = await db.prepare("SELECT pw, data FROM users WHERE email=?").bind(email).first();
-    if (!row || !(await checkPassword(pw, row.pw))) { await loginFailed(db, email); throw new Problem(401, "Não autenticado", "E-mail ou senha incorretos."); }
-    await db.prepare("DELETE FROM login_fails WHERE email=?").bind(email).run();
-    const c = JSON.parse(row.data); c.last_login_at = nowIso(); await saveCustomer(db, c);
-    return { token: await newSession(db, c.id), user: meFromCustomer(c) };
+  if (m === "GET" && p === "/v1/privacy/export") { const u = await authUser(req, env, db); await audit(db, req, { user_id: u.me.id, actor: u.me.id, action: "dados.exportados", resource: "user" }); return privacyExport(db, u.me.id, D); }
+  if (m === "POST" && p === "/v1/privacy/delete-account") {
+    const u = await authUser(req, env, db);
+    if (u.owner) throw new Problem(409, "Não permitido", "A conta do administrador não pode ser eliminada por aqui.");
+    const row = await db.prepare("SELECT pw FROM users WHERE id=?").bind(u.me.id).first();
+    if (!(await checkPassword(String(body.password || ""), row?.pw))) throw new Problem(401, "Senha incorreta", "Confirme com a sua senha para eliminar a conta.");
+    await privacyDelete(db, req, u.me.id, D);
+    return new Resp(204);
   }
   /* primeiro acesso do dono: código de ativação de uso único (só o hash fica no código) → Ramon define a própria senha */
   if (m === "POST" && p === "/v1/auth/owner/setup") {
@@ -337,12 +290,8 @@ async function route(req, env, db, url, ctx) {
     if (!env.OWNER_SETUP_HASH || !safeEqual(await sha256(code), env.OWNER_SETUP_HASH)) { await loginFailed(db, "setup:" + email); throw new Problem(401, "Código inválido", "Código de ativação incorreto."); }
     if (pw.length < 10 || !/\d/.test(pw) || !/[a-z]/i.test(pw)) throw new Problem(422, "Senha fraca", "Use 10+ caracteres, com letras e números.");
     await kvSet(db, "owner_pw", await hashPassword(pw));
-    return new Resp(201, { token: await newSession(db, OWNER_ID), user: ownerMe(env, await kvGet(db, "owner_theme", "system")) });
-  }
-  if (m === "POST" && p === "/v1/auth/logout") {
-    const h = req.headers.get("Authorization") || "";
-    if (h.toLowerCase().startsWith("bearer ")) await db.prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(h.slice(7).trim())).run();
-    return new Resp(204);
+    await audit(db, req, { user_id: OWNER_ID, actor: OWNER_ID, action: "admin.primeiro_acesso", resource: "user" });
+    return new Resp(201, { token: await newSession(db, OWNER_ID, req), user: ownerMe(env, await kvGet(db, "owner_theme", "system")) });
   }
   if (m === "GET" && p === "/v1/me") return (await authUser(req, env, db)).me;
   if (p === "/v1/theme-preference") {
@@ -358,7 +307,7 @@ async function route(req, env, db, url, ctx) {
   if (m === "POST" && p === "/v1/webhooks/pluggy") return pluggyWebhook(env, db, body, q, ctx);
   if (p === "/v1/openfinance" || p.startsWith("/v1/openfinance/")) {
     const u = await authUser(req, env, db);
-    return ofRoute(m, p, body, u, env, db, url);
+    return ofRoute(m, p, body, u, env, db, url, req);
   }
 
   /* ---- mercado (público): índices do Banco Central e situação das cotações */
@@ -373,7 +322,7 @@ async function route(req, env, db, url, ctx) {
   if (p.startsWith("/v1/documents")) { const u = await authUser(req, env, db); return docRoute(m, p, body, q, u, db, req); }
   if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || p.startsWith("/v1/alerts") || p === "/v1/simulations" || p === "/v1/assistant/query" || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
     const u = await authUser(req, env, db);
-    return finRoute(m, p, body, q, u, db);
+    return finRoute(m, p, body, q, u, db, req);
   }
 
   /* ---- assinatura do cliente */
@@ -468,7 +417,9 @@ async function route(req, env, db, url, ctx) {
         if (Array.isArray(body.tags)) c.tags = body.tags.slice(0, 20).map(t => String(t).slice(0, 30));
         if (body.next_action !== undefined) c.next_action = String(body.next_action || "").slice(0, 200);
         if (body.next_action_date !== undefined) c.next_action_date = body.next_action_date || null;
-        await saveCustomer(db, c); const { billing, ...rest } = c; return rest;
+        await saveCustomer(db, c);
+        await audit(db, req, { user_id: c.id, actor: OWNER_ID, action: "admin.cliente_alterado", resource: "crm", entity_id: c.id, meta: body });
+        const { billing, ...rest } = c; return rest;
       }
       if (cm[2] === "notes" && m === "POST") {
         const text = String(body.text || "").trim();
@@ -487,7 +438,9 @@ async function route(req, env, db, url, ctx) {
         c.timeline = [{ at: pay.date, kind: "pagamento", text: `Pagamento ${pay.status}: R$ ${pay.amount} via ${pay.method} (${pay.period})` }, ...(c.timeline || [])];
         if (pay.status === "pago") { c.subscription.status = "ativa"; c.subscription.next_due = addMonth(c.subscription.next_due || pay.date); }
         else if (pay.status === "atrasado") c.subscription.status = "inadimplente";
-        await saveCustomer(db, c); return pay;
+        await saveCustomer(db, c);
+        await audit(db, req, { user_id: c.id, actor: OWNER_ID, action: "admin.pagamento_registrado", resource: "payment", entity_id: pay.id, meta: { valor: pay.amount, status: pay.status } });
+        return pay;
       }
     }
     if (m === "GET" && p === "/v1/admin/payments") {
@@ -535,6 +488,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const url = new URL(req.url);
     const cid = req.headers.get("X-Correlation-ID") || randomToken(8);
+    REQ.set(req, { cid });
     try {
       await ensureSchema(env.DB);
       const out = await route(req, env, env.DB, url, ctx);
@@ -564,9 +518,6 @@ export const _internals = { recompute, hashPassword, checkPassword, STATUS_MAP, 
 /* ------------------------------------------------------------------ dados financeiros (importação) */
 const FIN_KINDS = ["transaction", "account", "holding", "trade"];
 const LIMITS = { transaction: 20000, account: 50, holding: 500, trade: 10000 };
-const str = (v, n = 200) => String(v ?? "").slice(0, n);
-const numOrNull = v => (v === null || v === undefined || v === "" || !isFinite(+v)) ? null : Math.round(+v * 1e6) / 1e6;
-const isoDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : null;
 const ASSET_CLASSES = ["acao", "fii", "etf", "bdr", "tesouro", "renda_fixa", "fundo", "previdencia", "cripto", "outro"];
 
 function cleanItem(kind, x, src) {
@@ -627,7 +578,8 @@ async function finLoad(db, uid, kind) {
   return results.map(r => ({ id: r.id, ...JSON.parse(r.data) }));
 }
 
-async function finRoute(m, p, body, q, u, db) {
+async function finRoute(m, p, body, q, u, db, req) {
+  const A = (action, o = {}) => audit(db, req, { user_id: u.me.id, actor: u.me.id, action, ...o });
   const uid = u.me.id;
   if (m === "POST" && p === "/v1/imports") {
     const src = str(body.source, 60) || "arquivo";
@@ -641,6 +593,7 @@ async function finRoute(m, p, body, q, u, db) {
     const rec = { id: importId, filename, source: src, kind: str(body.kind, 40), counts, created_at: nowIso() };
     stmts.push(db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?)").bind(uid, "import", importId, importId, JSON.stringify(rec)));
     for (let i = 0; i < stmts.length; i += 90) await db.batch(stmts.slice(i, i + 90));
+    await A("importacao.criada", { resource: "import", entity_id: importId, meta: { arquivo: filename, tipo: rec.kind, registros: counts } });
     return new Resp(201, rec);
   }
   if (m === "GET" && p === "/v1/imports") {
@@ -650,10 +603,12 @@ async function finRoute(m, p, body, q, u, db) {
   const del = p.match(/^\/v1\/imports\/(imp_[A-Za-z0-9]+)$/);
   if (m === "DELETE" && del) {
     await db.prepare("DELETE FROM fin_items WHERE user_id=? AND import_id=?").bind(uid, del[1]).run();
+    await A("importacao.apagada", { resource: "import", entity_id: del[1] });
     return new Resp(204);
   }
   if (m === "DELETE" && p === "/v1/imports") {
     await db.prepare("DELETE FROM fin_items WHERE user_id=?").bind(uid).run();
+    await A("importacao.apagadas_todas", { resource: "import" });
     return new Resp(204);
   }
   /* ---- preferências da apuração: prejuízos de anos anteriores e DARFs pagos */
@@ -669,6 +624,7 @@ async function finRoute(m, p, body, q, u, db) {
         if (pl[k] !== undefined) prefs.prior_losses[k] = v ? money(v) : "0.00";
       }
       await kvSet(db, prefKey, prefs);
+      await A("tributacao.prejuizos_informados", { resource: "tax_settings", meta: prefs.prior_losses });
       return prefs;
     }
   }
@@ -682,6 +638,7 @@ async function finRoute(m, p, body, q, u, db) {
       prefs.paid_darfs[darf[1]] = money(v);
     }
     await kvSet(db, prefKey, prefs);
+    await A(m === "DELETE" ? "darf.desmarcado" : "darf.marcado_pago", { resource: "darf", entity_id: darf[1], meta: m === "DELETE" ? null : { valor: prefs.paid_darfs[darf[1]] } });
     return new Resp(m === "DELETE" ? 204 : 200, m === "DELETE" ? null : prefs);
   }
   /* ---- radar: status dos alertas */
@@ -690,6 +647,7 @@ async function finRoute(m, p, body, q, u, db) {
     if (!["novo", "visto", "resolvido"].includes(body.status)) throw new Problem(422, "Dados inválidos", "Status deve ser novo, visto ou resolvido.");
     const st = await kvGet(db, "alerts_status:" + uid, {});
     st[al[1]] = body.status; await kvSet(db, "alerts_status:" + uid, st);
+    await A("alerta.status", { resource: "alert", entity_id: al[1], meta: { status: body.status } });
     return { id: al[1], status: body.status };
   }
   const ents = u.me.entitlements || [];
@@ -720,6 +678,7 @@ async function finRoute(m, p, body, q, u, db) {
     } catch (e) { if (e.status === 422) throw new Problem(422, "Simulação inválida", e.message); throw e; }
     res = { id: "sim_" + randomToken(8).replace(/[-_]/g, ""), created_at: nowIso(), ...res };
     const list = await kvGet(db, "sims:" + uid, []);
+    await A("simulacao.executada", { resource: "simulation", entity_id: res.id, meta: { tipo: res.kind, hash: res.reproducibility_hash || null } });
     await kvSet(db, "sims:" + uid, [{ id: res.id, kind: res.kind, created_at: res.created_at, reproducibility_hash: res.reproducibility_hash || null, results: res.results.map(r => ({ name: r.name })) }, ...list].slice(0, 10));
     return new Resp(201, res);
   }
@@ -785,7 +744,6 @@ async function getJson(url, headers = {}, timeout = 9000) {
   return r.json();
 }
 const marketState = db => kvGet(db, "market_state", { indices_at: null, quotes_at: null, quotes_ok: 0, quotes_fail: 0, errors: [] });
-const ageH = iso => iso ? (Date.now() - Date.parse(iso)) / 36e5 : Infinity;
 
 async function refreshMarket(env, db, { force = false } = {}) {
   const st = await marketState(db), errors = [];
@@ -914,7 +872,8 @@ async function ofSync(env, db, uid, itemId) {
   return { synced: true, ...view, counts };
 }
 
-async function ofRoute(m, p, body, u, env, db, url) {
+async function ofRoute(m, p, body, u, env, db, url, req) {
+  const A = (action, o = {}) => audit(db, req, { user_id: u.me.id, actor: u.me.id, resource: "connection", ...o, action });
   const uid = u.me.id;
   if (m === "GET" && p === "/v1/openfinance")
     return { configured: ofConfigured(env), provider: "Pluggy", widget_url: PLUGGY_WIDGET, sandbox: env.PLUGGY_SANDBOX === "1", items: await ofItems(db, uid) };
@@ -934,18 +893,21 @@ async function ofRoute(m, p, body, u, env, db, url) {
     if (item.clientUserId && item.clientUserId !== uid) throw new Problem(403, "Acesso negado", "Esta conexão pertence a outra conta.");
     await kvSet(db, "of_owner:" + id, uid);
     await ofUpsertMeta(db, uid, itemView(item));
-    return new Resp(201, await ofSync(env, db, uid, id));
+    const res = await ofSync(env, db, uid, id);
+    await A("conexao.criada", { entity_id: id, meta: { instituicao: res.institution, sincronizado: res.synced, registros: res.counts || null } });
+    return new Resp(201, res);
   }
   const mm = p.match(/^\/v1\/openfinance\/items\/([A-Za-z0-9-]{8,80})(\/sync)?$/);
   if (mm) {
     const items = await ofItems(db, uid);
     if (!items.some(x => x.id === mm[1])) throw new Problem(404, "Conexão não encontrada", "Esta conexão não existe nesta conta.");
-    if (m === "POST" && mm[2]) return ofSync(env, db, uid, mm[1]);
+    if (m === "POST" && mm[2]) { const r = await ofSync(env, db, uid, mm[1]); await A("conexao.sincronizada", { entity_id: mm[1], meta: { registros: r.counts || null } }); return r; }
     if (m === "DELETE" && !mm[2]) {
       try { await pluggy(env, db, "DELETE", `/items/${mm[1]}`); } catch (e) { if (e.upstream !== 404) throw e; }
       await db.prepare("DELETE FROM fin_items WHERE user_id=? AND import_id=?").bind(uid, "of_" + mm[1].replace(/[^A-Za-z0-9]/g, "").slice(0, 40)).run();
       await saveOfItems(db, uid, items.filter(x => x.id !== mm[1]));
       await db.prepare("DELETE FROM kv WHERE k=?").bind("of_owner:" + mm[1]).run();
+      await A("conexao.revogada", { entity_id: mm[1] });
       return new Resp(204);
     }
   }
@@ -1015,6 +977,7 @@ async function docRoute(m, p, body, q, u, db, req) {
     const stmts = [db.prepare("INSERT INTO docs (user_id,id,data,size) VALUES (?,?,?,?)").bind(uid, id, JSON.stringify(doc), buf.length)];
     for (let i = 0, n = 0; i < buf.length; i += CHUNK, n++) stmts.push(db.prepare("INSERT INTO doc_chunks (doc_id,n,bytes) VALUES (?,?,?)").bind(id, n, buf.slice(i, i + CHUNK)));
     await db.batch(stmts);
+    await audit(db, req, { user_id: uid, actor: uid, action: "documento.enviado", resource: "document", entity_id: id, meta: { arquivo: filename, tipo: kind, tamanho: buf.length, impressao: hash } });
     return new Resp(201, doc);
   }
   const mm = p.match(/^\/v1\/documents\/(doc_[A-Za-z0-9]+)(\/download)?$/);
@@ -1032,10 +995,12 @@ async function docRoute(m, p, body, q, u, db, req) {
     if (body.title !== undefined) doc.title = str(body.title, 120).trim() || doc.title;
     if (body.institution !== undefined) doc.institution = str(body.institution, 80);
     await db.prepare("UPDATE docs SET data=? WHERE user_id=? AND id=?").bind(JSON.stringify(doc), uid, doc.id).run();
+    await audit(db, req, { user_id: uid, actor: uid, action: "documento.alterado", resource: "document", entity_id: doc.id, meta: { tipo: doc.kind, ano: doc.year } });
     return doc;
   }
   if (m === "DELETE" && !mm[2]) {
     await db.batch([db.prepare("DELETE FROM docs WHERE user_id=? AND id=?").bind(uid, doc.id), db.prepare("DELETE FROM doc_chunks WHERE doc_id=?").bind(doc.id)]);
+    await audit(db, req, { user_id: uid, actor: uid, action: "documento.apagado", resource: "document", entity_id: doc.id, meta: { arquivo: doc.filename } });
     return new Resp(204);
   }
   throw new Problem(405, "Método não permitido", `${m} ${p}`);

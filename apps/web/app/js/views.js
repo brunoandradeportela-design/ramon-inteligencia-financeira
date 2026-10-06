@@ -2,6 +2,8 @@
 import { api, DEMO, ANALYTICS_DEMO, ApiError, HAS_API } from "./api.js";
 import { connectionsReal } from "./views_openfinance.js";
 import { documentsReal } from "./views_docs.js";
+import { loginReal, recoverView, resetView, securitySection, privacyReal } from "./views_identity.js";
+export { recoverView, resetView };
 import { onLogin, themeSwitch, theme } from "./app.js";
 import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
 import { areaChart, barChart, brl, confidence, donut, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
@@ -21,6 +23,7 @@ function authLayout(inner) {
 }
 
 export async function login(root, r) {
+  if (!DEMO) return loginReal(root, r, ownerSetup);
   root.innerHTML = authLayout(`
     <a href="../index.html" class="muted small">← Voltar ao site</a>
     <h1>Entrar</h1>
@@ -107,6 +110,8 @@ export async function register(root, r) {
         <datalist id="profs">${["Médico(a)", "Dentista", "Advogado(a)", "Engenheiro(a)", "Empresário(a)", "Arquiteto(a)", "Contador(a)", "Servidor(a) público(a)", "Psicólogo(a)", "Fisioterapeuta", "Produtor(a) rural", "Analista de sistemas"].map(p => `<option value="${p}">`).join("")}</datalist></div>
       <div class="field"><label for="phone">Telefone (WhatsApp) *</label><input class="input" id="phone" type="tel" autocomplete="tel-national" inputmode="numeric" required value="${esc(d.phone || "")}" placeholder="(69) 99999-9999"></div>
     </div>
+    <div class="field"><label for="cpf">CPF (opcional)</label><input class="input" id="cpf" inputmode="numeric" autocomplete="off" value="${esc(d.cpf || "")}" placeholder="000.000.000-00">
+      <span class="small muted">Para entrar também pelo CPF. Guardamos só uma impressão protegida.</span></div>
     <div class="field"><label for="pw">Senha *</label><input class="input" id="pw" type="password" autocomplete="new-password" minlength="10" required>
       <span class="small muted">10+ caracteres, com letras e números.</span></div>
     <label class="check"><input type="checkbox" id="terms" ${d.accept_terms ? "checked" : ""}> Li e aceito os Termos de Uso e a Política de Privacidade (LGPD). Meus dados de contato serão usados para atendimento e acompanhamento da assinatura.</label>`;
@@ -126,8 +131,10 @@ export async function register(root, r) {
     if (state.step === 1) {
       Object.assign(d, { name: root.querySelector("#name").value.trim(), email: root.querySelector("#email").value.trim(),
         profession: root.querySelector("#profession").value.trim(), phone: root.querySelector("#phone").value,
-        password: root.querySelector("#pw").value, accept_terms: root.querySelector("#terms").checked });
+        password: root.querySelector("#pw").value, accept_terms: root.querySelector("#terms").checked, cpf: root.querySelector("#cpf").value.trim() });
       const errs = validateSignup(d);
+      const cd = d.cpf.replace(/\D/g, "");
+      if (d.cpf && (cd.length !== 11 || !docValid(cd))) errs.push({ field: "cpf", msg: "CPF inválido" });
       root.querySelectorAll(".input").forEach(i => i.removeAttribute("aria-invalid"));
       errs.forEach(x => root.querySelector("#" + ({ password: "pw", accept_terms: "terms" }[x.field] || x.field))?.setAttribute("aria-invalid", "true"));
       if (errs.length) return err.textContent = errs.map(x => x.msg).join(" · ");
@@ -138,7 +145,7 @@ export async function register(root, r) {
     const btn = e.target.querySelector(".btn--primary"); btn.disabled = true; btn.textContent = "Criando conta…";
     try {
       const res = await api.post("/v1/auth/register", { name: d.name, email: d.email, profession: d.profession, phone: d.phone,
-        password: d.password, accept_terms: d.accept_terms, plan: d.plan, origin: "site" });
+        password: d.password, accept_terms: d.accept_terms, plan: d.plan, origin: "site", ...(d.cpf ? { cpf: d.cpf } : {}) });
       onLogin(res.token, res.user);
       toast("Conta criada. Este é o seu primeiro diagnóstico.");
       go("#/dashboard?primeiro=1");
@@ -630,11 +637,14 @@ export async function settings(el, r, { me }) {
       <li><b>Objetivos:</b> ${esc((me.profile?.objetivos || []).join(", ") || "—")}</li></ul></section>
     <section class="card"><h3>Notificações</h3><label class="check" style="margin-top:10px"><input type="checkbox" checked> Alertas no aplicativo</label>
       <label class="check" style="margin-top:8px"><input type="checkbox"> Resumo semanal por e-mail</label><p class="note">Apenas alertas de severidade “atenção” ou maior; alertas repetidos não são reenviados.</p></section>
-    <section class="card"><h3>Sobre</h3><p class="small muted" style="margin-top:8px">Fintechs · Ramon Inteligência Financeira — MVP v1.0. Consolida, analisa, simula, alerta e explica. Não é corretora nem consultoria de investimentos.</p></section></div>`;
+    <section class="card"><h3>Sobre</h3><p class="small muted" style="margin-top:8px">AURION · Inteligência Financeira e Tributária. Consolida, analisa, simula, alerta e explica. Não é corretora, não executa ordens e não faz recomendação individualizada de investimento.</p></section></div>
+    <div id="secbox"></div>`;
   theme.apply();
+  securitySection(el.querySelector("#secbox"));
 }
 
 export async function privacy(el) {
+  if (HAS_API) return privacyReal(el);
   const [c, a] = await Promise.all([api.get("/v1/consents"), api.get("/v1/audit")]);
   el.innerHTML = `<div class="grid g-2">
     <section class="card"><h3>Seus direitos (LGPD)</h3><ul class="stack small" style="margin-top:10px"><li>• Confirmação e acesso aos dados</li><li>• Correção</li><li>• Portabilidade (exportação)</li><li>• Eliminação, quando aplicável</li><li>• Informação sobre compartilhamento e revogação do consentimento</li></ul>

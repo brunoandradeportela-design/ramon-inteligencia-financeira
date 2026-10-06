@@ -13,7 +13,7 @@ const NAV = [
 ];
 const TITLES = Object.fromEntries(NAV.map(([k, t]) => [k, t]));
 Object.assign(TITLES, { crm: "CRM · Clientes", pagamentos: "Pagamentos", planos: "Planos", configuracoes: "Configurações", privacidade: "Privacidade e auditoria" });
-const PUBLIC = { entrar: V.login, cadastro: V.register };
+const PUBLIC = { entrar: V.login, cadastro: V.register, recuperar: V.recoverView, redefinir: V.resetView };
 const ROUTES = {
   dashboard: V.dashboard, patrimonio: V.portfolio, financas: V.finance, tributacao: V.tax, simulador: V.simulator,
   alertas: V.alerts, documentos: V.documents, conexoes: V.connections, assistente: V.assistant, planos: V.plans,
@@ -60,7 +60,7 @@ function parse() {
 async function render() {
   const r = parse();
   const root = document.getElementById("root");
-  if (PUBLIC[r.name]) { root.innerHTML = ""; await PUBLIC[r.name](root, r); document.title = `Fintechs — ${r.name === "entrar" ? "Entrar" : "Cadastro"}`; return; }
+  if (PUBLIC[r.name]) { root.innerHTML = ""; await PUBLIC[r.name](root, r); document.title = `Aurion — ${({ entrar: "Entrar", cadastro: "Cadastro", recuperar: "Recuperar acesso", redefinir: "Nova senha" })[r.name]}`; return; }
   if (!session.token) { location.hash = `#/entrar?next=${encodeURIComponent(r.name)}`; return; }
   try {
     if (!me) me = await api.get("/v1/me");
@@ -74,7 +74,7 @@ async function render() {
     updateShell(r.name);
     const main = document.getElementById("view");
     main.innerHTML = loading();
-    document.title = `Fintechs — ${TITLES[r.name] || "Início"}`;
+    document.title = `AURION — ${TITLES[r.name] || "Início"}`;
     await view(main, r, { me, refresh: () => render() });
     main.focus({ preventScroll: true });
   } catch (e) {
@@ -92,7 +92,7 @@ function shell(admin = false) {
     : NAV.map(([k, t, ic]) => `<a class="navi" href="#/${k}" data-nav="${k}">${icon(ic)}<span>${t}</span>${k === "alertas" ? '<span class="count" data-alert-count hidden></span>' : ""}</a>`).join("");
   return `<div class="shell" data-role="${admin ? "admin" : "client"}">
     <aside class="side" aria-label="Navegação">
-      <a class="side__logo" href="../index.html" title="Página inicial">Fintechs</a>
+      <a class="side__logo" href="../index.html" title="Página inicial">AURION</a>
       <nav>${nav}</nav>
       <div class="side__bottom">
         <div class="side__sep"></div>

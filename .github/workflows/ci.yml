@@ -36,3 +36,28 @@ jobs:
           node-version: "22"
       - name: Sintaxe dos módulos JS
         run: for f in apps/web/js/*.js apps/web/app/js/*.js; do node --check "$f"; done
+
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Unit + tax regression + compliance (sem rotas de ordem, sem segredos)
+        run: npm test
+      - name: E2E contra o Worker local (D1 local, simuladores Asaas/Pluggy/e-mail)
+        run: |
+          KEY=$(node -e "import('./test/fake_asaas.mjs').then(m=>{console.log(m.KEY);process.exit(0)})")
+          npx wrangler dev --local --port 8799 --persist-to /tmp/d1-ci \
+            --var "OWNER_PASSWORD:senhaDonoTeste2026" --var "ASAAS_API_KEY:$KEY" --var "ASAAS_WEBHOOK_TOKEN:whk" \
+            --var "ASAAS_BASE_URL:http://127.0.0.1:9911/v3" --var "RESEND_API_KEY:re_teste" --var "MAIL_FROM:Aurion <teste@exemplo.com>" \
+            --var "RESEND_BASE_URL:http://127.0.0.1:9913" --var "PLUGGY_CLIENT_ID:cli-teste-local" --var "PLUGGY_CLIENT_SECRET:segredo-teste-local" \
+            --var "PLUGGY_BASE_URL:http://127.0.0.1:9912" > /tmp/dev.log 2>&1 &
+          for i in $(seq 1 60); do curl -s localhost:8799/health >/dev/null && break; sleep 1; done
+          export AURION_TEST_URL=http://localhost:8799
+          for t in e2e imports_e2e docs_assistant_e2e openfinance_e2e identity_e2e; do node test/$t.mjs || { tail -50 /tmp/dev.log; exit 1; }; done
