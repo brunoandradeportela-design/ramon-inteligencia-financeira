@@ -18,6 +18,7 @@ import { integrationsRoute } from "./integrations.js";
 import { mailCron, notifItems, cacheForMail } from "./mailer.js";
 import { extract as extractDoc, notaToTrades, normTitle } from "../../apps/web/app/js/doc_extract.js";
 import { backupRoute } from "./backup.js";
+import { irpfReport } from "../../apps/web/app/js/irpf_report.js";
 import { checkRate } from "./ratelimit.js";
 import { METRICS_SCHEMA, recordRequest, routeGroup, count as metric, flush as flushMetrics, prune as pruneMetrics, summary as metricsSummary } from "./metrics.js";
 import { eventsView as buildEvents, personalEvents } from "../../apps/web/app/js/event_engine.js";
@@ -817,6 +818,13 @@ async function finRoute(m, p, body, q, u, db, req) {
   if (p.startsWith("/v1/tax/")) {
     if (!(u.me.entitlements || []).includes("inteligencia_tributaria"))
       throw new Problem(402, "Recurso do plano Pro", "A apuração de imposto sobre as suas negociações faz parte dos planos Pro e Premium.", { required_plan: "Pro" });
+    if (p === "/v1/tax/irpf-report") {
+      const y = /^\d{4}$/.test(q.year || "") ? +q.year : +ref.slice(0, 4) - 1;
+      if (y < 2000 || y > +ref.slice(0, 4)) throw new Problem(422, "Ano inválido", "Escolha um ano-calendário entre 2000 e o ano atual.");
+      const rep = irpfReport({ trades, year: y, refDate: ref, knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs });
+      await A("tributacao.relatorio_irpf", { resource: "tax", entity_id: String(y), meta: { bens: rep.bens_e_direitos.length } });
+      return rep;
+    }
     if (p === "/v1/tax/summary") {
       const { events, ...rest } = tax;
       if (tax.has_data) metric("tax.calculo", tax.quality?.score ?? tax.confidence);

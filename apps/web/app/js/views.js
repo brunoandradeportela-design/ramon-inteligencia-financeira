@@ -4,7 +4,7 @@ import { connectionsReal } from "./views_openfinance.js";
 import { documentsReal } from "./views_docs.js";
 import { loginReal, recoverView, resetView, securitySection, privacyReal } from "./views_identity.js";
 import { wireTxEdits, allocation, dataHubSection } from "./views_finance2.js";
-import { taxExtras } from "./views_tax2.js";
+import { taxExtras, irpfSection } from "./views_tax2.js";
 import { settingsExtras } from "./views_hub.js";
 export { allocation };
 export { recoverView, resetView };
@@ -312,7 +312,7 @@ export async function tax(el, r) {
         <section class="card"><h3>Limitações</h3><ul class="stack small" style="margin-top:10px">${t.limitations.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul>
           <p class="note">Snapshot ${esc(t.snapshot_hash.slice(0, 16))}… · mesmo snapshot + mesma versão de regra = mesmo resultado.</p></section>
       </div>
-      ${real ? `<div id="taxextra"></div>` : ""}
+      ${real ? `<div id="taxextra"></div><div id="irpfbox"></div>` : ""}
       ${real ? `<section class="card section"><h3>Ajustes da apuração</h3>
         <p class="small muted" style="margin-top:6px">Prejuízos acumulados até 31/12 do ano anterior (veja na sua declaração, ficha Renda Variável, ou no controle do seu contador). Eles abatem os ganhos da mesma modalidade.</p>
         <form id="prior" class="row wrap" style="gap:10px;margin-top:12px;align-items:flex-end">
@@ -320,7 +320,7 @@ export async function tax(el, r) {
             <input class="input" id="pl_${k}" inputmode="decimal" value="${esc(String(prefs.prior_losses[k] || "").replace(".", ","))}" placeholder="0,00"></div>`).join("")}
           <button class="btn btn--primary">Salvar e recalcular</button></form></section>` : ""}`;
     el.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { tab = b.dataset.tab; draw(); });
-    if (real) taxExtras(el.querySelector("#taxextra"), t);
+    if (real) { taxExtras(el.querySelector("#taxextra"), t); irpfSection(el.querySelector("#irpfbox")); }
     const f = el.querySelector("#prior");
     if (f) f.onsubmit = async e => {
       e.preventDefault();

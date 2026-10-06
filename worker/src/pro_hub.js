@@ -4,7 +4,7 @@
 import { Problem, kvGet, kvSet, nowIso, randomToken, str } from "./shared.js";
 import { audit } from "./identity.js";
 
-const READ_PATHS = /^\/v1\/(dashboard|finance\/(summary|transactions|categories)|portfolio\/consolidated|allocation|data-quality|tax\/(summary|events|calculations|rules|darfs|settings)|alerts|events|trader\/(overview|trades|performance|tax|risk|journal|strategies|watchlists|market)|me)(\/|\?|$)/;
+const READ_PATHS = /^\/v1\/(dashboard|finance\/(summary|transactions|categories)|portfolio\/consolidated|allocation|data-quality|tax\/(summary|events|calculations|rules|darfs|settings|irpf-report)|alerts|events|trader\/(overview|trades|performance|tax|risk|journal|strategies|watchlists|market)|me)(\/|\?|$)/;
 const MAX_DAYS = 365;
 
 const active = g => !g.revoked_at && (!g.expires_at || g.expires_at > nowIso());

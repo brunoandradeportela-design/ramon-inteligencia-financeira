@@ -38,4 +38,9 @@ const sim = (await call("POST", "/v1/simulations", { kind: "venda_ativos", scena
   { name: "C", operations: [{ ticker: "PETR4", quantity: 400, date: future, price: "40" }] }] }, tk)).body;
 assert.equal(sim.results.length, 3); assert.equal(sim.results[2].scenario.calculation_version, "tax-engine-js@1.1.0");
 assert.ok((await call("GET", "/v1/audit", null, tk)).body.items.some(i => i.action === "tributacao.calculo_verificado"));
+// relatório de apoio à declaração
+const y0 = new Date().getFullYear();
+const ir = await call("GET", `/v1/tax/irpf-report?year=${y0}`, null, tk);
+assert.equal(ir.status, 200, JSON.stringify(ir.body)); assert.equal(ir.body.renda_variavel.mensal.length, 12); assert.ok(Array.isArray(ir.body.bens_e_direitos));
+assert.equal((await call("GET", "/v1/tax/irpf-report?year=1999", null, tk)).status, 422);
 console.log("TAX E2E OK — cálculo persistido e idempotente, reprodutibilidade verificada, artefato de 8 abas, regras versionadas com DSL, cenários B/C, isolamento e auditoria");
