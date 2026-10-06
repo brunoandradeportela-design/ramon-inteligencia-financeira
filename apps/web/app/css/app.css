@@ -187,7 +187,7 @@ details summary{cursor:pointer;color:var(--brand-2);font-size:12.5px;font-weight
 
 /* ---------- auth ---------- */
 .auth{min-height:100vh;display:grid;grid-template-columns:1fr 1fr;background:var(--bg)}
-.auth__art{position:relative;overflow:hidden;background:#020b16 url(../../assets/img/hero-laptop.webp) 70% 50%/cover no-repeat;display:flex;align-items:flex-end;padding:40px}
+.auth__art{position:relative;overflow:hidden;background:#020b16 url(../../assets/img/hero-laptop.webp?v=2) 70% 50%/cover no-repeat;display:flex;align-items:flex-end;padding:40px}
 .auth__art::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(2,11,22,.92),rgba(2,11,22,.15) 60%)}
 .auth__art div{position:relative;z-index:1;color:#eef4fb;max-width:420px}
 .auth__art h2{font-size:30px;line-height:1.1;font-weight:600}
