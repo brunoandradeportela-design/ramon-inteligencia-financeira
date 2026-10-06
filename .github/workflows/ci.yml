@@ -65,7 +65,7 @@ jobs:
           for i in $(seq 1 90); do curl -s localhost:8799/health >/dev/null && break; sleep 1; done
           curl -s localhost:8799/health >/dev/null || { echo "::error title=wrangler::$(tail -c 900 /tmp/dev.log | tr '\n' ' ')"; exit 1; }
           export AURION_TEST_URL=http://localhost:8799
-          for t in e2e imports_e2e docs_assistant_e2e openfinance_e2e identity_e2e connect_finance_e2e tax_e2e trader_e2e hub_e2e mail_e2e backup_e2e; do
+          for t in e2e imports_e2e docs_assistant_e2e openfinance_e2e identity_e2e connect_finance_e2e tax_e2e trader_e2e hub_e2e mail_e2e backup_e2e docextract_e2e; do
             node test/$t.mjs > /tmp/out.txt 2>&1 || { cat /tmp/out.txt; echo "::error title=$t::$(tail -c 1200 /tmp/out.txt | tr '\n' ' ')"; exit 1; }
             tail -1 /tmp/out.txt
           done

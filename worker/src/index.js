@@ -16,6 +16,7 @@ import { TRADER_SCHEMA, traderRoute } from "./trader.js";
 import { actAs, sharingRoute } from "./pro_hub.js";
 import { integrationsRoute } from "./integrations.js";
 import { mailCron, notifItems, cacheForMail } from "./mailer.js";
+import { extract as extractDoc, notaToTrades, normTitle } from "../../apps/web/app/js/doc_extract.js";
 import { backupRoute } from "./backup.js";
 import { eventsView as buildEvents, personalEvents } from "../../apps/web/app/js/event_engine.js";
 import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
@@ -1132,6 +1133,7 @@ async function ofCron(env, db) {
 const DOC_MAX = 8 * 1024 * 1024, DOC_QUOTA = 100 * 1024 * 1024, CHUNK = 1024 * 1024;
 async function docRoute(m, p, body, q, u, db, req) {
   const uid = u.me.id;
+  const A = (action, o = {}) => audit(db, req, { user_id: uid, actor: u.actor?.id || uid, action, ...o });
   const load = async id => { const r = await db.prepare("SELECT data FROM docs WHERE user_id=? AND id=?").bind(uid, id).first(); if (!r) throw new Problem(404, "Documento não encontrado", id); return JSON.parse(r.data); };
   if (m === "GET" && p === "/v1/documents") {
     const items = (await db.prepare("SELECT data FROM docs WHERE user_id=?").bind(uid).all()).results.map(r => JSON.parse(r.data)).sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at));
@@ -1167,6 +1169,67 @@ async function docRoute(m, p, body, q, u, db, req) {
     await audit(db, req, { user_id: uid, actor: uid, action: "documento.enviado", resource: "document", entity_id: id, meta: { arquivo: filename, tipo: kind, tamanho: buf.length, impressao: hash } });
     return new Resp(201, doc);
   }
+  /* ---- extração e validação (RF-018): o navegador lê o texto do PDF; o servidor extrai e valida de novo */
+  const mx = p.match(/^\/v1\/documents\/(doc_[A-Za-z0-9]+)\/extraction(\/confirm)?$/);
+  if (mx) {
+    const doc = await load(mx[1]), xKey = "ext_" + doc.id.slice(4), mapKey = "ticker_map:" + uid;
+    const getX = async () => (await finLoad(db, uid, "extraction")).find(x => x.id === xKey) || null;
+    const putX = x => db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET data=excluded.data").bind(uid, "extraction", xKey, "extraction", JSON.stringify(x)).run();
+    const run = async (lines, type) => extractDoc(lines, { type: type || undefined, userMap: await kvGet(db, mapKey, {}), refDate: today() });
+    if (m === "GET" && !mx[2]) { const x = await getX(); if (!x) return { extraction: null }; const { id, import_id, lines, ...rest } = x; return { extraction: rest }; }
+    if ((m === "PUT" || m === "PATCH") && !mx[2]) {
+      let lines, prev = await getX();
+      if (m === "PUT") {
+        lines = (Array.isArray(body.lines) ? body.lines : []).slice(0, 4000).map(l => str(l, 400));
+        if (!lines.some(l => l.trim())) throw new Problem(422, "Sem texto", "Não foi possível ler texto deste arquivo. PDFs escaneados (imagem) ainda não são lidos.");
+      } else {
+        if (!prev) throw new Problem(404, "Sem extração", "Extraia o documento primeiro.");
+        if (prev.status === "confirmado") throw new Problem(409, "Já confirmado", "Esta extração já foi confirmada. Para refazer, desfaça a importação.");
+        lines = prev.lines;
+        const ov = body.ticker_overrides && typeof body.ticker_overrides === "object" ? body.ticker_overrides : {};
+        const map = await kvGet(db, mapKey, {});
+        for (const [title, tk] of Object.entries(ov)) { const t = str(tk, 12).toUpperCase().trim(); if (/^[A-Z]{4}\d{1,2}$/.test(t)) map[normTitle(title)] = t; }
+        await kvSet(db, mapKey, map);
+      }
+      const r = await run(lines, body.type || prev?.type);
+      const x = { id: xKey, doc_id: doc.id, status: "rascunho", extracted_at: nowIso(), lines, ...r };
+      await putX(x);
+      await A("documento.extraido", { resource: "document", entity_id: doc.id, meta: { tipo: r.type, confianca: r.validation.confidence, ok: r.validation.ok } });
+      const { id, import_id, lines: _l, ...rest } = x; return { extraction: rest };
+    }
+    if (m === "POST" && mx[2]) {
+      const x = await getX();
+      if (!x) throw new Problem(404, "Sem extração", "Extraia o documento primeiro.");
+      if (x.status === "confirmado") throw new Problem(409, "Já confirmado", "Esta extração já foi confirmada.");
+      const r = await run(x.lines, x.type);                  // revalida com as regras e o mapa atuais
+      if (!r.validation.ok) throw new Problem(422, "Validação pendente", "Corrija os pontos bloqueantes antes de confirmar.", { checks: r.validation.checks.filter(c => c.blocking) });
+      let result = {};
+      if (r.type === "nota_corretagem") {
+        const importId = "imp_nota" + doc.id.slice(4);
+        const existing = (await finLoad(db, uid, "trade")).filter(t => !t.superseded_by && t.status !== "voided");
+        const key = t => [t.date, t.ticker, t.side, +t.quantity, (+t.price).toFixed(2)].join("|"), seen = new Set(existing.map(key));
+        const all = notaToTrades(r).map(t => ({ ...t, raw_ref: doc.id })), fresh = all.filter(t => !seen.has(key(t)));
+        if (fresh.length) {
+          const { stmts, counts } = await finStmts(db, uid, importId, "nota_corretagem", { trades: fresh });
+          const rec = { id: importId, filename: doc.filename, source: "nota_corretagem", kind: "nota_corretagem", counts, rejected: 0, parser: r.extractor, checksum: doc.checksum, document_id: doc.id, nota: r.header.numero, created_at: nowIso() };
+          stmts.push(db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET data=excluded.data").bind(uid, "import", importId, importId, JSON.stringify(rec)));
+          for (let i = 0; i < stmts.length; i += 90) await db.batch(stmts.slice(i, i + 90));
+        }
+        result = { import_id: fresh.length ? importId : null, imported: fresh.length, skipped_duplicates: all.length - fresh.length, ignored_out_of_scope: r.negocios.length - all.length };
+      } else if (r.type === "darf") {
+        if (r.codigo === "6015") { const tp = await kvGet(db, "tax_prefs:" + uid, { prior_losses: {}, paid_darfs: {} }); tp.paid_darfs[r.competencia] = money(r.valor_total); await kvSet(db, "tax_prefs:" + uid, tp); result = { darf_marcado_pago: r.competencia, valor: money(r.valor_total) }; }
+        else result = { darf_marcado_pago: null, nota: "Código diferente de 6015: guardado sem alterar a apuração de renda variável." };
+      } else result = { guardado: true };
+      const kindMap = { nota_corretagem: "nota_corretagem", darf: "darf", informe_rendimentos: "informe_rendimentos", recibo: doc.kind.startsWith("recibo") ? doc.kind : "recibo_saude" };
+      doc.kind = kindMap[r.type] || doc.kind; doc.status = "conferido"; doc.extracted = { type: r.type, confirmed_at: nowIso(), confidence: r.validation.confidence, summary: result };
+      if (r.type === "informe_rendimentos" && r.ano_calendario) doc.year = r.ano_calendario;
+      await db.prepare("UPDATE docs SET data=? WHERE user_id=? AND id=?").bind(JSON.stringify(doc), uid, doc.id).run();
+      await putX({ ...x, ...r, status: "confirmado", confirmed_at: nowIso(), result });
+      await A("documento.extracao_confirmada", { resource: "document", entity_id: doc.id, meta: { tipo: r.type, ...result } });
+      return { status: "confirmado", type: r.type, result };
+    }
+    throw new Problem(405, "Método não permitido", `${m} ${p}`);
+  }
   const mm = p.match(/^\/v1\/documents\/(doc_[A-Za-z0-9]+)(\/download)?$/);
   if (!mm) throw new Problem(404, "Não encontrado", p);
   const doc = await load(mm[1]);
@@ -1186,7 +1249,7 @@ async function docRoute(m, p, body, q, u, db, req) {
     return doc;
   }
   if (m === "DELETE" && !mm[2]) {
-    await db.batch([db.prepare("DELETE FROM docs WHERE user_id=? AND id=?").bind(uid, doc.id), db.prepare("DELETE FROM doc_chunks WHERE doc_id=?").bind(doc.id)]);
+    await db.batch([db.prepare("DELETE FROM docs WHERE user_id=? AND id=?").bind(uid, doc.id), db.prepare("DELETE FROM doc_chunks WHERE doc_id=?").bind(doc.id), db.prepare("DELETE FROM fin_items WHERE user_id=? AND kind='extraction' AND id=?").bind(uid, "ext_" + doc.id.slice(4))]);
     await audit(db, req, { user_id: uid, actor: uid, action: "documento.apagado", resource: "document", entity_id: doc.id, meta: { arquivo: doc.filename } });
     return new Resp(204);
   }

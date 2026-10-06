@@ -71,7 +71,13 @@ Como reproduzir:
   - 3.000 negociações: cerca de 10 ms, contra 25 ms antes.
 - **Imagem da página inicial.** Já mostra a marca AURION.
 
+- **RF-018, extração de documentos.**
+  - Notas de corretagem, DARF, informes e recibos em PDF com texto agora são lidos e validados.
+  - A nota só é importada depois da conferência do cliente.
+  - Testes: `doc_extract.test.mjs`, `docextract_e2e` e um teste com PDF real lido pelo pdf.js no navegador.
+
 ### Ainda abertos
+- **OCR de documentos escaneados (imagem).** Ainda não é feito; depende de provedor ou plano pago.
 - **Limite de CPU do plano gratuito do Workers (10 ms).** Contas com mais de cerca de 2.000 negociações ficam no limite. A solução definitiva é o Workers Paid (5 dólares por mês, até 30 s de CPU), sem mudança de código.
 - **Escala dos e-mails.** O lote atual atende até cerca de 140 clientes por manhã (6 por rodada, a cada 15 minutos, das 7h às 13h). Acima disso, é preciso o Workers Paid ou o Cloudflare Queues.
 - **Chave Asaas antiga.** Revogar no painel do Asaas e gerar outra; só o Bruno pode fazer isso.
