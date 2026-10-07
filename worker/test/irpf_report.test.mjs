@@ -26,3 +26,19 @@ test("relatório IRPF: bens pelo custo em 31/12, renda variável mês a mês, is
   const parcial = irpfReport({ trades: T, year: 2026, refDate: "2026-05-01" });
   assert.equal(parcial.partial, true); assert.ok(!parcial.bens_e_direitos.find(b => b.ticker === "HGLG11" && +b.situacao_atual === 750), "ano em andamento considera só até a data");
 });
+
+import { parseB3Workbook } from "../../apps/web/app/js/importers.js";
+test("proventos: movimentação da B3 → dividendos, JCP e rendimentos de FII no relatório", () => {
+  const mov = parseB3Workbook({ "Movimentação": [["Entrada/Saída", "Data", "Movimentação", "Produto", "Instituição", "Quantidade", "Preço unitário", "Valor da Operação"],
+    ["Credito", "15/05/2026", "Dividendo", "PETR4 - PETROLEO BRASILEIRO S.A. PETROBRAS", "XP INVESTIMENTOS", "500", "1,20", "600,00"],
+    ["Credito", "20/06/2026", "Juros Sobre Capital Próprio", "ITUB4 - ITAU UNIBANCO HOLDING S.A.", "XP INVESTIMENTOS", "100", "0,85", "85,00"],
+    ["Credito", "14/07/2026", "Rendimento", "HGLG11 - CSHG LOGISTICA FDO INV IMOB", "XP INVESTIMENTOS", "10", "1,10", "11,00"],
+    ["Credito", "14/08/2026", "Rendimento", "HGLG11 - CSHG LOGISTICA FDO INV IMOB", "XP INVESTIMENTOS", "10", "1,10", "11,00"],
+    ["Debito", "01/09/2026", "Transferência - Liquidação", "VALE3 - VALE S.A.", "XP INVESTIMENTOS", "10", "60,00", "600,00"]] });
+  assert.equal(mov.incomes.length, 4); assert.equal(mov.incomes[0].payer, "PETROLEO BRASILEIRO S.A. PETROBRAS"); assert.equal(mov.trades.length, 1, "liquidação continua virando negociação");
+  const r = irpfReport({ trades: T, incomes: mov.incomes, year: 2026, refDate: "2027-02-10" });
+  assert.equal(r.proventos.dividendos.total, "600.00"); assert.equal(r.proventos.rendimentos_fii.total, "22.00"); assert.equal(r.proventos.rendimentos_fii.itens[0].lancamentos, 2);
+  assert.equal(r.proventos.jcp.total_liquido, "85.00"); assert.equal(r.proventos.jcp.total_bruto_estimado, "100.00");
+  assert.ok(r.premissas.some(p => /Movimentação da B3/.test(p)));
+  assert.equal(irpfReport({ trades: T, year: 2026, refDate: "2027-02-10" }).proventos.fonte_dados, null);
+});

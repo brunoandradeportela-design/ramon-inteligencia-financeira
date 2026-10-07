@@ -121,7 +121,7 @@ function headerIndex(rows, mustHave) {
 }
 export function parseB3Workbook(sheets) {
   // sheets: { "Nome da aba": [[célula, ...], ...] }
-  const holdings = [], trades = [];
+  const holdings = [], trades = [], incomes = [];
   let kind = null;
   for (const [name, rows] of Object.entries(sheets || {})) {
     const sn = norm(name);
@@ -147,7 +147,16 @@ export function parseB3Workbook(sheets) {
       const H = rows[hi].map(norm), c = re => H.findIndex(x => re.test(x));
       const iES = c(/entrada/), iD = c(/^data/), iMv = c(/^movimentacao/), iPr = c(/^produto/), iI = c(/instituicao/), iQ = c(/^quantidade/), iP = c(/preco/), iV = c(/valor/);
       for (const r of rows.slice(hi + 1)) {
-        if (!/transferencia - liquidacao|^compra$|^venda$/.test(norm(r[iMv]))) continue;
+        const mv = norm(r[iMv]);
+        // proventos creditados: dividendo, juros sobre capital próprio e rendimento (FII); valor líquido creditado
+        const inc = /^dividendo/.test(mv) ? "dividendo" : /juros sobre capital/.test(mv) ? "jcp" : /^rendimento/.test(mv) ? "rendimento" : null;
+        if (inc && /credito|entrada/.test(norm(r[iES]))) {
+          const date = parseDate(r[iD]), v = parseNumber(r[iV]);
+          if (date && v > 0) incomes.push({ date, ticker: String(r[iPr]).split(" - ")[0].trim().toUpperCase().replace(/F$/, ""), kind: inc, value: round2(v),
+            quantity: parseNumber(r[iQ]), custodian: String(r[iI] ?? "").trim(), payer: String(r[iPr] ?? "").split(" - ").slice(1).join(" - ").trim().slice(0, 80) });
+          continue;
+        }
+        if (!/transferencia - liquidacao|^compra$|^venda$/.test(mv)) continue;
         const date = parseDate(r[iD]), q = parseNumber(r[iQ]);
         if (!date || !q) continue;
         const side = /credito|entrada/.test(norm(r[iES])) ? "C" : "V";
@@ -176,8 +185,8 @@ export function parseB3Workbook(sheets) {
         maturity: iVenc >= 0 ? parseDate(r[iVenc]) : null, indexer: iIdx >= 0 ? String(r[iIdx] ?? "").trim() : "" });
     }
   }
-  if (!holdings.length && !trades.length) throw new Error("Planilha não reconhecida. Use os relatórios de Posição, Negociação ou Movimentação da Área do Investidor da B3.");
-  return { kind: kind || "b3", source: "b3", holdings, trades, replace_holdings: holdings.length > 0 };
+  if (!holdings.length && !trades.length && !incomes.length) throw new Error("Planilha não reconhecida. Use os relatórios de Posição, Negociação ou Movimentação da Área do Investidor da B3.");
+  return { kind: kind || "b3", source: "b3", holdings, trades, incomes, replace_holdings: holdings.length > 0 };
 }
 
 /* ------------------------------------------------------------------ Nota de corretagem SINACOR (texto do PDF) — beta */
@@ -213,5 +222,5 @@ export function detectKind(filename) {
 }
 export function summarize(parsed) {
   return { transactions: parsed.transactions?.length || 0, accounts: parsed.accounts?.length || 0,
-           holdings: parsed.holdings?.length || 0, trades: parsed.trades?.length || 0 };
+           holdings: parsed.holdings?.length || 0, trades: parsed.trades?.length || 0, incomes: parsed.incomes?.length || 0 };
 }

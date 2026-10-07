@@ -670,6 +670,19 @@ async function finStmts(db, uid, importId, src, body) {
       counts[kind + "s"]++; total++;
     }
   }
+  // proventos (dividendos, JCP, rendimentos de FII): tipo próprio, fora de FIN_KINDS para não mudar os demais fluxos
+  const incs = Array.isArray(body.incomes) ? body.incomes : [];
+  if (incs.length > 20000) throw new Problem(422, "Arquivo grande demais", "Máximo de 20000 proventos por importação.");
+  if (incs.length) counts.incomes = 0;
+  for (const x of incs) {
+    const date = isoDate(x?.date), v = numOrNull(x?.value), k = ["dividendo", "jcp", "rendimento"].includes(x?.kind) ? x.kind : null, tk = str(x?.ticker, 20).toUpperCase().trim();
+    if (!date || !k || !tk || !(v > 0)) { rejected++; continue; }
+    const it = { date, ticker: tk, kind: k, value: money(v), quantity: numOrNull(x.quantity), custodian: str(x.custodian, 80), payer: str(x.payer, 80), source: src };
+    const id = "inc_" + (await sha256([date, tk, k, it.value, it.custodian].join("|"))).slice(0, 22);
+    stmts.push(db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET data=excluded.data, import_id=excluded.import_id")
+      .bind(uid, "income", id, importId, JSON.stringify(it)));
+    counts.incomes++; total++;
+  }
   return { stmts, counts, total, rejected };
 }
 async function finLoad(db, uid, kind) {
@@ -690,7 +703,7 @@ async function finRoute(m, p, body, q, u, db, req) {
     if (body.replace_holdings && counts.holdings)
       stmts.unshift(db.prepare("DELETE FROM fin_items WHERE user_id=? AND kind='holding' AND json_extract(data,'$.source')=?").bind(uid, src));
     const rec = { id: importId, filename, source: src, kind: str(body.kind, 40), counts, rejected, parser: str(body.parser, 40) || "importers.js@1",
-                  checksum: (await sha256(JSON.stringify([body.transactions, body.accounts, body.holdings, body.trades]))).slice(0, 22), created_at: nowIso() };
+                  checksum: (await sha256(JSON.stringify([body.transactions, body.accounts, body.holdings, body.trades, body.incomes]))).slice(0, 22), created_at: nowIso() };
     stmts.push(db.prepare("INSERT INTO fin_items (user_id,kind,id,import_id,data) VALUES (?,?,?,?,?)").bind(uid, "import", importId, importId, JSON.stringify(rec)));
     for (let i = 0; i < stmts.length; i += 90) await db.batch(stmts.slice(i, i + 90));
     await A("importacao.criada", { resource: "import", entity_id: importId, meta: { arquivo: filename, tipo: rec.kind, registros: counts } });
@@ -821,7 +834,7 @@ async function finRoute(m, p, body, q, u, db, req) {
     if (p === "/v1/tax/irpf-report") {
       const y = /^\d{4}$/.test(q.year || "") ? +q.year : +ref.slice(0, 4) - 1;
       if (y < 2000 || y > +ref.slice(0, 4)) throw new Problem(422, "Ano inválido", "Escolha um ano-calendário entre 2000 e o ano atual.");
-      const rep = irpfReport({ trades, year: y, refDate: ref, knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs });
+      const rep = irpfReport({ trades, incomes: await finLoad(db, uid, "income"), year: y, refDate: ref, knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs });
       await A("tributacao.relatorio_irpf", { resource: "tax", entity_id: String(y), meta: { bens: rep.bens_e_direitos.length } });
       return rep;
     }
@@ -883,7 +896,7 @@ async function finRoute(m, p, body, q, u, db, req) {
     const hasRv = holdings.some(h => ["acao", "fii", "etf", "bdr"].includes(h.asset_class));
     const positions = applyQuotes(holdings, quotes, hasRv ? {} : tax.positions_cost);
     const checklist = irpfChecklist({ year: +ref.slice(0, 4), accounts, holdings, txs, tax, docs: docsMeta, hasTrades: trades.some(t => t.date.startsWith(ref.slice(0, 4))), trades });
-    const a = assistantAnswer(qtext, { fin, port, tax, alerts: await alertsFor(), name: u.me.name, trades, positions, refDate: ref, documents: docsMeta, checklist, holdings, watchlists: await finLoad(db, uid, "watchlist"),
+    const a = assistantAnswer(qtext, { fin, port, tax, alerts: await alertsFor(), name: u.me.name, trades, positions, refDate: ref, documents: docsMeta, checklist, holdings, watchlists: await finLoad(db, uid, "watchlist"), incomes: await finLoad(db, uid, "income"),
       taxOpts: { knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs } });
     a.tool_calls.forEach(t => { t.latency_ms = Date.now() - t0; });
     metric("ai.pergunta." + a.intent, Date.now() - t0); if (a.guardrail) metric("ai.bloqueio." + a.guardrail);

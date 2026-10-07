@@ -75,6 +75,13 @@ export function buildIrpfWorkbook(XLSX, r) {
   add("Bens e direitos", [["Grupo", "Código", "Ativo", "Discriminação", `Situação em 31/12/${r.year - 1}`, `Situação em 31/12/${r.year}`],
     ...r.bens_e_direitos.map(b => [b.grupo || "conferir", b.codigo || "conferir", b.ticker, b.discriminacao, +b.situacao_anterior, +b.situacao_atual])], [8, 8, 10, 90, 18, 18]);
   add("Isentos", [["Descrição", "Valor"], [r.rendimentos_isentos.descricao, +r.rendimentos_isentos.ganhos_acoes_ate_20_mil]], [90, 16]);
+  const pv = r.proventos;
+  if (pv) add("Proventos", [["Ficha", "Tipo", "Ativo", "Fonte (como na B3)", "Lançamentos", "Valor"],
+    ...pv.dividendos.itens.map(g => [pv.dividendos.ficha, "Dividendos", g.ticker, g.fonte || "", g.lancamentos, +g.valor]),
+    ...pv.rendimentos_fii.itens.map(g => [pv.rendimentos_fii.ficha, "Rendimentos de FII", g.ticker, g.fonte || "", g.lancamentos, +g.valor]),
+    ...pv.jcp.itens.map(g => [pv.jcp.ficha, "JCP (líquido)", g.ticker, g.fonte || "", g.lancamentos, +g.valor]),
+    [], ["Totais", "Dividendos", +pv.dividendos.total, "Rendimentos FII", +pv.rendimentos_fii.total, ""], ["", "JCP líquido", +pv.jcp.total_liquido, "JCP bruto estimado", +pv.jcp.total_bruto_estimado, ""],
+    [], [pv.rendimentos_fii.condicao], [pv.jcp.nota]], [60, 18, 10, 40, 12, 14]);
   add("Premissas", [["Premissas e versões"], ...r.premissas.map(p => [p]), [], ["Motor", r.engine_version], ["Regras", Object.entries(r.rule_versions).map(([k, v]) => `${k}@${v}`).join(", ")], ["Relatório", r.version], [r.disclaimer]], [120, 60]);
   return wb;
 }
@@ -91,6 +98,11 @@ export async function irpfSection(el) {
         <div><div class="small muted">Resultado comum</div><b>R$ ${b2(t.resultado_comum)}</b></div><div><div class="small muted">Resultado day trade</div><b>R$ ${b2(t.resultado_daytrade)}</b></div>
         <div><div class="small muted">Resultado FII</div><b>R$ ${b2(t.resultado_fii)}</b></div><div><div class="small muted">Ganhos isentos (ações até R$ 20 mil)</div><b>R$ ${b2(r.rendimentos_isentos.ganhos_acoes_ate_20_mil)}</b></div></div>
       <p class="small" style="margin-top:8px">Imposto devido no ano R$ ${b2(t.imposto_devido)} · IRRF R$ ${b2(t.irrf)} · prejuízo a compensar no fim do ano: comum R$ ${b2(pj.comum)}, day trade R$ ${b2(pj.daytrade)}, FII R$ ${b2(pj.fii)}</p>
+      ${r.proventos?.fonte_dados ? `<h3 style="margin-top:14px;font-size:14px">Proventos recebidos</h3>
+        <div class="grid g-3" style="margin-top:6px"><div><div class="small muted">Dividendos (isentos)</div><b>R$ ${b2(r.proventos.dividendos.total)}</b></div>
+          <div><div class="small muted">Rendimentos de FII (isenção condicionada)</div><b>R$ ${b2(r.proventos.rendimentos_fii.total)}</b></div>
+          <div><div class="small muted">JCP (tributação exclusiva)</div><b>R$ ${b2(r.proventos.jcp.total_liquido)}</b> <span class="small muted">líquido · bruto estimado R$ ${b2(r.proventos.jcp.total_bruto_estimado)}</span></div></div>
+        <p class="small muted" style="margin-top:6px">${esc(r.proventos.jcp.nota)} ${esc(r.proventos.rendimentos_fii.condicao)}</p>` : ""}
       <h3 style="margin-top:14px;font-size:14px">Bens e direitos (custo de aquisição)</h3>
       ${r.bens_e_direitos.length ? `<div class="table-wrap"><table class="table" style="margin-top:8px"><thead><tr><th>Grupo/código</th><th>Discriminação</th><th class="num">31/12/${r.year - 1}</th><th class="num">31/12/${r.year}</th></tr></thead><tbody>
         ${r.bens_e_direitos.map(b => `<tr><td>${b.grupo ? `${b.grupo} / ${b.codigo}` : `<span class="muted">conferir</span>`}</td><td class="small">${esc(b.discriminacao)}</td><td class="num">${b2(b.situacao_anterior)}</td><td class="num">${b2(b.situacao_atual)}</td></tr>`).join("")}

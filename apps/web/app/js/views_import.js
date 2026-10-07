@@ -118,8 +118,8 @@ export async function importData(el) {
     const { file, parsed } = pending;
     try {
       const r = await api.post("/v1/imports", { filename: file.name, kind: parsed.kind, source: parsed.source, replace_holdings: !!parsed.replace_holdings,
-        transactions: parsed.transactions || [], accounts: parsed.accounts || [], holdings: parsed.holdings || [], trades: parsed.trades || [] });
-      toast(`Importado: ${Object.entries(r.counts).filter(([, v]) => v).map(([k, v]) => `${v} ${({ transactions: "lançamentos", accounts: "contas", holdings: "posições", trades: "negociações" })[k]}`).join(", ")}.`);
+        transactions: parsed.transactions || [], accounts: parsed.accounts || [], holdings: parsed.holdings || [], trades: parsed.trades || [], incomes: parsed.incomes || [] });
+      toast(`Importado: ${Object.entries(r.counts).filter(([, v]) => v).map(([k, v]) => `${v} ${({ transactions: "lançamentos", accounts: "contas", holdings: "posições", trades: "negociações", incomes: "proventos" })[k]}`).join(", ")}.`);
       pending = null; draw();
     } catch (x) { el.querySelector("#err").textContent = x instanceof ApiError ? (x.problem.detail || x.problem.title) : x.message; b.disabled = false; b.textContent = "Confirmar importação"; }
   }

@@ -9,7 +9,7 @@ const r2 = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
 const BEM = { acao: { grupo: "03", codigo: "01", label: "Participações societárias — ações" }, fii: { grupo: "07", codigo: "03", label: "Fundos — fundos de investimento imobiliário (FII)" } };
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-export function irpfReport({ trades = [], year, refDate, knownClasses = {}, priorLosses = {}, paidDarfs = {} }) {
+export function irpfReport({ trades = [], incomes = [], year, refDate, knownClasses = {}, priorLosses = {}, paidDarfs = {} }) {
   const end = `${year}-12-31`, ref = refDate && refDate < end ? refDate : end, partial = ref < end;
   const opts = { knownClasses, priorLosses, paidDarfs };
   const tax = computeTax(trades.filter(t => t.date <= ref), { ...opts, year, refDate: ref });
@@ -31,18 +31,33 @@ export function irpfReport({ trades = [], year, refDate, knownClasses = {}, prio
       darf_pago: paidDarfs[mk] != null ? r2(paidDarfs[mk]) : null, darf_status: m?.darf?.status || null };
   });
   const sum = k => r2(mensal.reduce((s, x) => s + +x[k], 0));
+  // proventos do ano, por ativo e tipo (valores líquidos creditados pela B3)
+  const inYear = incomes.filter(i => String(i.date).startsWith(String(year)) && i.date <= ref);
+  const byPayer = {};
+  for (const i of inYear) { const k = i.kind + "|" + i.ticker, g = byPayer[k] || (byPayer[k] = { tipo: i.kind, ticker: i.ticker, fonte: i.payer || null, valor: 0, lancamentos: 0 }); g.valor += +i.value; g.lancamentos++; }
+  const prov = Object.values(byPayer).map(g => ({ ...g, valor: r2(g.valor) })).sort((a, b) => a.tipo.localeCompare(b.tipo) || a.ticker.localeCompare(b.ticker));
+  const tot = t => r2(prov.filter(g => g.tipo === t).reduce((s, g) => s + +g.valor, 0));
+  const proventos = {
+    dividendos: { total: tot("dividendo"), ficha: "Rendimentos isentos e não tributáveis — lucros e dividendos recebidos", itens: prov.filter(g => g.tipo === "dividendo") },
+    rendimentos_fii: { total: tot("rendimento"), ficha: "Rendimentos isentos — rendimentos distribuídos por FII (isenção condicionada)", itens: prov.filter(g => g.tipo === "rendimento"),
+      condicao: "A isenção de pessoa física depende das condições legais do fundo e do cotista (por exemplo, número mínimo de cotistas e participação máxima); confira no informe do fundo." },
+    jcp: { total_liquido: tot("jcp"), total_bruto_estimado: r2(+tot("jcp") / 0.85), ficha: "Rendimentos sujeitos à tributação exclusiva/definitiva — juros sobre capital próprio", itens: prov.filter(g => g.tipo === "jcp"),
+      nota: "A B3 mostra o JCP líquido (após IRRF de 15%). O bruto estimado divide por 0,85; declare o valor do informe de rendimentos da empresa ou da corretora." },
+    fonte_dados: inYear.length ? "Movimentação da B3 (proventos creditados)" : null,
+  };
   return {
     version: IRPF_REPORT_VERSION, engine_version: ENGINE_VERSION, rule_versions: tax.rule_versions, year, reference_date: ref, partial,
     renda_variavel: { mensal, totais: { resultado_comum: sum("resultado_comum"), resultado_daytrade: sum("resultado_daytrade"), resultado_fii: sum("resultado_fii"), imposto_devido: sum("imposto_devido"), irrf: sum("irrf"), imposto_a_pagar: sum("imposto_a_pagar") },
       prejuizo_a_compensar_final: tax.losses_available },
     rendimentos_isentos: { ganhos_acoes_ate_20_mil: tax.total_exempt_gain, descricao: "Ganhos líquidos em operações no mercado à vista de ações em meses com vendas de até R$ 20 mil" },
+    proventos,
     bens_e_direitos: bens,
     totais_bens: { situacao_anterior: r2(bens.reduce((s, b) => s + +b.situacao_anterior, 0)), situacao_atual: r2(bens.reduce((s, b) => s + +b.situacao_atual, 0)) },
     premissas: [
       "Bens e direitos pelo custo de aquisição (preço médio com custos da nota), não pelo valor de mercado.",
       "Valores da apuração mensal vêm do Tax Engine com as versões de regra indicadas; conferir com as notas de corretagem.",
       "Grupo e código de bens só foram preenchidos para ações (03/01) e FII (07/03); ETF e BDR: conferir no Perguntas e Respostas do exercício.",
-      "Rendimentos de FII (proventos), juros sobre capital próprio e dividendos não entram neste relatório.",
+      inYear.length ? "Proventos (dividendos, JCP e rendimentos de FII) vêm da Movimentação da B3 importada; a fonte pagadora oficial (CNPJ) está no informe de rendimentos." : "Proventos não importados: envie a planilha de Movimentação da B3 para incluir dividendos, JCP e rendimentos de FII.",
       ...(partial ? [`Ano em andamento: posição e resultados até ${ref.split("-").reverse().join("/")}.`] : []),
     ],
     limitations: tax.limitations, confidence: tax.confidence, quality: tax.quality,

@@ -21,6 +21,7 @@ export function classify(q) {
   if (any(PATTERNS.injection)) return "bloqueado";
   if (any(PATTERNS.credential)) return "credencial";
   if (any(PATTERNS.advice)) return "investimento_individual";
+  if (/dividend|\bjcp\b|juros sobre capital|provento|rendimentos? (de|do|dos) fii/.test(t) && !CONCEPT.test(t)) return "proventos";
   if (CONCEPT.test(t)) return "conhecimento";
   if (/document|comprovante|recibo|informe de rend/.test(t)) return "documento";
   if (/vend\w*\s+(de\s+)?\d/.test(t) && /[a-z]{4}\d{1,2}/.test(t)) return "simulacao";
@@ -45,7 +46,7 @@ export function parseSaleQuestion(q, refDate) {
 }
 
 export function answer(question, ctx) {
-  const { fin, port, tax, alerts = [], name = "", trades = [], positions = [], taxOpts = {}, refDate, documents = [], checklist = null, holdings = [], watchlists = [] } = ctx;
+  const { fin, port, tax, alerts = [], name = "", trades = [], positions = [], taxOpts = {}, refDate, documents = [], checklist = null, holdings = [], watchlists = [], incomes = [] } = ctx;
   const intent = classify(question);
   const out = { intent, guardrail: null, evidence: [], tool_calls: [], suggestions: [], confidence: 1, consistency_ok: true };
   const tool = (t, ms = 0) => out.tool_calls.push({ tool: t, status: "ok", latency_ms: ms });
@@ -162,6 +163,19 @@ export function answer(question, ctx) {
     out.suggestions = ["Quanto imposto pago se vender?", "Quais alertas existem?", "Como está minha concentração?"];
     const tail = e.exposure.length ? ` Divulgações públicas (CVM) e notícias dos seus ${e.exposure.length} ativo(s) ficam em Trader Intelligence → Divulgações e em Notícias, com link para a fonte original.` : "";
     return say(e.items.length ? `Próximos eventos seus: ${e.items.slice(0, 4).map(i => `${i.date.split("-").reverse().join("/")} — ${i.title}`).join("; ")}.${tail}` : `Nenhum prazo pessoal (DARF ou vencimento de título) nos próximos dias.${tail}`);
+  }
+
+  if (intent === "proventos") {
+    tool("incomes");
+    const y = +String(refDate || new Date().toISOString()).slice(0, 4), ys = [y, y - 1];
+    out.suggestions = ["Quanto vou pagar de imposto?", "Como funciona a isenção de 20 mil?", "Quais eventos vêm por aí?"];
+    if (!incomes.length) return say("Ainda não há proventos importados. Envie a planilha de Movimentação da Área do Investidor da B3 em Importar dados: dividendos, juros sobre capital próprio e rendimentos de FII entram automaticamente.");
+    const lab = { dividendo: "dividendos", jcp: "JCP (líquido)", rendimento: "rendimentos de FII" };
+    const parts = ys.map(yy => { const l = incomes.filter(i => String(i.date).startsWith(String(yy))); if (!l.length) return null;
+      const by = k => l.filter(i => i.kind === k).reduce((s2, i) => s2 + +i.value, 0);
+      return `${yy}: ${["dividendo", "jcp", "rendimento"].filter(k => by(k) > 0).map(k => `${lab[k]} ${brl(by(k))}`).join(", ")}`; }).filter(Boolean);
+    out.evidence = incomes.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6).map(i => ev(`${lab[i.kind]} ${i.ticker}`, i.value, `${brl(i.value)} em ${dbr(i.date)}`, "Movimentação B3"));
+    return say(`Proventos creditados — ${parts.join(" · ") || "nada nos últimos dois anos"}. Valores líquidos como aparecem na B3; para a declaração, use o relatório em Tributação e confira com o informe de rendimentos.`);
   }
 
   if (intent === "conhecimento" || intent === "geral") {
