@@ -19,7 +19,7 @@ export function personalEvents({ tax = null, holdings = [], refDate, horizonDays
     const d = m.darf; if (!d || d.status === "pago" || (d.status !== "vencido" && !inWin(d.vencimento))) continue;   // DARF vencido e não pago aparece sempre
     out.push({ date: d.vencimento, kind: "darf", title: `DARF ${d.codigo} — competência ${d.competencia.split("-").reverse().join("/")}`,
       detail: `Valor estimado R$ ${String(d.valor).replace(".", ",")}${d.status === "vencido" ? " · vencido" : ""}`, impact: d.status === "vencido" ? "atenção" : "prazo",
-      source: "Tax Engine AURION (estimativa)", link: "#/tributacao" });
+      source: "Tax Engine AURION (estimativa)", link: `#/tributacao?tab=guias&competencia=${d.competencia}` });
   }
   for (const h of holdings) {
     if (!h.maturity || !inWin(h.maturity)) continue;

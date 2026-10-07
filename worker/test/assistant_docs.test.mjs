@@ -68,3 +68,23 @@ test("base de conhecimento governada: metadados, só regras validadas, citação
   assert.equal(answerKB("devo comprar PETR4?", ctx).guardrail, "recomendacao", "guardrail continua antes do conhecimento");
   assert.deepEqual(Object.keys(citation(retrieve("open finance")[0])).sort(), ["collection", "document", "effective_at", "links", "source_id", "version"]);
 });
+
+test("guias: código por assunto, DARF em aberto com multa e juros, DARE e links", () => {
+  assert.equal(classify("Como pagar DARF atrasado?"), "guia");
+  assert.equal(classify("Qual o código do DARF do carnê-leão?"), "guia");
+  assert.equal(classify("Como emitir DARE de IPVA?"), "guia");
+  assert.equal(classify("quanto pago de darf"), "tributaria");
+  const c = answer("Qual o código do DARF do carnê-leão?", ctx);
+  assert.match(c.answer, /0190/); assert.match(c.answer, /último dia útil do mês seguinte/);
+  const selic = [{ date: "2026-06-01", value: 1.1 }, { date: "2026-07-01", value: 1.2 }, { date: "2026-08-01", value: 1.1 }, { date: "2026-09-01", value: 1.0 }, { date: "2026-10-01", value: 0.1 }];
+  const a = answer("Como pagar DARF atrasado?", { ...ctx, selic });
+  const d = tax.months.find(m => m.month === "2026-04").darf;
+  assert.equal(d.vencimento, "2026-05-29");
+  const principal = +d.valor, total = Math.round((principal * 1.2 + principal * 0.054) * 100) / 100;   // multa 20% + juros 4,4% + 1%
+  assert.match(a.answer, /venceu em 29\/05\/2026/); assert.match(a.answer, /20%/); assert.match(a.answer, /5,4%/);
+  assert.ok(a.evidence.some(e => +e.value === total), JSON.stringify(a.evidence));
+  assert.deepEqual(a.actions, [{ label: "Gerar DARF de abr/2026", route: "/tributacao?tab=guias&competencia=2026-04" }]);
+  assert.ok(a.knowledge.citations.some(x => x.links.some(u => /l9430/.test(u))));
+  const r = answer("Como emitir DARE de IPVA?", ctx);
+  assert.match(r.answer, /2120/); assert.match(r.answer, /Secretaria de Fazenda/);
+});

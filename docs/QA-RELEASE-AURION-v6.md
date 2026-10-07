@@ -96,6 +96,8 @@ Como reproduzir:
   - DARF 6015 gerado direto da apuração mensal; CPF conferido com o da conta; documento cifrado no banco e mascarado nas listas; tudo na auditoria.
   - DARE: tabela de códigos de Rondônia (SEFIN-RO) e código informado para as demais UFs; o código de barras do DARE é emitido no portal da SEFAZ.
   - Testes: `guias.test.mjs` e `guias_e2e`. Selic mensal (SGS 4390) coletada pela API e publicada em `data/public/selic.json`.
+  - Integração: alertas, próximas ações, agenda e Radar Trader abrem a guia já preenchida (botão "Gerar DARF"). O assistente responde código por assunto, valor do DARF em aberto com multa e juros para pagamento hoje e DARE, citando a Lei 9.430/96 e o Sicalc.
+  - Passo a passo para ligar o código de barras pelo SERPRO: `docs/INTEGRA-CONTADOR.md`.
 
 ### Ainda abertos
 - **Código de barras do DARF pela API.** Depende do contrato do Integra Contador (SERPRO) e do certificado e-CNPJ; até lá, o código de barras é gerado no Sicalc com os mesmos dados.

@@ -77,7 +77,7 @@ class AlertEngine:
                     key=m.month, due_date=m.darf["vencimento"], rule=m.rules[0],
                     evidence=[{"label": "Competência", "value": m.month}, {"label": "Imposto estimado", "value": m.darf["valor"]},
                               {"label": "IRRF compensado", "value": m.irrf}],
-                    action={"label": "Ver apuração", "route": "/tributacao"}))
+                    action={"label": "Gerar DARF", "route": f"/tributacao?tab=guias&competencia={m.month}"}))
         # 2. Proximidade do limite de isenção no mês corrente (informativo, sem recomendar operação)
         cur = f"{reference.year:04d}-{reference.month:02d}"
         for m in tax.months:

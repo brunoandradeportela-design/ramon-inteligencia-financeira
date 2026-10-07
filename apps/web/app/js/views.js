@@ -334,7 +334,9 @@ export async function tax(el, r, ctx = {}) {
   const real = HAS_API && !t.sample;
   let prefs = { prior_losses: {}, paid_darfs: {} };
   if (real) try { prefs = await api.get("/v1/tax/settings"); } catch (e) { /* segue com o padrão */ }
-  const reload = () => tax(el, { params: new URLSearchParams(`tab=${tab}`) });
+  const reload = () => tax(el, { params: new URLSearchParams(`tab=${tab}`) }, ctx);
+  const comp = r.params.get("competencia"), mComp = comp ? t.months.find(x => x.month === comp && x.darf && x.darf.status !== "pago") : null;
+  if (mComp) { tab = "guias"; guiaPrefill = { codigo: "6015", periodo: comp, principal: mComp.darf.valor, origem: "apuracao" }; }
   const draw = () => {
     el.innerHTML = `${sampleNote(t)}
       ${real && t.limitations[0]?.startsWith("Há vendas sem") ? `<div class="card" style="margin-bottom:16px;border-color:var(--warn, #c98a00)"><p class="small"><b>Faltam compras no histórico.</b> ${esc(t.limitations[0])} <a href="#/importar">Importar negociações</a></p></div>` : ""}
@@ -641,6 +643,7 @@ export async function assistant(el, r) {
       const a = await api.post("/v1/assistant/query", { question: q, thread_id: hist.at(-1)?.thread_id });
       hist.push(a);
       chat.querySelector("#pending").outerHTML = `<div class="msg msg--ai ${a.guardrail ? "msg--guard" : ""}">${esc(a.answer)}
+        ${a.actions?.length ? `<div class="row wrap" style="gap:6px;margin-top:10px">${a.actions.map(x => `<a class="btn btn--ghost btn--sm" href="#${esc(x.route)}">${esc(x.label)}</a>`).join("")}</div>` : ""}
         ${a.evidence?.length ? `<details style="margin-top:8px"><summary>Evidências (${a.evidence.length})</summary><ul class="small" style="margin-top:6px">${a.evidence.map(e => `<li>• ${esc(e.label)}: <b>${esc(e.display || e.value)}</b> <span class="muted">— ${esc(e.source)}</span></li>`).join("")}</ul></details>` : ""}
         ${a.knowledge?.citations?.length ? `<details style="margin-top:8px"><summary>Fontes (${a.knowledge.citations.length})</summary><ul class="small" style="margin-top:6px">${a.knowledge.citations.map(c => `<li>• ${esc(c.document)} <span class="muted">— ${esc(c.source_id)} · versão ${esc(c.version)}${c.effective_at ? " · vigente desde " + esc(c.effective_at.split("-").reverse().join("/")) : ""}</span>${c.links.map(u => ` · <a href="${esc(u)}" target="_blank" rel="noopener">fonte oficial</a>`).join("")}</li>`).join("")}</ul></details>` : ""}
         <div class="meta">Intenção: ${esc(a.intent)}${a.guardrail ? ` · guardrail: ${esc(a.guardrail)}` : ""} · ferramentas: ${esc(a.tool_calls.map(t => t.tool).join(", ") || "nenhuma")} · consistência ${a.consistency_ok ? "ok" : "falhou"} · ${esc(a.provider)} · ${esc(a.disclaimer)}</div>

@@ -27,15 +27,15 @@ export function buildAlerts({ fin, port, tax, refDate = new Date().toISOString()
       const days = d.dias_para_vencimento;
       if (d.status === "vencido") out.push(make("DARF_VENCIDO", d.competencia, {
         title: `DARF de ${mesBr(d.competencia)} vencido`, category: "tributario", severity: "critico", impact: 0.9, urgency: 1,
-        detail: `Venceu em ${d.vencimento.split("-").reverse().join("/")} — estimativa de R$ ${brn(d.valor)} (código 6015). Pagamento em atraso tem multa de 0,33% ao dia (até 20%) e juros pela Selic. Se já pagou, marque como pago na Tributação.`,
+        detail: `Venceu em ${d.vencimento.split("-").reverse().join("/")} — estimativa de R$ ${brn(d.valor)} (código 6015). Pagamento em atraso tem multa de 0,33% ao dia (até 20%) e juros pela Selic: gere o DARF com os acréscimos em Tributação → Guias. Se já pagou, marque como pago.`,
         evidence: [{ label: "Competência", value: d.competencia }, { label: "Imposto estimado", value: d.valor }], rule: m.rules?.[0] || null,
-        action: { label: "Ver apuração", route: "/tributacao" }, due_date: d.vencimento }));
+        action: { label: "Gerar DARF", route: `/tributacao?tab=guias&competencia=${d.competencia}` }, due_date: d.vencimento }));
       else if (days <= 15) out.push(make("DARF_VENCIMENTO", d.competencia, {
         title: `DARF de ${mesBr(d.competencia)} vence ${days <= 0 ? "hoje" : `em ${days} dia(s)`}`, category: "tributario",
         severity: days <= 5 ? "critico" : "alto", impact: 0.8, urgency: days <= 5 ? 1 : 0.7,
-        detail: `Valor estimado R$ ${brn(d.valor)} (código 6015), vencimento ${d.vencimento.split("-").reverse().join("/")}. Gere o DARF no Sicalc da Receita ou peça ao seu contador.`,
+        detail: `Valor estimado R$ ${brn(d.valor)} (código 6015), vencimento ${d.vencimento.split("-").reverse().join("/")}. Gere o DARF em Tributação → Guias (código, CPF e vencimento conferidos) ou peça ao seu contador.`,
         evidence: [{ label: "Competência", value: d.competencia }, { label: "Imposto estimado", value: d.valor }, { label: "IRRF compensado", value: m.irrf }],
-        rule: m.rules?.[0] || null, action: { label: "Ver apuração", route: "/tributacao" }, due_date: d.vencimento }));
+        rule: m.rules?.[0] || null, action: { label: "Gerar DARF", route: `/tributacao?tab=guias&competencia=${d.competencia}` }, due_date: d.vencimento }));
     }
     // vendas sem custo
     const pend = tax.events.filter(e => e.status === "pendente_dado");

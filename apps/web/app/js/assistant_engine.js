@@ -5,6 +5,7 @@ import { simulateSale } from "./sim_engine.js";
 import { tradeAnalytics } from "./trader_engine.js";
 import { eventsView } from "./event_engine.js";
 import { retrieve, citation, KB_VERSION, ruleText } from "./knowledge.js";
+import { RECEITAS_DARF, DARE_UF, acrescimos, diaUtil, proximoDiaUtil, SICALC_URL, VALOR_MINIMO_DARF } from "./guia_engine.js";
 
 export const PATTERNS = {"injection": ["ignore (as |todas as |suas )?(instru|regras)", "ignore (all|previous|the above)", "system prompt", "prompt do sistema", "modo desenvolvedor", "developer mode", "jailbreak", "aja como (um )?consultor", "finja (que|ser)", "sem (as )?restri", "desative (o|os) (guardrail|filtro)", "revele (suas|as) instru"], "credential": ["\\bsenha\\b.*\\b(banco|conta|corretora)", "\\btoken\\b.*\\b(banco|seguranca)", "\\bminha senha\\b"], "advice": ["\\b(devo|deveria|vale a pena|compensa) (comprar|vender|investir|aplicar|resgatar|sair|entrar)", "\\b(qual|quais|que) (acao|acoes|ativo|ativos|fundo|fundos|fii|fiis|etf|cripto|investimento)s? (devo|deveria|comprar|vender|recomenda|indica|e melhor|sao melhores)", "\\b(recomend|indic|sugir|sugest)\\w* .*(acao|acoes|ativo|fundo|fii|carteira|investimento|compra|venda)", "\\bmonte (uma|minha) carteira", "\\bcarteira recomendada", "\\bonde (devo )?investir", "\\b(compro|vendo) (agora|hoje|ou)", "\\bmelhor (acao|investimento|fundo|ativo)", "\\bpreco[- ]alvo", "\\bvai (subir|cair|valorizar)", "\\bhora (certa|de) (comprar|vender)"], "intents": {"tributaria": ["impost", "\\bir\\b", "irpf", "darf", "tribut", "isen", "prejuiz", "aliquota", "day ?trade", "ganho de capital", "imposto de renda", "receita federal", "pgbl", "vgbl", "dedu"], "simulacao": ["simul", "cenario", "e se ", "what if", "comparar cenario", "compare"], "alertas": ["alerta", "atencao", "pendenc", "radar", "o que (merece|preciso)", "prioridade"], "patrimonio": ["patrimon", "carteira", "aloca", "posic", "concentra", "liquidez", "quanto (eu )?tenho", "onde esta", "investimento"], "financeira": ["gasto", "despes", "receita", "fluxo", "categoria", "orcamento", "saldo", "conta", "cartao", "recorren", "mudou", "economi"], "documento": ["document", "informe", "nota de corretagem", "comprovante", "upload", "arquivo"], "trader": ["\\btrade", "trader", "operac", "taxa de acerto", "win rate", "payoff", "drawdown", "backtest", "estrategia", "resultado das (minhas )?operac"], "eventos": ["evento", "divulga", "fato relevante", "comunicado", "noticia", "agenda", "prazo", "vencimento", "aconteceu", "daily", "resumo do dia"]}};
 const DISCLAIMER = "Informação educativa calculada sobre os seus dados; não é recomendação de investimento nem substitui seu contador.";
@@ -16,12 +17,21 @@ const mesBr = mk => { const [y, m] = String(mk).split("-"); return ["jan", "fev"
 const ev = (label, value, display, source) => ({ label, value: String(value), display, source });
 
 const CONCEPT = /^(o que (e|sao|significa)|oque|como (funciona|e calculad|o aurion|voces|calcula)|qual (e |eh )?a regra|quais (sao )?as regras|explique|explica|me explica|por que o aurion|o aurion (faz|executa|recomenda|guarda|le)|existe (isencao|limite)|tem (isencao|limite)|qual a aliquota|quais as aliquotas|onde (esta|fica) a fonte)/;
+const GUIA = /(codigo|cod\.?) (do |da |de )?(darf|dare|receita)|\b(gerar|emitir|imprimir|tirar|fazer) (o |a |um |uma |meu |minha )?(darf|dare|guia)|\bdare\b|darf (atrasad|em atraso|vencid|em aberto)|pag\w* (o |um )?darf|(multa|juros)\b.*\bdarf|darf\b.*(multa|juros)|guia de (pagamento|recolhimento)/;
+/* palavras → código de receita do DARF (tabela do guia_engine) */
+const CODIGO_POR_TEMA = [[/carne[- ]?leao|aluguel recebido|exterior/, "0190"], [/moeda estrangeira|dolar/, "8523"], [/ganho de capital|venda de (imovel|carro|bem)|gcap/, "4600"],
+  [/quota|declaracao|ajuste anual|restituic/, "0211"], [/csll/, "2372"], [/lucro presumido|irpj/, "2089"], [/\bpis\b/, "8109"], [/cofins/, "2172"], [/assalariad|salario|folha/, "0561"],
+  [/csrf|retencao (de )?(pis|cofins|csll)/, "5952"], [/aluguel|royalt/, "3208"], [/servico/, "1708"], [/bolsa|acoes|acao|renda variavel|day ?trade|fii|swing/, "6015"]];
+const VENC_TXT = { ultimo_util_mes_seguinte: "último dia útil do mês seguinte ao período", dia_20_mes_seguinte_antecipa: "dia 20 do mês seguinte (antecipa se não for dia útil)",
+  dia_25_mes_seguinte_antecipa: "dia 25 do mês seguinte (antecipa se não for dia útil)", informado: "prazo da declaração do ano (quota única ou 1ª quota)" };
+const LEI_9430 = "https://www.planalto.gov.br/ccivil_03/leis/l9430.htm";
 export function classify(q) {
   const t = norm(q), any = list => list.some(p => new RegExp(p).test(t));
   if (any(PATTERNS.injection)) return "bloqueado";
   if (any(PATTERNS.credential)) return "credencial";
   if (any(PATTERNS.advice)) return "investimento_individual";
   if (/dividend|\bjcp\b|juros sobre capital|provento|rendimentos? (de|do|dos) fii/.test(t) && !CONCEPT.test(t)) return "proventos";
+  if (GUIA.test(t)) return "guia";
   if (CONCEPT.test(t)) return "conhecimento";
   if (/document|comprovante|recibo|informe de rend/.test(t)) return "documento";
   if (/vend\w*\s+(de\s+)?\d/.test(t) && /[a-z]{4}\d{1,2}/.test(t)) return "simulacao";
@@ -60,6 +70,47 @@ export function answer(question, ctx) {
   if (intent === "investimento_individual") { out.guardrail = "recomendacao"; out.suggestions = ["Simular venda de 100 PETR4", "Como está minha concentração?", "Quanto imposto pago se vender?"];
     return say("Não faço recomendação de compra ou venda de ativos (é atividade regulada pela CVM). Posso mostrar as consequências de um cenário: escreva, por exemplo, \"simular venda de 100 PETR4\" e eu calculo o imposto e a liquidez."); }
 
+  if (intent === "guia") {
+    const t = norm(question);
+    out.actions = [{ label: "Abrir guias DARF/DARE", route: "/tributacao?tab=guias" }];
+    out.knowledge = { kb_version: KB_VERSION, citations: [{ document: "Lei 9.430/1996, arts. 61 (multa e juros de mora) e 68 (valor mínimo do DARF)", source_id: "lei-9430-1996", version: "consolidada", effective_at: null, collection: "fontes_publicas", links: [LEI_9430] },
+      { document: "Sicalc — Receita Federal", source_id: "sicalc", version: "web", effective_at: null, collection: "fontes_publicas", links: [SICALC_URL] }] };
+    // DARE estadual
+    if (/\bdare\b|ipva|itcd|itcmd|icms|estadual|sefaz|sefin/.test(t)) {
+      const ro = DARE_UF.RO, hit = ro.receitas.filter(r => (/ipva/.test(t) && /IPVA/.test(r.descricao)) || (/itcd|itcmd|heranca|doacao/.test(t) && /ITCD/.test(r.descricao)) || (/icms/.test(t) && /ICMS/.test(r.descricao)));
+      out.evidence = (hit.length ? hit : ro.receitas.slice(0, 4)).map(r => ev(`DARE RO ${r.codigo}`, r.codigo, r.descricao, ro.fonte));
+      out.knowledge.citations = [{ document: ro.fonte, source_id: "sefin-ro-dare", version: "tabela de códigos", effective_at: null, collection: "fontes_publicas", links: [ro.portal] }];
+      out.suggestions = ["Como pagar DARF atrasado?", "Qual o código do DARF do carnê-leão?"];
+      return say(`O DARE é a guia dos tributos estaduais (IPVA, ITCD, ICMS e taxas). Em Tributação → Guias, escolha "DARE · estadual": o AURION confere o CPF ou CNPJ, a inscrição estadual quando o tributo exige e o código de receita${hit.length ? ` — em Rondônia, ${hit.map(r => `${r.codigo} (${r.descricao})`).join(", ")}` : " (a tabela de Rondônia já está cadastrada; nos outros estados você informa o código)"}. O código de barras é gerado pela Secretaria de Fazenda do estado, no portal dela; multa e juros estaduais também são calculados lá.`);
+    }
+    const parts = [];
+    // código por assunto
+    const tema = CODIGO_POR_TEMA.find(([re]) => re.test(t));
+    if (tema && /codigo|qual|que darf|cod\b/.test(t)) {
+      const r = RECEITAS_DARF.find(x => x.codigo === tema[1]);
+      out.evidence.push(ev(`Código ${r.codigo}`, r.codigo, `${r.descricao} · vencimento: ${VENC_TXT[r.venc]}`, "Tabela de receitas do AURION (guias@1.0.0)"));
+      parts.push(`O código é ${r.codigo} — ${r.descricao}. Vence no ${VENC_TXT[r.venc]}${r.quem === "PF" ? " e é pago com o CPF" : r.quem === "PJ" ? " e é pago com o CNPJ" : ""}.${r.nota ? " " + r.nota : ""}`);
+    }
+    // DARFs em aberto do próprio cliente, com multa e juros para pagamento hoje
+    const open = tax?.has_data ? tax.months.map(m => m.darf).filter(d => d && d.status !== "pago") : [];
+    if (open.length) {
+      tool("tax"); tool("guias");
+      const pag = proximoDiaUtil(refDate), selic = (ctx.selic || []).filter(x => String(x.date).slice(0, 7) < refDate.slice(0, 7));
+      for (const d of open) {
+        const a = acrescimos({ principal: +d.valor, vencimento: d.vencimento, pagamento: pag, selic });
+        out.evidence.push(ev(`DARF 6015 ${mesBr(d.competencia)}`, a.total, a.atraso_dias ? `${brl(d.valor)} + multa ${brl(a.multa)} + juros ${brl(a.juros)} = ${brl(a.total)} pagando em ${dbr(pag)}` : `${brl(d.valor)} · vence ${dbr(d.vencimento)}`, "Tax Engine + motor de guias"));
+        parts.push(a.atraso_dias
+          ? `O DARF 6015 de ${mesBr(d.competencia)} venceu em ${dbr(d.vencimento)}: pagando em ${dbr(pag)}, são ${brl(d.valor)} de principal, ${brl(a.multa)} de multa (${String(a.multa_pct).replace(".", ",")}%) e ${brl(a.juros)} de juros (${String(a.juros_pct).replace(".", ",")}%), total ${brl(a.total)}.${a.selic_faltando.length ? " A Selic de algum mês ainda não foi publicada; confira no Sicalc." : ""}`
+          : `O DARF 6015 de ${mesBr(d.competencia)} é de ${brl(d.valor)} e vence em ${dbr(d.vencimento)}.`);
+      }
+      out.actions = open.map(d => ({ label: `Gerar DARF de ${mesBr(d.competencia)}`, route: `/tributacao?tab=guias&competencia=${d.competencia}` }));
+      out.confidence = tax.confidence;
+    } else if (!parts.length && tax?.has_data) parts.push("Você não tem DARF de renda variável em aberto.");
+    parts.push(`Para gerar a guia: Tributação → Guias. O AURION confere o código, o CPF ou CNPJ e o vencimento, e calcula multa de 0,33% ao dia (até 20%) e juros pela Selic mais 1% no mês do pagamento. Abaixo de R$ ${VALOR_MINIMO_DARF},00 não se emite DARF: o valor soma ao período seguinte. A guia sai pronta para "DARF sem código de barras" no internet banking; com código de barras, gere no Sicalc com os mesmos dados.`);
+    out.suggestions = ["Qual o código do DARF do carnê-leão?", "Como emitir DARE de IPVA?", "Quanto vou pagar de imposto?"];
+    return say(parts.join(" "));
+  }
+
   if (intent === "simulacao") {
     tool("simulation");
     const op = parseSaleQuestion(question, refDate);
@@ -75,7 +126,7 @@ export function answer(question, ctx) {
     } catch (e) { return say(e.message || "Não consegui simular esse cenário."); }
   }
 
-  if (noData && intent !== "documento" && intent !== "conhecimento") {
+  if (noData && intent !== "documento" && intent !== "conhecimento" && intent !== "guia") {
     out.suggestions = ["Como importar meus dados?"];
     return say(`${name ? name.split(" ")[0] + ", ainda" : "Ainda"} não há dados seus para eu analisar. Envie seus extratos (OFX/CSV) e os relatórios da B3 em Importar dados, ou conecte seu banco em Conexões — aí eu respondo com os seus números.`);
   }

@@ -201,8 +201,8 @@ export function traderRadar({ analytics, tax = null, journal = [], refDate }) {
   const brl = v => "R$ " + (+v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   for (const m of tax?.months || []) {
     const d = m.darf; if (!d || d.status === "pago") continue;
-    if (d.status === "vencido") push("darf_" + d.competencia, "critico", `DARF ${d.competencia.split("-").reverse().join("/")} vencido`, `Valor estimado ${brl(d.valor)}, venceu em ${d.vencimento.split("-").reverse().join("/")}. Pagamento em atraso tem multa e juros.`, { label: "Ver apuração", route: "/tributacao" });
-    else if (d.dias_para_vencimento <= 10) push("darf_" + d.competencia, "alto", `DARF vence em ${d.dias_para_vencimento} dia(s)`, `Valor estimado ${brl(d.valor)} (competência ${d.competencia.split("-").reverse().join("/")}).`, { label: "Ver apuração", route: "/tributacao" });
+    if (d.status === "vencido") push("darf_" + d.competencia, "critico", `DARF ${d.competencia.split("-").reverse().join("/")} vencido`, `Valor estimado ${brl(d.valor)}, venceu em ${d.vencimento.split("-").reverse().join("/")}. Pagamento em atraso tem multa e juros.`, { label: "Gerar DARF", route: `/tributacao?tab=guias&competencia=${d.competencia}` });
+    else if (d.dias_para_vencimento <= 10) push("darf_" + d.competencia, "alto", `DARF vence em ${d.dias_para_vencimento} dia(s)`, `Valor estimado ${brl(d.valor)} (competência ${d.competencia.split("-").reverse().join("/")}).`, { label: "Gerar DARF", route: `/tributacao?tab=guias&competencia=${d.competencia}` });
   }
   const closed = [...(analytics?.closed || [])].sort((a, b) => cmp(a.exit_date, b.exit_date));
   let cur = 0; for (let i = closed.length - 1; i >= 0 && closed[i].net_pnl < 0; i--) cur++;

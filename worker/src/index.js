@@ -910,6 +910,7 @@ async function finRoute(m, p, body, q, u, db, req) {
     const positions = applyQuotes(holdings, quotes, hasRv ? {} : tax.positions_cost);
     const checklist = irpfChecklist({ year: +ref.slice(0, 4), accounts, holdings, txs, tax, docs: docsMeta, hasTrades: trades.some(t => t.date.startsWith(ref.slice(0, 4))), trades });
     const a = assistantAnswer(qtext, { fin, port, tax, alerts: await alertsFor(), name: u.me.name, trades, positions, refDate: ref, documents: docsMeta, checklist, holdings, watchlists: await finLoad(db, uid, "watchlist"), incomes: await finLoad(db, uid, "income"),
+      selic: ((await kvGet(db, "market_raw", null)) || {}).selic_m || [],
       taxOpts: { knownClasses: known, priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs } });
     a.tool_calls.forEach(t => { t.latency_ms = Date.now() - t0; });
     metric("ai.pergunta." + a.intent, Date.now() - t0); if (a.guardrail) metric("ai.bloqueio." + a.guardrail);
