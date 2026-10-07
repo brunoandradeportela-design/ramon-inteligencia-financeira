@@ -30,45 +30,83 @@ export const ICONS = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/>',
   inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+  chev: '<path d="M9 6l6 6-6 6"/>', chevd: '<path d="M6 9l6 6 6-6"/>', dots: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>', receipt: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+  radar: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12l6-6"/>', target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>', drop: '<path d="M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z"/>',
+  bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>', news: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/>',
+  cart: '<path d="M3 4h2l2.5 11h11L21 7H7"/><circle cx="10" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/>', food: '<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 2-2 6 0 8v10"/>',
+  file: '<path d="M6 2.5h8.5L19 7v14.5H6z"/><path d="M14 2.5V7h5"/>', wallet: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/>', grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  candle: '<path d="M7 3v4M7 17v4M17 3v6M17 15v6"/><rect x="5" y="7" width="4" height="10" rx="1"/><rect x="15" y="9" width="4" height="6" rx="1"/>', arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
 };
 export const icon = (n, cls = "") => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ""}</svg>`;
 
 export const PALETTE = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)", "var(--c5)"];
 
-/** Área + linha (evolução). Acessível: role=img + aria-label com resumo. */
-export function areaChart(values, { h = 90, w = 320, label = "" } = {}) {
+let _gid = 0;
+const gid = p => p + (++_gid) + Math.random().toString(36).slice(2, 5);
+/** valor compacto: R$ 1,24 mi / R$ 820 mil */
+export const brlShort = v => { const n = +v || 0, a = Math.abs(n); return a >= 1e6 ? "R$ " + (n / 1e6).toFixed(2).replace(".", ",") + " mi" : a >= 1e4 ? "R$ " + Math.round(n / 1e3) + " mil" : brl(n); };
+
+/** Área + linha com brilho (evolução). Acessível: role=img + aria-label com resumo. labels = eixo X; tag = etiqueta no último ponto. */
+export function areaChart(values, { h = 90, w = 320, label = "", labels = null, tag = null } = {}) {
   if (!values.length) return "";
-  const min = Math.min(...values), max = Math.max(...values), r = max - min || 1;
-  const pts = values.map((v, i) => [i * (w / (values.length - 1 || 1)), h - 8 - ((v - min) / r) * (h - 22)]);
+  const min = Math.min(...values), max = Math.max(...values), r = max - min || 1, padT = tag ? 30 : 10, padB = 10;
+  const pts = values.map((v, i) => [i * (w / (values.length - 1 || 1)), padT + (1 - (v - min) / r) * (h - padT - padB)]);
   const line = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
-  const id = "g" + Math.random().toString(36).slice(2, 7);
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:${h}px" role="img" aria-label="${esc(label)}">
-    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--c1)" stop-opacity=".45"/><stop offset="1" stop-color="var(--c1)" stop-opacity="0"/></linearGradient></defs>
-    <path d="${line} L${w} ${h} L0 ${h} Z" fill="url(#${id})"/><path d="${line}" fill="none" stroke="var(--c2)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+  const g = gid("a"), ln = gid("l"), last = pts.at(-1);
+  const grid = [0.25, 0.5, 0.75].map(f => `<line x1="0" x2="${w}" y1="${(h * f).toFixed(1)}" y2="${(h * f).toFixed(1)}" class="ch-grid"/>`).join("");
+  const dots = pts.map((p, i) => i % 3 === 1 || i === pts.length - 1 ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === pts.length - 1 ? 5.5 : 4}" class="ch-dot${i === pts.length - 1 ? " ch-dot--last" : ""}"/>` : "").join("");
+  return `<div class="chart-area" role="img" aria-label="${esc(label)}"><svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:${h}px;overflow:visible">
+    <defs><linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--c1)" stop-opacity=".38"/><stop offset="1" stop-color="var(--c1)" stop-opacity="0"/></linearGradient>
+      <linearGradient id="${ln}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--c2)"/><stop offset="1" stop-color="var(--c1)"/></linearGradient></defs>
+    ${grid}<path d="${line} L${w} ${h} L0 ${h} Z" fill="url(#${g})"/><path d="${line}" fill="none" stroke="url(#${ln})" stroke-width="2.6" class="ch-glow" vector-effect="non-scaling-stroke"/>${dots}</svg>
+    ${tag ? `<span class="ch-tag" style="right:${Math.max(0, 100 - last[0] / w * 100)}%;top:${Math.max(0, last[1] - 34)}px">${esc(tag)}</span>` : ""}
+    ${labels ? `<div class="ch-x">${labels.map(l => `<span>${esc(l)}</span>`).join("")}</div>` : ""}</div>`;
 }
 
-/** Barras verticais com rótulos de mês. */
+/** Barras 3D com brilho e rótulo de valor; a barra mais recente com valor fica destacada. */
 export function barChart(items, { h = 110, label = "" } = {}) {
   const max = Math.max(...items.map(i => +i.value), 1);
-  const w = 100 / items.length;
-  return `<div role="img" aria-label="${esc(label)}" style="display:flex;align-items:flex-end;gap:6px;height:${h}px;margin-top:12px">
-    ${items.map(i => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0" title="${esc(i.label)}: ${brl(i.value)}">
-      <div style="width:min(18px,70%);height:${Math.max(3, (+i.value / max) * (h - 22))}px;border-radius:3px 3px 1px 1px;background:linear-gradient(180deg,var(--c2),var(--c1))"></div>
-      <span style="font-size:10px;color:var(--ink-4)">${esc(i.label)}</span></div>`).join("")}</div>`;
+  const lastIdx = items.map((i, k) => +i.value > 0 ? k : -1).filter(k => k >= 0).at(-1);
+  return `<div class="bars3d" role="img" aria-label="${esc(label)}" style="height:${h + 34}px">
+    ${items.map((i, k) => { const hh = Math.max(6, (+i.value / max) * (h - 18));
+      return `<div class="b3" title="${esc(i.label)}: ${brl(i.value)}"><span class="b3-v">${+i.value ? brlShort(i.value).replace(",00", "") : "R$ 0"}</span>
+        <div class="b3-col${k === lastIdx ? " b3-col--hi" : ""}${+i.value ? "" : " b3-col--zero"}" style="height:${hh}px"><i></i></div><span class="b3-l">${esc(i.label)}</span></div>`; }).join("")}</div>`;
 }
 
-/** Rosca (alocação). */
-export function donut(items, { size = 150, stroke = 22, label = "" } = {}) {
-  const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+/** Rosca 3D (alocação) com texto central opcional. */
+export function donut(items, { size = 150, stroke = 22, label = "", center = null, sub = null } = {}) {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r, cx = size / 2;
   let acc = 0;
   const segs = items.map((it, i) => {
-    const len = it.weight * c, s = `<circle r="${r}" cx="${size / 2}" cy="${size / 2}" fill="none" stroke="${PALETTE[i % 5]}" stroke-width="${stroke}"
-      stroke-dasharray="${Math.max(0, len - 2)} ${c}" stroke-dashoffset="${-acc}" transform="rotate(-90 ${size / 2} ${size / 2})"/>`;
+    const len = it.weight * c, s = `<circle r="${r}" cx="${cx}" cy="${cx}" fill="none" stroke="${PALETTE[i % 5]}" stroke-width="${stroke}"
+      stroke-dasharray="${Math.max(0, len - 1.5)} ${c}" stroke-dashoffset="${-acc}" transform="rotate(-90 ${cx} ${cx})"/>`;
     acc += len; return s;
   }).join("");
-  return `<svg viewBox="0 0 ${size} ${size}" style="width:${size}px;height:${size}px;flex:none" role="img" aria-label="${esc(label)}">
-    <circle r="${r}" cx="${size / 2}" cy="${size / 2}" fill="none" stroke="var(--surface-3)" stroke-width="${stroke}"/>${segs}</svg>`;
+  const sh = gid("s");
+  return `<div class="donut3d" style="width:${size}px;height:${size}px"><svg viewBox="0 0 ${size} ${size}" style="width:${size}px;height:${size}px" role="img" aria-label="${esc(label)}">
+    <defs><radialGradient id="${sh}" cx="50%" cy="35%" r="65%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
+    <circle r="${r}" cx="${cx}" cy="${cx}" fill="none" stroke="var(--surface-3)" stroke-width="${stroke}"/>${segs}
+    <circle r="${r}" cx="${cx}" cy="${cx}" fill="none" stroke="url(#${sh})" stroke-width="${stroke}"/></svg>
+    ${center ? `<div class="donut3d-c"><b>${esc(center)}</b>${sub ? `<span>${esc(sub)}</span>` : ""}</div>` : ""}</div>`;
 }
+
+/** Anel com brilho (contagem de alertas). */
+export function ringGauge(n, { size = 132, tone = "neg" } = {}) {
+  return `<div class="ring ring--${tone}" style="width:${size}px;height:${size}px"><span class="ring-w"></span><span class="ring-m"></span><b>${esc(String(n))}</b></div>`;
+}
+
+/** Ilustrações decorativas de vidro (sem dados). */
+export const deco = {
+  bars: (cls = "") => `<svg class="deco ${cls}" viewBox="0 0 120 90" aria-hidden="true"><defs><linearGradient id="dg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfe0ff" stop-opacity=".95"/><stop offset="1" stop-color="#2f7bff" stop-opacity=".55"/></linearGradient></defs>
+    ${[[10, 50], [34, 32], [58, 18], [82, 40]].map(([x, y]) => `<path d="M${x} ${y} l12 -6 l12 6 v${84 - y} l-12 6 l-12 -6z" fill="url(#dg1)" stroke="#fff" stroke-opacity=".7"/><path d="M${x} ${y} l12 6 l12 -6" fill="none" stroke="#fff" stroke-opacity=".9"/><path d="M${x + 12} ${y + 6} v${84 - y}" stroke="#fff" stroke-opacity=".5"/>`).join("")}</svg>`,
+  layers: (cls = "") => `<svg class="deco ${cls}" viewBox="0 0 120 100" aria-hidden="true"><defs><linearGradient id="dg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9fd0ff"/><stop offset="1" stop-color="#1f5fff"/></linearGradient></defs>
+    ${[70, 52, 34, 16].map((y, i) => `<path d="M60 ${y} l46 18 l-46 18 l-46 -18z" fill="url(#dg2)" fill-opacity="${0.35 + i * 0.15}" stroke="#fff" stroke-opacity=".85"/><path d="M14 ${y + 18} v6 l46 18 l46 -18 v-6" fill="#1f5fff" fill-opacity="${0.18 + i * 0.1}" stroke="#fff" stroke-opacity=".5"/>`).join("")}</svg>`,
+  city: (cls = "") => `<svg class="deco ${cls}" viewBox="0 0 160 90" aria-hidden="true"><defs><linearGradient id="dg3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6f3ff"/><stop offset="1" stop-color="#4b8dff" stop-opacity=".75"/></linearGradient></defs>
+    ${[[8, 46, 18], [30, 22, 22], [56, 8, 26], [86, 30, 20], [110, 16, 24], [138, 44, 16]].map(([x, y, w]) => `<rect x="${x}" y="${y}" width="${w}" height="${90 - y}" rx="2" fill="url(#dg3)" stroke="#fff" stroke-opacity=".8"/>${Array.from({ length: Math.floor((90 - y) / 9) }, (_, k) => `<line x1="${x + 3}" x2="${x + w - 3}" y1="${y + 6 + k * 9}" y2="${y + 6 + k * 9}" stroke="#fff" stroke-opacity=".55"/>`).join("")}`).join("")}</svg>`,
+};
 
 /** Barras horizontais (categorias). */
 export function hbars(items) {

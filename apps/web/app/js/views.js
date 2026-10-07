@@ -8,9 +8,9 @@ import { taxExtras, irpfSection } from "./views_tax2.js";
 import { settingsExtras } from "./views_hub.js";
 export { allocation };
 export { recoverView, resetView };
-import { onLogin, themeSwitch, theme } from "./app.js";
+import { onLogin, themeSwitch, theme, searchPill } from "./app.js";
 import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
-import { areaChart, barChart, brl, confidence, donut, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
+import { areaChart, barChart, brl, brlShort, confidence, deco, donut, ringGauge, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
 
 const trust = txt => `<p class="trust-line">${icon("info")}<span>${txt}</span></p>`;
 const badge = (s, label) => `<span class="badge b-${esc(s)}">${esc(label || s.replace("_", " "))}</span>`;
@@ -159,48 +159,88 @@ export async function register(root, r) {
 }
 
 /* ================================================================ DASHBOARD */
+const CAT_ICON = [[/aliment|mercado|restaur|ifood|padaria/i, "food"], [/compra|shopping|varejo|loja/i, "cart"], [/transp|combust|uber|carro|veícul/i, "trend"], [/moradia|aluguel|condom|energia|água|luz/i, "home"],
+  [/saúde|farm|médic/i, "shield"], [/educa|curso|escola/i, "doc"], [/lazer|viagem|assinatura|stream/i, "sim"], [/imposto|taxa|tarifa/i, "receipt"]];
+const catIcon = c => (CAT_ICON.find(([re]) => re.test(c)) || [0, "wallet"])[1];
+/* cabeçalho de cartão do modelo: ícone + título › + menu "…" */
+const cardHead = (ic, title, href, ask) => `<div class="card-h"><span class="ttl-ico" aria-hidden="true">${icon(ic)}</span>
+  <h3>${href ? `<a href="${href}">${esc(title)} ${icon("chev", "chev")}</a>` : esc(title)}</h3>
+  <div class="dd"><button type="button" class="card-dots" data-dd aria-haspopup="true" aria-expanded="false" aria-label="Opções de ${esc(title)}">${icon("dots")}</button>
+    <div class="menu" role="menu">${href ? `<a href="${href}" role="menuitem">${icon("arrow")}<span>Abrir detalhes</span></a>` : ""}<a href="#/assistente?q=${encodeURIComponent(ask || "Explique " + title.toLowerCase())}" role="menuitem">${icon("ai")}<span>Explicar com o assistente</span></a></div></div></div>`;
+
 export async function dashboard(el, r) {
   const d = await api.get("/v1/dashboard");
   const tax = d.tax, nw = d.net_worth;
   const up = nw.variation_pct >= 0;
+  const series = nw.series.map(s => +s.value);
+  const monthly = tax.monthly.slice(-7);
+  const allocTotal = d.allocation.reduce((s, a) => s + +a.value, 0);
+  const sevIc = { critico: "radar", alto: "file", atencao: "receipt", informativo: "info", oportunidade: "trend" };
   el.innerHTML = `${sampleNote(d)}
-    <div class="row between wrap" style="margin-bottom:18px">
-      <div class="hello"><h2>Olá, ${esc(d.greeting)}!</h2><p>Aqui está um resumo da sua vida financeira.</p></div>
-      <span class="chip">Referência: ${dt(d.reference_date)}</span></div>
-    ${r.params.get("primeiro") ? `<div class="card" style="margin-bottom:16px;border-color:var(--brand-2)"><h3>${icon("ai")} Seu primeiro diagnóstico</h3>
+    <div class="hero">
+      <div><h2>Olá, <span>bem-vindo de volta!</span></h2><p>Aqui está um panorama completo da sua vida financeira.</p></div>
+      ${searchPill()}
+      <a class="promo" href="#/simulador"><b>Decisões melhores para um futuro maior.</b>${deco.city()}<span class="go" aria-hidden="true">${icon("chev")}</span></a>
+    </div>
+    ${r.params.get("primeiro") ? `<div class="card" style="margin-bottom:18px;border-color:var(--brand-2)"><h3>${icon("ai")} Seu primeiro diagnóstico</h3>
       <p class="small muted" style="margin-top:6px">Envie seus extratos (OFX/CSV) e os relatórios da B3 em <a href="#/importar">Importar dados</a> para que os motores consolidem seus números reais.</p></div>` : ""}
-    <div class="grid g-dash">
-      <section class="card" aria-labelledby="k1"><h3 id="k1">Patrimônio total</h3>
-        <div class="kpi">${brl(nw.total)}</div>
-        <span class="delta ${up ? "delta--up" : "delta--down"}">${up ? "▲" : "▼"} ${pct(Math.abs(nw.variation_pct))}</span>
-        ${areaChart(nw.series.map(s => +s.value), { label: "Evolução patrimonial estimada nos últimos meses" })}
+    <div class="dash-r1">
+      <section class="card" aria-label="Patrimônio total">${cardHead("wealth", "Patrimônio total", "#/patrimonio", "Como evoluiu meu patrimônio?")}
+        <div class="kpi-row"><div class="kpi">${brl(nw.total)}</div><span class="delta ${up ? "delta--up" : "delta--down"}">${up ? "▲ +" : "▼ −"}${pct(Math.abs(nw.variation_pct))} <span style="font-weight:500">vs. mês anterior</span></span></div>
+        ${areaChart(series, { h: 128, w: 420, label: `Evolução patrimonial: de ${brl(series[0])} para ${brl(series.at(-1))}`, labels: nw.series.map(s => mes(s.month).split("/")[0]), tag: brlShort(nw.total) })}
         <p class="note">Evolução ${esc(nw.series_kind)}.</p></section>
-      <section class="card" aria-labelledby="k2"><h3 id="k2">Impostos estimados (ano) <span class="right small muted">${esc(tax.scope)}</span></h3>
-        <div class="kpi">${brl(tax.estimated)}</div>
-        <span class="delta delta--neutral">Isento no ano: ${brl(tax.exempt)}</span>
-        ${barChart(tax.monthly.map(m => ({ label: mes(m.month).split("/")[0], value: m.value })), { h: 90, label: "Imposto estimado por mês" })}
-        <div class="row between" style="margin-top:8px"><span class="note" style="margin:0">Estimativa · não é valor pago</span>${confidence(tax.confidence)}</div></section>
-      <section class="card" aria-labelledby="k3"><h3 id="k3">Alertas</h3>
-        <div class="kpi ${d.alerts.open ? "kpi--neg" : ""}" style="font-size:30px">${d.alerts.open}</div>
-        <p class="muted small">pontos de atenção${d.alerts.critical ? ` · <b style="color:var(--neg)">${d.alerts.critical} prioritário(s)</b>` : ""}</p>
-        <a class="btn btn--ghost btn--sm" style="margin-top:14px" href="#/alertas">Ver radar ›</a></section>
+      <section class="card" aria-label="Impostos estimados">${cardHead("receipt", "Impostos estimados (ano)", "#/tributacao", "Quanto de imposto estimado tenho no ano?")}
+        <p class="small muted" style="margin-top:8px">${esc(tax.scope.charAt(0).toUpperCase() + tax.scope.slice(1))}</p>
+        <div class="kpi-row" style="margin-top:4px"><div class="kpi">${brl(tax.estimated)}</div><span class="delta delta--up">Isento no ano: ${brl(tax.exempt)}</span></div>
+        ${barChart(monthly.map(m => ({ label: mes(m.month).split("/")[0], value: m.value })), { h: 96, label: "Imposto estimado por mês" })}
+        <div class="row between wrap" style="margin-top:10px;gap:8px"><span class="note" style="margin:0">Estimativa · não é valor pago</span>${confidence(tax.confidence)}</div></section>
+      <section class="card alerts-card" aria-label="Alertas">${cardHead("radar", "Alertas", "#/alertas", "Quais são meus alertas prioritários?")}
+        ${ringGauge(d.alerts.open, { tone: d.alerts.open ? "neg" : "ok" })}
+        <p class="lbl">pontos de atenção${d.alerts.critical ? `<b>${d.alerts.critical} prioritário(s)</b>` : ""}</p>
+        <a class="btn btn--ghost btn--sm" href="#/alertas">Ver radar ${icon("arrow")}</a></section>
     </div>
-    <div class="grid g-dash2 section">
-      <section class="card" aria-labelledby="k4"><h3 id="k4">Minha alocação</h3>
-        <div class="row wrap" style="gap:24px;margin-top:14px">${donut(d.allocation, { label: "Composição do patrimônio por classe" })}
-          <ul class="legend" style="flex:1;min-width:180px">${d.allocation.map((a, i) => `<li><i style="background:${PALETTE[i]}"></i><span>${esc(a.group)}</span><b>${pct(a.weight, 0)}</b></li>`).join("")}</ul></div></section>
-      <section class="card" aria-labelledby="k5"><h3 id="k5">Próximas ações</h3>
-        ${d.next_actions.length ? `<ul class="actions" style="margin-top:6px">${d.next_actions.map(a => `<li><span class="sev-ico sev-${a.severity}" aria-hidden="true">!</span>
-          <div><b>${esc(a.title)}</b><span>${esc(a.detail)}</span></div>${a.action ? `<a class="btn btn--ghost btn--sm" href="#${a.action.route}">${esc(a.action.label)}</a>` : ""}</li>`).join("")}</ul>` : empty("Nenhuma ação pendente.")}</section>
+    <div class="dash-r2">
+      <section class="card" aria-label="Minha alocação"><div class="card-h"><span class="ttl-ico" aria-hidden="true">${icon("layers")}</span><h3><a href="#/alocacao">Minha alocação ${icon("chev", "chev")}</a></h3>
+          <div class="seg" role="group" aria-label="Agrupar alocação"><button type="button" data-by="classe" aria-pressed="true">Por classe</button><button type="button" data-by="inst" aria-pressed="false">Por instituição</button></div></div>
+        <div class="alloc" id="allocbox"></div></section>
+      <section class="card" aria-label="Próximas ações">${cardHead("target", "Próximas ações", "#/alertas", "O que devo fazer primeiro?")}
+        ${d.next_actions.length ? `<ul class="actions next" style="margin-top:6px">${d.next_actions.slice(0, 4).map(a => `<li><span class="sev-ico sev-${a.severity}" aria-hidden="true">${icon(sevIc[a.severity] || "info")}</span>
+          <div><b>${esc(a.title)}</b><span>${esc(a.detail)}</span></div>${a.action ? `<a class="btn btn--ghost btn--sm" href="#${a.action.route}">${esc(a.action.label)}</a>` : ""}</li>`).join("")}</ul>
+          <a class="small" style="display:inline-flex;gap:4px;align-items:center;font-weight:700;margin-top:6px" href="#/alertas">Ver todas →</a>` : empty("Nenhuma ação pendente.")}</section>
     </div>
-    <div class="grid g-3 section">
-      <section class="card"><h3>O que mudou</h3>${d.changes.length ? `<ul class="stack" style="margin-top:12px">${d.changes.map(c =>
-        `<li class="small"><b>${esc(c.category)}</b>: ${brl(c.last)} no último mês vs ${brl(c.baseline)} de referência <span class="${c.delta_pct > 0 ? "neg" : "pos"}">(${c.delta_pct > 0 ? "+" : ""}${pct(c.delta_pct, 0)})</span></li>`).join("")}</ul>` : `<p class="muted small" style="margin-top:10px">Sem mudanças relevantes no período.</p>`}</section>
-      <section class="card"><h3>Liquidez</h3><div class="kpi">${brl(d.liquidity.cash)}</div>
-        <p class="small muted">em conta · cobre ~${(d.liquidity.months_covered || 0).toFixed(1).replace(".", ",")} mês(es) da despesa média de ${brl(d.liquidity.avg_monthly_expense)}</p></section>
-      <section class="card"><h3>Como calculamos</h3><p class="small muted" style="margin-top:8px">Os números vêm de motores determinísticos com regras versionadas. A IA apenas explica. Cada estimativa mostra premissas, fonte e confiança.</p>
-        <a class="small" href="#/tributacao?tab=regras">Ver regras e fontes ›</a></section>
+    <div class="dash-r3">
+      <section class="card" aria-label="O que mudou">${cardHead("trend", "O que mudou", "#/financas", "O que mudou nos meus gastos?")}
+        ${d.changes.length ? `<ul class="chg" style="margin-top:8px">${d.changes.slice(0, 4).map(c => `<li><span class="ci" aria-hidden="true">${icon(catIcon(c.category))}</span>
+          <div><b>${esc(c.category)}</b><span>${brl(c.last)} no último mês · ref. ${brl(c.baseline)}</span></div>
+          <span class="d ${c.delta_pct > 0 ? "neg" : "pos"}">${c.delta_pct > 0 ? "↑" : "↓"} ${c.delta_pct > 0 ? "+" : ""}${pct(c.delta_pct, 0)}</span><a class="cv" href="#/financas" aria-label="Ver ${esc(c.category)}">${icon("chev")}</a></li>`).join("")}</ul>`
+          : `<p class="muted small" style="margin-top:10px">Sem mudanças relevantes no período.</p>`}</section>
+      <section class="card" aria-label="Liquidez">${cardHead("drop", "Liquidez", "#/financas", "Minha reserva de liquidez é suficiente?")}
+        <div class="liq"><div><div class="kpi">${brl(d.liquidity.cash)}</div>
+          <p class="small muted" style="margin-top:6px">em conta · cobre ~${(d.liquidity.months_covered || 0).toFixed(1).replace(".", ",")} mês(es) da despesa média de ${brl(d.liquidity.avg_monthly_expense)}</p></div>${deco.bars()}</div></section>
+      <section class="card how" aria-label="Como calculamos">${cardHead("bulb", "Como calculamos", "", "Como vocês calculam os números?")}
+        <p class="small muted" style="margin:10px 0 16px;max-width:78%">Os números vêm de motores determinísticos com regras versionadas. A IA apenas explica. Cada estimativa mostra premissas, fonte e confiança.</p>
+        <a class="btn btn--ghost btn--sm pill" href="#/tributacao?tab=regras">Ver regras e fontes ${icon("arrow")}</a>${deco.layers()}</section>
     </div>`;
+  const box = el.querySelector("#allocbox");
+  let byInst = null;
+  const drawAlloc = (items, title) => {
+    const tot = items.reduce((s, a) => s + +a.value, 0) || allocTotal;
+    box.innerHTML = `${donut(items, { size: 168, stroke: 26, label: title, center: brlShort(tot), sub: "em ativos" })}
+      <ul class="legend">${items.map((a, i) => `<li><i style="background:${PALETTE[i % 5]}"></i><span>${esc(a.group)}</span><b>${pct(a.weight, 0)}</b></li>`).join("")}</ul>${deco.layers()}`;
+  };
+  drawAlloc(d.allocation, "Composição do patrimônio por classe");
+  el.querySelectorAll("[data-by]").forEach(b => b.addEventListener("click", async () => {
+    el.querySelectorAll("[data-by]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    if (b.dataset.by === "classe") return drawAlloc(d.allocation, "Composição do patrimônio por classe");
+    try {
+      if (!byInst) {
+        const p = await api.get("/v1/portfolio/consolidated"), list = p.by_custodian || [], tot = list.reduce((s, c) => s + +c.value, 0) || 1;
+        const top = list.slice(0, 4), rest = list.slice(4).reduce((s, c) => s + +c.value, 0);
+        byInst = [...top.map(c => ({ group: c.custodian, value: c.value, weight: +c.value / tot })), ...(rest ? [{ group: "Outras", value: rest, weight: rest / tot }] : [])];
+      }
+      byInst.length ? drawAlloc(byInst, "Composição do patrimônio por instituição") : (box.innerHTML = empty("Sem posições por instituição."));
+    } catch (e) { box.innerHTML = `<p class="small muted">${esc(problemMsg(e))}</p>`; }
+  }));
 }
 
 /* ================================================================ PATRIMÔNIO */

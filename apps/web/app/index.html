@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-theme="dark">
+<html lang="pt-BR" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,13 +8,14 @@
 <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-180.png">
-<meta name="theme-color" content="#020b16">
+<meta name="theme-color" content="#e9f2ff">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="../css/fonts.css">
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/app.css?v=7">
+<link rel="stylesheet" href="css/glass.css?v=1">
 <script>
   /* aplica o tema antes da primeira pintura (evita flash) — RN-12: só apresentação */
-  (function(){try{var p=localStorage.getItem('ramon.theme')||'system';var d=p==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):p;document.documentElement.setAttribute('data-theme',d);}catch(e){}})();
+  (function(){try{var p=localStorage.getItem('ramon.theme')||'light';var d=p==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):p;document.documentElement.setAttribute('data-theme',d);}catch(e){}})();
 </script>
 <script src="js/config.js"></script>
 <script type="module" src="js/app.js"></script>

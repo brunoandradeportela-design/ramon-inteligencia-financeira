@@ -43,7 +43,7 @@ Como reproduzir:
 | 16 | Sem recomendação individualizada | ✅ Guardrails, avisos em Daily, Radar Trader e backtest; testes verificam o texto |
 | 17 | Sem uso de informação privilegiada | ✅ Só fontes públicas; aviso na tela de divulgações |
 | 18 | Acessibilidade | ✅ Rótulos ARIA, alternativa textual em gráficos, foco no conteúdo; sem rolagem horizontal a 390 px |
-| 19 | Temas | ✅ Claro, Escuro e Sistema conferidos por captura de tela |
+| 19 | Temas | ✅ Visual "vidro" futurista (barra superior em pílula, cartões translúcidos, gráficos 3D, busca ⌘K). Claro é o padrão; Escuro e Sistema conferidos por captura de tela em desktop e celular (390 px, sem rolagem horizontal) |
 | 20 | Backup e restauração | ✅ `backup_e2e` em todo CI: backup criptografado, ambiente vazio restaurado, login, mesmo hash de cálculo, documento binário idêntico e auditoria íntegra. Em produção: D1 Time Travel e rotina semanal criptografada (liga com segredos). Ver `docs/BACKUP-RESTAURACAO.md` |
 | 21 | Observabilidade | ✅ Painel **Operações** do administrador: requisições, disponibilidade e p95 contra os SLOs (§26), latência e erros por rota, saúde dos jobs e eventos de segurança, IA, Tax e Trader. Métricas sem dados pessoais (`ops_e2e`). Também: `[observability] enabled`, `X-Correlation-ID` e trilha de auditoria |
 | 22 | Resultado e riscos | Este documento |
