@@ -59,8 +59,8 @@ async function appSecret(db, name, bytes = 32) {
 }
 const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), c => c.charCodeAt(0));
 async function aesKey(db) { return crypto.subtle.importKey("raw", unb64u(await appSecret(db, "app_key")), "AES-GCM", false, ["encrypt", "decrypt"]); }
-async function seal(db, text) { const iv = crypto.getRandomValues(new Uint8Array(12)); const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await aesKey(db), enc.encode(text)); return b64u(iv) + "." + b64u(ct); }
-async function unseal(db, s) { const [iv, ct] = s.split("."); return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64u(iv) }, await aesKey(db), unb64u(ct))); }
+export async function seal(db, text) { const iv = crypto.getRandomValues(new Uint8Array(12)); const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await aesKey(db), enc.encode(text)); return b64u(iv) + "." + b64u(ct); }
+export async function unseal(db, s) { const [iv, ct] = s.split("."); return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64u(iv) }, await aesKey(db), unb64u(ct))); }
 
 /* CPF nunca é guardado em claro: índice por HMAC com pepper interno + versão mascarada para exibição */
 export const cpfDigits = v => String(v || "").replace(/\D/g, "");

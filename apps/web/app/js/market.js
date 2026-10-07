@@ -12,7 +12,7 @@ const isoFromBr = s => { const m = String(s || "").match(/^(\d{2})\/(\d{2})\/(\d
 const isoFromUnix = s => new Date((+s - 3 * 3600) * 1000).toISOString().slice(0, 10);   // horário de Brasília
 
 /* ------------------------------------------------------------------ Banco Central — SGS */
-export const SGS = { cdi: 12, cdi_m: 4391, cdi_aa: 4389, selic_meta: 432, ipca: 433 };
+export const SGS = { cdi: 12, cdi_m: 4391, cdi_aa: 4389, selic_meta: 432, ipca: 433, selic_m: 4390 };   // 4390: Selic acumulada no mês (juros de mora dos tributos federais)
 /* consulta leve (últimos N valores) — o SGS é lento para intervalos longos */
 export const sgsLastUrl = (code, n) => `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${code}/dados/ultimos/${n}?formato=json`;
 export function sgsUrl(code, from, to) {

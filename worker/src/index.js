@@ -20,6 +20,7 @@ import { extract as extractDoc, notaToTrades, normTitle } from "../../apps/web/a
 import { backupRoute } from "./backup.js";
 import { irpfReport } from "../../apps/web/app/js/irpf_report.js";
 import { checkRate } from "./ratelimit.js";
+import { guiasRoute } from "./guias.js";
 import { METRICS_SCHEMA, recordRequest, routeGroup, count as metric, flush as flushMetrics, prune as pruneMetrics, summary as metricsSummary } from "./metrics.js";
 import { eventsView as buildEvents, personalEvents } from "../../apps/web/app/js/event_engine.js";
 import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
@@ -407,6 +408,18 @@ async function route(req, env, db, url, ctx) {
     return traderRoute(m, p, body, q, req, u, db, env, DT);
   }
 
+  /* ---- guias de arrecadação (DARF federal e DARE estadual) */
+  if (p.startsWith("/v1/tax/guias")) {
+    const u = await authUser(req, env, db);
+    if (!(u.me.entitlements || []).includes("inteligencia_tributaria"))
+      throw new Problem(402, "Recurso do plano Pro", "A geração de guias DARF e DARE faz parte dos planos Pro e Premium.", { required_plan: "Pro" });
+    const G = { audit: o => audit(db, req, o),
+      selic: async () => ((await kvGet(db, "market_raw", null)) || {}).selic_m || [],
+      taxFor: async (uid, year) => { const [holdings, trades] = await Promise.all([finLoad(db, uid, "holding"), finLoad(db, uid, "trade")]);
+        const prefs = await kvGet(db, "tax_prefs:" + uid, { prior_losses: {}, paid_darfs: {} });
+        return computeTax(trades.filter(t => !t.superseded_by && t.status !== "voided"), { year, refDate: today(), knownClasses: Object.fromEntries(holdings.filter(h => h.ticker).map(h => [h.ticker, h.asset_class])), priorLosses: prefs.prior_losses, paidDarfs: prefs.paid_darfs }); } };
+    return guiasRoute(m, p, body, q, req, u, db, env, G);
+  }
   /* ---- dados financeiros reais do cliente (importação de arquivos; futuramente Open Finance) */
   if (p.startsWith("/v1/documents")) { const u = await authUser(req, env, db); return docRoute(m, p, body, q, u, db, req); }
   if (p.startsWith("/v1/imports") || p.startsWith("/v1/tax/") || p.startsWith("/v1/alerts") || p.startsWith("/v1/finance/") || ["/v1/simulations", "/v1/assistant/query", "/v1/allocation", "/v1/data-quality", "/v1/notifications", "/v1/notifications/read"].includes(p) || ["/v1/finance/summary", "/v1/finance/transactions", "/v1/portfolio/consolidated", "/v1/dashboard"].includes(p)) {
@@ -958,11 +971,11 @@ async function refreshMarket(env, db, { force = false } = {}) {
   if (env.MARKET_OFFLINE === "1") return { indices: false, quotes: 0, offline: true };   // testes determinísticos (CI/local)
   const st = await marketState(db), errors = [];
   const done = { indices: false, quotes: 0 };
-  // índices do Banco Central (4 consultas leves; o SGS costuma ser lento — guarda o que vier e tenta o resto depois)
+  // índices do Banco Central (5 consultas leves; o SGS costuma ser lento — guarda o que vier e tenta o resto depois)
   if (force || ageH(st.indices_at) >= 6) {
     const prev = await kvGet(db, "market_indices", null);
     const raw = (await kvGet(db, "market_raw", null)) || {};
-    const want = { cdi_m: sgsLastUrl(SGS.cdi_m, 13), cdi_aa: sgsLastUrl(SGS.cdi_aa, 1), selic_meta: sgsLastUrl(SGS.selic_meta, 1), ipca: sgsLastUrl(SGS.ipca, 13) };
+    const want = { cdi_m: sgsLastUrl(SGS.cdi_m, 13), cdi_aa: sgsLastUrl(SGS.cdi_aa, 1), selic_meta: sgsLastUrl(SGS.selic_meta, 1), ipca: sgsLastUrl(SGS.ipca, 13), selic_m: sgsLastUrl(SGS.selic_m, 72) };
     const res = await Promise.allSettled(Object.values(want).map(u => getJson(u, {}, 25000).then(parseSgs)));
     let okAll = true;
     Object.keys(want).forEach((k, i) => {

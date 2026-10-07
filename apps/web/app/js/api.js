@@ -2,6 +2,7 @@
    Em modo demo, todos os números vêm de data/demo.json, gerado pelos motores Python
    (tools/export_demo.py). O JS não recalcula imposto — só consulta a grade pré-calculada. */
 
+import { RECEITAS_DARF, DARE_UF, UFS, SICALC_URL, GUIA_ENGINE_VERSION, montarDarf, montarDare } from "./guia_engine.js";
 import { validateSignup, localCustomer, metricsFrom, addMonth, formatPhone, PRICE, PLAN_NAME, paymentsFrom, docValid } from "./crm_rules.js";
 
 const BASE = (window.RAMON_API_BASE || "").replace(/\/$/, "");
@@ -9,7 +10,7 @@ export const DEMO = !BASE;
 /* Modo híbrido (API na nuvem): contas, CRM e pagamentos são reais; os módulos de análise
    (finanças, impostos, carteira, simulações) usam o snapshot de demonstração até o Open Finance. */
 export const ANALYTICS_DEMO = true;
-const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing|imports|market|tax\/settings|tax\/darfs|tax\/rules|tax\/calculations|tax\/irpf-report|simulations|openfinance|documents|assistant|security|sessions|audit|privacy|consents|institutions|data-quality|allocation|trader|events|notifications|sharing|integrations|voice|analytics|finance\/categories|finance\/transactions\/tra_[A-Za-z0-9_-]+|alerts\/alr_[a-f0-9]+)(\/|\?|$)/.test(p);
+const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing|imports|market|tax\/settings|tax\/darfs|tax\/rules|tax\/calculations|tax\/irpf-report|tax\/guias|simulations|openfinance|documents|assistant|security|sessions|audit|privacy|consents|institutions|data-quality|allocation|trader|events|notifications|sharing|integrations|voice|analytics|finance\/categories|finance\/transactions\/tra_[A-Za-z0-9_-]+|alerts\/alr_[a-f0-9]+)(\/|\?|$)/.test(p);
 /* painéis que usam os dados importados pelo cliente; sem dados próprios, mostram o exemplo */
 const HYBRID_DATA = p => !!BASE && /^\/v1\/(finance\/summary|finance\/transactions|portfolio\/consolidated|dashboard|tax\/summary|tax\/events|alerts)(\?|$)/.test(p);
 async function hybridGet(p) {
@@ -70,6 +71,13 @@ function classify(q, pats) {
 }
 function problem(status, title, detail) { return new ApiError({ status, title, detail }); }
 
+/* Selic mensal (SGS 4390) publicada pelo coletor de dados públicos — juros de mora no modo demonstração */
+let _selic = null;
+async function selicPublic() {
+  if (_selic) return _selic;
+  try { const r = await fetch("data/public/selic.json", { cache: "no-cache" }); _selic = r.ok ? (await r.json()).items || [] : []; } catch { _selic = []; }
+  return _selic;
+}
 async function demoCall(method, path, body) {
   const d = await demo();
   const [p, qs] = path.split("?");
@@ -77,7 +85,17 @@ async function demoCall(method, path, body) {
   const revoked = LS.get("revoked", []);
   const extraConns = LS.get("conns", []);
   const mapConn = c => revoked.includes(c.id) ? { ...c, status: "revogado", consent: { ...c.consent, status: "revogado" } } : c;
+  const selic = p.startsWith("/v1/tax/guias") ? await selicPublic() : [];
+  const guias = LS.get("guias", []);
+  const hojeBr = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  const guiaSave = g => { LS.set("guias", [{ ...g, created_at: new Date().toISOString(), origem: body.origem || "manual" }, ...guias.filter(x => x.id !== g.id)].slice(0, 30)); return { ...g, origem: body.origem || "manual", integra_contador_disponivel: false }; };
+  const guiaFail = g => { throw new ApiError({ status: 422, title: g.abaixo_minimo ? "Abaixo do valor mínimo" : "Dados inválidos", detail: g.erros.map(e => e.msg).join(" "), errors: g.erros.map(e => ({ field: e.campo, msg: e.msg })) }); };
   const R = {
+    "GET /v1/tax/guias/receitas": () => ({ version: GUIA_ENGINE_VERSION, darf: RECEITAS_DARF, dare: DARE_UF, ufs: UFS, sicalc_url: SICALC_URL, integra_contador: false }),
+    "GET /v1/tax/guias": () => ({ items: guias.map(g => ({ id: g.id, tipo: g.tipo, created_at: g.created_at, receita: g.receita, uf: g.uf || null, periodo: g.periodo?.rotulo || g.periodo || null, vencimento: g.vencimento,
+      pagamento: g.pagamento || null, total: g.valores.total || g.valores.total_estimado, situacao: g.situacao, documento: g.contribuinte.documento_formatado, oficial: false, origem: g.origem })), integra_contador: false }),
+    "POST /v1/tax/guias/darf": () => { const g = montarDarf({ ...body, hoje: hojeBr, selic }); return g.ok ? guiaSave(g) : guiaFail(g); },
+    "POST /v1/tax/guias/dare": () => { const g = montarDare({ ...body, hoje: hojeBr }); return g.ok ? guiaSave(g) : guiaFail(g); },
     "POST /v1/auth/login": () => {
       const email = norm(body.email || "");
       if (email === d.admin_me.email && body.password === "ramon2026crm") { LS.set("role", "admin"); return { token: "demo-admin", user: d.admin_me }; }
@@ -263,7 +281,9 @@ async function demoCall(method, path, body) {
       crmSave(c); return pay;
     };
     if (!m) {
-    if ((mm = p.match(/^\/v1\/alerts\/(.+)$/)) && method === "PATCH") m = () => { alertStatus[mm[1]] = body.status; LS.set("alerts", alertStatus); return { id: mm[1], status: body.status }; };
+    if ((mm = p.match(/^\/v1\/tax\/guias\/((?:darf|dare)_[a-f0-9]{16})$/))) m = method === "DELETE" ? () => { LS.set("guias", guias.filter(g => g.id !== mm[1])); return null; }
+      : () => { const g = guias.find(x => x.id === mm[1]); if (!g) throw problem(404, "Guia não encontrada", mm[1]); return g; };
+    else if ((mm = p.match(/^\/v1\/alerts\/(.+)$/)) && method === "PATCH") m = () => { alertStatus[mm[1]] = body.status; LS.set("alerts", alertStatus); return { id: mm[1], status: body.status }; };
     else if ((mm = p.match(/^\/v1\/connections\/(.+)\/revoke$/))) m = () => { LS.set("revoked", [...new Set([...revoked, mm[1]])]); return mapConn({ ...[...d.connections.items, ...extraConns].find(c => c.id === mm[1]) }); };
     else if ((mm = p.match(/^\/v1\/connections\/(.+)\/refresh$/))) m = () => {
       if (revoked.includes(mm[1])) throw problem(409, "Conexão inativa", "Status: revogado");
@@ -288,7 +308,7 @@ export const api = {
   post: (p, b, h) => REAL(p) ? realPost(p, b, h) : demoCall("POST", p, b),
   put: (p, b) => REAL(p) ? http("PUT", p, b) : demoCall("PUT", p, b),
   patch: (p, b) => REAL(p) ? http("PATCH", p, b) : demoCall("PATCH", p, b),
-  del: p => REAL(p) ? http("DELETE", p) : Promise.reject(new ApiError({ status: 409, title: "Indisponível", detail: "Solicite pelo suporte: exportação/exclusão de dados é feita pelo administrador." })),
+  del: p => REAL(p) ? http("DELETE", p) : p.startsWith("/v1/tax/guias/") ? demoCall("DELETE", p) : Promise.reject(new ApiError({ status: 409, title: "Indisponível", detail: "Solicite pelo suporte: exportação/exclusão de dados é feita pelo administrador." })),
   demo: p => demoCall("GET", p),
   demoPost: (p, b) => demoCall("POST", p, b),
   demoPatch: (p, b) => demoCall("PATCH", p, b),

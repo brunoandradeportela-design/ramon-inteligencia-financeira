@@ -59,6 +59,7 @@ Como reproduzir:
 | Voz neural (Google TTS) | `TTS_API_KEY` (opcional `TTS_VOICE`) | Voz do navegador |
 | Power BI Embedded | `PBI_TENANT_ID`, `PBI_CLIENT_ID`, `PBI_CLIENT_SECRET`, `PBI_WORKSPACE_ID`, `PBI_REPORT_ID`, `PBI_DATASET_ID` (opcional `PBI_RLS_ROLE`) | Gráficos próprios |
 | Notícias licenciadas | `NEWS_API_KEY` (adaptador a escolher com o contrato) | RSS públicos |
+| DARF com código de barras (Integra Contador/SERPRO, serviço SICALC) | `SERPRO_CONSUMER_KEY`, `SERPRO_CONSUMER_SECRET`, `SERPRO_CONTRATANTE_CNPJ`, certificado e-CNPJ no binding mTLS `SERPRO_CERT` (opcional `SERPRO_UF_PADRAO`, `SERPRO_MUNICIPIO_PADRAO`). Para PF, o cliente dá procuração no e-CAC ao CNPJ contratante | DARF completo sem código de barras (internet banking) e atalho para o Sicalc |
 
 ## Riscos e pendências
 
@@ -89,7 +90,16 @@ Como reproduzir:
   - Renda variável mês a mês, ganhos isentos e prejuízo a compensar.
   - Bens e direitos pelo custo em 31/12, com Excel; disponível também para o contador no acesso somente leitura.
 
+- **Guias de pagamento (DARF e DARE), 07/10/2026.**
+  - DARF com os 10 campos, código de receita (15 códigos PF, PJ e retenções), CPF/CNPJ validados, vencimento legal no calendário bancário (feriados nacionais, Carnaval, Sexta-feira Santa e Corpus Christi).
+  - Em atraso: multa de 0,33% ao dia até 20% e juros Selic acumulada mais 1% no mês do pagamento (Lei 9.430/96, art. 61). Abaixo de R$ 10,00 não gera guia e soma ao período seguinte (art. 68).
+  - DARF 6015 gerado direto da apuração mensal; CPF conferido com o da conta; documento cifrado no banco e mascarado nas listas; tudo na auditoria.
+  - DARE: tabela de códigos de Rondônia (SEFIN-RO) e código informado para as demais UFs; o código de barras do DARE é emitido no portal da SEFAZ.
+  - Testes: `guias.test.mjs` e `guias_e2e`. Selic mensal (SGS 4390) coletada pela API e publicada em `data/public/selic.json`.
+
 ### Ainda abertos
+- **Código de barras do DARF pela API.** Depende do contrato do Integra Contador (SERPRO) e do certificado e-CNPJ; até lá, o código de barras é gerado no Sicalc com os mesmos dados.
+- **Tabelas de DARE de outros estados.** Só Rondônia está cadastrada; nos outros estados o código é informado pelo usuário.
 - **Limite de requisições global.** O limitador atual conta por instância do Worker; o limite global entre regiões exige o Rate Limiting do Cloudflare no plano pago.
 - **OCR de documentos escaneados (imagem).** Ainda não é feito; depende de provedor ou plano pago.
 - **Limite de CPU do plano gratuito do Workers (10 ms).** Contas com mais de cerca de 2.000 negociações ficam no limite. A solução definitiva é o Workers Paid (5 dólares por mês, até 30 s de CPU), sem mudança de código.

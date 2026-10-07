@@ -5,6 +5,7 @@ import { documentsReal } from "./views_docs.js";
 import { loginReal, recoverView, resetView, securitySection, privacyReal } from "./views_identity.js";
 import { wireTxEdits, allocation, dataHubSection } from "./views_finance2.js";
 import { taxExtras, irpfSection } from "./views_tax2.js";
+import { guiasTab } from "./views_guias.js";
 import { settingsExtras } from "./views_hub.js";
 export { allocation };
 export { recoverView, resetView };
@@ -324,8 +325,8 @@ export async function finance(el) {
 }
 
 /* ================================================================ TRIBUTAÇÃO */
-export async function tax(el, r) {
-  let tab = r.params.get("tab") || "resumo";
+export async function tax(el, r, ctx = {}) {
+  let tab = r.params.get("tab") || "resumo", guiaPrefill = null;
   let t, ev, rules;
   try { [t, ev, rules] = await Promise.all([api.get("/v1/tax/summary"), api.get("/v1/tax/events"), api.get("/v1/tax/rules")]); }
   catch (e) { if (e.status === 402) { el.innerHTML = upsell("Inteligência tributária", e); return; } throw e; }
@@ -344,9 +345,9 @@ export async function tax(el, r) {
         <div class="card"><h3>Qualidade do cálculo</h3><div style="margin-top:14px">${confidence(t.confidence)}</div>
           <p class="note">${losses.length ? "Prejuízos: " + losses.map(([k, v]) => `${k} ${brl(v)}`).join(", ") : "Sem prejuízos a compensar"}</p></div>
       </div>
-      <div class="tabs section" role="tablist">${[["resumo", "Apuração mensal"], ["eventos", "Eventos tributários"], ["regras", "Regras e fontes"]].map(([k, l]) =>
+      <div class="tabs section" role="tablist">${[["resumo", "Apuração mensal"], ["guias", "Guias DARF/DARE"], ["eventos", "Eventos tributários"], ["regras", "Regras e fontes"]].map(([k, l]) =>
         `<button role="tab" aria-selected="${tab === k}" data-tab="${k}">${l}</button>`).join("")}</div>
-      <div id="tabc">${tab === "resumo" ? months() : tab === "eventos" ? events() : rulesView()}</div>
+      <div id="tabc">${tab === "resumo" ? months() : tab === "guias" ? `<div id="guiasbox">${loadingLine}</div>` : tab === "eventos" ? events() : rulesView()}</div>
       <div class="grid g-2 section">
         <section class="card"><h3>Premissas</h3><ul class="stack small" style="margin-top:10px">${t.premises.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul></section>
         <section class="card"><h3>Limitações</h3><ul class="stack small" style="margin-top:10px">${t.limitations.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul>
@@ -361,6 +362,8 @@ export async function tax(el, r) {
           <button class="btn btn--primary">Salvar e recalcular</button></form></section>` : ""}`;
     el.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { tab = b.dataset.tab; draw(); });
     if (real) { taxExtras(el.querySelector("#taxextra"), t); irpfSection(el.querySelector("#irpfbox")); }
+    if (tab === "guias") guiasTab(el.querySelector("#guiasbox"), { me: ctx.me, prefill: guiaPrefill, onPaid: reload }).catch(e => { el.querySelector("#guiasbox").innerHTML = `<p class="err">${esc(problemMsg(e))}</p>`; });
+    el.querySelectorAll("[data-guia]").forEach(b => b.onclick = () => { guiaPrefill = { codigo: "6015", periodo: b.dataset.guia, principal: b.dataset.val, origem: "apuracao" }; tab = "guias"; draw(); el.querySelector("#tabc").scrollIntoView({ behavior: "smooth", block: "start" }); });
     const f = el.querySelector("#prior");
     if (f) f.onsubmit = async e => {
       e.preventDefault();
@@ -376,6 +379,7 @@ export async function tax(el, r) {
       } catch (x) { toast(problemMsg(x)); }
     });
   };
+  const loadingLine = `<div class="skeleton" style="width:40%"></div>`;
   const months = () => `<section class="card"><div class="table-wrap"><table class="table"><caption class="sr-only">Apuração mensal de renda variável</caption>
     <thead><tr><th>Mês</th><th class="num">Vendas de ações</th><th>Isenção</th><th class="num">Resultado comum</th><th class="num">Day trade</th><th class="num">FII</th><th class="num">IR bruto</th><th class="num">IRRF</th><th>DARF 6015</th></tr></thead>
     <tbody>${t.months.map(m => `<tr><td><b>${mes(m.month)}</b></td><td class="num">${brl(m.sales_acoes)}</td><td>${m.exempt ? badge("isento", "até 20 mil") : badge("aberto", "tributável")}</td>
@@ -383,7 +387,7 @@ export async function tax(el, r) {
       <td class="num">${brl(m.tax_due_gross)}</td><td class="num">${brl(m.irrf)}</td>
       <td style="min-width:170px">${m.darf ? `${badge(m.darf.status)} <b>${brl(m.darf.valor)}</b><div class="small muted">vence ${dt(m.darf.vencimento)}${m.darf.valor_pago ? " · pago " + brl(m.darf.valor_pago) : ""}</div>${real ? (m.darf.status === "pago"
         ? `<button class="btn btn--ghost btn--sm" data-paid="${m.month}" data-undo="1">desfazer</button>`
-        : `<button class="btn btn--ghost btn--sm" data-paid="${m.month}" data-val="${m.darf.valor}">marcar pago</button>`) : ""}` : `<span class="small muted">${+m.tax_due_gross > 0 ? "acumula (< R$ 10)" : "—"}</span>`}</td></tr>`).join("")}</tbody></table></div></section>`;
+        : `<button class="btn btn--ghost btn--sm" data-paid="${m.month}" data-val="${m.darf.valor}">marcar pago</button>`) : ""}${m.darf.status !== "pago" ? ` <button class="btn btn--primary btn--sm" data-guia="${m.month}" data-val="${m.darf.valor}">gerar DARF</button>` : ""}` : `<span class="small muted">${+m.tax_due_gross > 0 ? "acumula (< R$ 10)" : "—"}</span>`}</td></tr>`).join("")}</tbody></table></div></section>`;
   const events = () => ev.items.length ? `<div class="stack">${ev.items.map(e => `<article class="alert ${e.status === "pendente_dado" ? "s-alto" : e.status === "isento" ? "s-oportunidade" : "s-informativo"}">
       <h4>${esc(e.ticker)} · ${e.kind === "daytrade" ? "Day trade" : "Venda"} em ${dt(e.date)} ${badge(e.status)}</h4>
       <p>Valor de venda ${brl(e.sale_value)} · custo ${e.cost_basis === "?" ? "<b>não informado</b>" : brl(e.cost_basis)} · resultado <b class="${+e.result < 0 ? "neg" : ""}">${e.result === "?" ? "—" : brl(e.result)}</b></p>

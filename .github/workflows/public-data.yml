@@ -1,4 +1,4 @@
-name: Dados públicos (CVM e notícias)
+name: Dados públicos (CVM, notícias e Selic)
 
 # Coleta fontes públicas e rastreáveis fora do Worker (ADR-0012): divulgações da CVM (IPE) e RSS oficiais.
 # Grava JSON estático em apps/web/app/data/public e publica o site. Não usa segredos.
@@ -30,6 +30,8 @@ jobs:
         run: python scripts/public_data/fetch_disclosures.py --days 45
       - name: Notícias (RSS públicos)
         run: python scripts/public_data/fetch_news.py
+      - name: Selic mensal (juros de mora dos tributos federais)
+        run: python scripts/public_data/fetch_selic.py
       - id: commit
         name: Gravar se mudou
         run: |

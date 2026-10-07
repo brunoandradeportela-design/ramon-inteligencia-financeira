@@ -349,3 +349,30 @@ textarea.input{height:auto}
   :root[data-theme="light"] .gnav{background:rgba(255,255,255,.9)}
   :root[data-theme="dark"] .gnav{background:rgba(14,28,50,.92)}
 }
+
+/* ---------- guias DARF / DARE ---------- */
+.darf{margin-top:14px;border:1.5px solid var(--ink-2);border-radius:12px;background:var(--solid);color:var(--ink);overflow:hidden}
+.darf-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1.5px solid var(--ink-2)}
+.darf-h div{display:flex;flex-direction:column;font-size:11px;line-height:1.35;color:var(--ink-2)}
+.darf-h b{font-size:12px;color:var(--ink);letter-spacing:.04em}
+.darf-h strong{font-size:26px;font-weight:800;letter-spacing:.08em}
+.darf-t{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.darf-t th{text-align:left;font-weight:600;font-size:11.5px;color:var(--ink-3);padding:8px 12px;border-bottom:1px solid var(--line-strong);width:46%}
+.darf-t th span{display:inline-grid;place-items:center;min-width:22px;height:18px;margin-right:8px;border:1px solid var(--line-strong);border-radius:5px;font-size:10.5px;color:var(--ink-2)}
+.darf-t td{padding:8px 12px;border-bottom:1px solid var(--line-strong);font-weight:700;text-align:right;overflow-wrap:normal;word-break:keep-all}
+.darf-t td.no-print{width:1%;padding:4px 8px;text-align:right}
+.darf-t tr.darf-tot th,.darf-t tr.darf-tot td{font-size:15px;color:var(--ink);background:var(--brand-soft)}
+.darf-f{font-size:11px;color:var(--ink-3);padding:10px 12px}
+[aria-invalid="true"]{border-color:var(--neg) !important}
+@media (max-width:860px){.darf-t th{width:auto;padding:8px}.darf-t td{padding:8px 6px;font-size:12.5px}.darf-t td.no-print .btn span{display:none}.darf-t td.no-print .btn{padding:0 9px}}
+@media print{
+  body{background:#fff !important}
+  body::before,.gtop,.pagehead,.demo-bar{display:none !important}
+  body *{visibility:hidden}
+  .print-area,.print-area *{visibility:visible}
+  .print-area{position:absolute;left:0;top:0;width:100%;border-color:#000;color:#000;background:#fff}
+  .print-area .no-print{display:none}
+  .card{box-shadow:none;backdrop-filter:none}
+}
+.darf-t td{white-space:nowrap}
+.darf-t tr:first-child td{white-space:normal}
