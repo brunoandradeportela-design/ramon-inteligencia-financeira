@@ -58,6 +58,12 @@ test("DARF em atraso calcula multa e juros; pagamento em fim de semana vai ao pr
   assert.equal(g.valido_ate, "2026-09-14");
 });
 
+test("Selic do mês corrente (parcial) não entra nos juros", () => {
+  const sel = [...SELIC, { date: "2026-09-01", value: 0.2 }];
+  const g = montarDarf({ codigo: "6015", documento: CPF, nome: "Bruno Teste", periodo: "2026-07", principal: 1000, pagamento: "2026-10-15", hoje: "2026-09-10", selic: sel });
+  assert.ok(g.ok); assert.ok(g.avisos.some(a => /2026-09/.test(a))); assert.equal(g.valores.juros_pct, 1);
+});
+
 test("DARF: validações (mínimo R$ 10, PF x PJ, CPF inválido, pagamento no passado)", () => {
   const base = { codigo: "6015", documento: CPF, nome: "Bruno Teste", periodo: "2026-08", hoje: "2026-09-27" };
   const min = montarDarf({ ...base, principal: 9.99 }); assert.ok(!min.ok && min.abaixo_minimo);

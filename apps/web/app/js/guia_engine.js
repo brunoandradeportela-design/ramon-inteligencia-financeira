@@ -161,7 +161,8 @@ export function montarDarf(e) {
   if (principal < VALOR_MINIMO_DARF) {
     return { ok: false, abaixo_minimo: true, principal: m2(principal), erros: [{ campo: "principal", msg: `Valor de R$ ${brMoney(principal)} é menor que R$ 10,00: não se emite DARF. Some ao imposto do período seguinte e recolha quando o total atingir R$ 10,00 (Lei 9.430/96, art. 68).` }], avisos };
   }
-  const ac = acrescimos({ principal, vencimento, pagamento, selic: e.selic });
+  // o Banco Central publica o mês corrente parcial; só meses encerrados entram nos juros
+  const ac = acrescimos({ principal, vencimento, pagamento, selic: (e.selic || []).filter(x => String(x.date).slice(0, 7) < hoje.slice(0, 7)) });
   if (ac.selic_faltando.length) avisos.push(`Taxa Selic ainda não publicada para ${ac.selic_faltando.join(", ")}: os juros podem estar subestimados. Confira no Sicalc antes de pagar.`);
   if (ac.multa_pct >= 20) avisos.push("Multa de mora no limite de 20%.");
   if (anterior > 0) avisos.push(`Inclui R$ ${brMoney(anterior)} de período(s) anterior(es) abaixo do mínimo.`);

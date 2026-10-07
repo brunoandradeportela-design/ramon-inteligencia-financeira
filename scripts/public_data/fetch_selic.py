@@ -31,7 +31,8 @@ def build(fixture=None):
         req = urllib.request.Request(URL.format(fim=fim), headers={"User-Agent": "AurionBot/1.0 (+https://aurionfinance.com.br)", "Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=60) as r:
             rows = json.load(r)
-    series = parse(rows)
+    mes_atual = dt.date.today().strftime("%Y-%m")
+    series = [x for x in parse(rows) if fixture or x["date"][:7] < mes_atual]  # mês corrente é parcial
     return {"generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "serie": "SGS 4390 — Selic acumulada no mês (% a.m.)",
             "fonte": "Banco Central do Brasil", "items": series}
 
