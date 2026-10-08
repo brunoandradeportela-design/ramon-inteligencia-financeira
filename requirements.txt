@@ -1,5 +1,5 @@
-fastapi>=0.115
+fastapi>=0.115,<0.142  # o contrato OpenAPI versionado foi gerado nesta faixa; atualizar junto com packages/contracts/openapi.json
 uvicorn[standard]>=0.30
-pydantic>=2.7
+pydantic>=2.7,<2.14
 httpx>=0.27
 psycopg[binary]>=3.2
