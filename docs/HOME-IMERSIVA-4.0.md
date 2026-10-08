@@ -2,6 +2,8 @@
 
 **Data:** 08/10/2026
 **Versão de origem:** `0a00cfd`, o último commit antes desta mudança.
+**Commit publicado:** `60292d4` (página inicial). Em seguida, `b34cefc` fixou a faixa de versões do FastAPI e do Pydantic, porque versões novas mudaram o formato do contrato OpenAPI gerado no CI.
+**URL:** https://aurionfinance.com.br/ — publicada pelo GitHub Pages (deploy concluído com sucesso). A API foi publicada pelo Workers Builds `aurion-api`, também com sucesso.
 **Reversão:** a mudança está em um único commit. Para voltar ao estado anterior, basta `git revert <commit>`. A página anterior volta inteira: `index.html`, `landing.css` e `stage.js`.
 
 ## 1. Arquivos alterados
