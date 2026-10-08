@@ -1,6 +1,7 @@
 /* AURION Identity no app: login por e-mail ou CPF, mostrar/ocultar senha, MFA, recuperação e redefinição,
  * segurança da conta (CPF, senha, MFA, sessões) e privacidade (auditoria, exportação, eliminação). */
 import { api, ApiError, DEMO } from "./api.js";
+import { UI4 } from "./ui4.js";
 import { onLogin, themeSwitch } from "./app.js";
 import { docValid } from "./crm_rules.js";
 import { dtm, esc, icon, toast } from "./ui.js";
@@ -12,6 +13,7 @@ const digits = v => String(v || "").replace(/\D/g, "");
 export const looksCpf = v => !String(v).includes("@") && digits(v).length === 11;
 
 export function authLayout(inner) {
+  if (UI4) return `<div class="a4-panel">${inner}</div>`;
   return `<div class="auth">
     <div class="auth__art" aria-hidden="true"><div><p class="eyebrow" style="color:#c6d3e0">Seu dinheiro gera dados.</p>
       <h2>Nossa inteligência mostra o que eles significam.</h2><p>Consolide, analise, simule e antecipe cenários financeiros e tributários.</p></div></div>

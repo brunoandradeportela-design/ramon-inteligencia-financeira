@@ -105,6 +105,9 @@ Como reproduzir:
   - Detalhes e testes em `docs/HOME-IMERSIVA-4.0.md`; teste automático em `site_e2e`.
 
 ### Ainda abertos
+- **Login e cadastro 4.0 aguardando aprovação.** A versão está em homologação em `/app/?ui=4#/cadastro` (relatório em `docs/LOGIN-CADASTRO-4.0.md`). A produção segue com o layout clássico até a aprovação.
+- **Cotações em tempo real.** A fonte atual é pública e atrasada, sem licença comercial; os dados aparecem sempre rotulados como atrasados ou de fechamento. Tempo real depende de contratar um provedor licenciado.
+- **Termos e Política sem identificação do controlador.** Faltam razão social, CNPJ e contato do encarregado (DPO), além da revisão jurídica.
 - **Código de barras do DARF pela API.** Depende do contrato do Integra Contador (SERPRO) e do certificado e-CNPJ; até lá, o código de barras é gerado no Sicalc com os mesmos dados.
 - **Tabelas de DARE de outros estados.** Só Rondônia está cadastrada; nos outros estados o código é informado pelo usuário.
 - **Limite de requisições global.** O limitador atual conta por instância do Worker; o limite global entre regiões exige o Rate Limiting do Cloudflare no plano pago.

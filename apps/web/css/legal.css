@@ -1,0 +1,18 @@
+/* Termos de Uso e Política de Privacidade */
+:root{--bg:#061426;--pn:#0A1628;--tx:#DAE8F5;--mu:#8FA6C0;--cy:#20D9FF;--ln:rgba(32,217,255,.2)}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(900px 500px at 20% 0,#0d2a52,transparent 60%),var(--bg);color:var(--tx);font:16px/1.65 Figtree,system-ui,sans-serif}
+a{color:var(--cy)}
+.lg-top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;max-width:880px;margin:0 auto;padding:20px 16px}
+.lg-top nav{display:flex;gap:16px;font-size:14px}
+.lg-logo{font-weight:800;letter-spacing:.1em;font-size:22px;text-decoration:none;background:linear-gradient(180deg,#fff,#8aa3c0);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lg{max-width:880px;margin:0 auto 40px;padding:28px clamp(16px,4vw,44px);border-radius:20px;background:rgba(10,22,40,.75);border:1px solid var(--ln)}
+.lg h1{margin:0 0 6px;font-size:clamp(26px,4vw,36px);color:#fff}
+.lg h2{margin:28px 0 8px;font-size:19px;color:#fff}
+.lg-ver{color:var(--mu);font-size:14px}
+.lg-pend{border-left:3px solid #ffd166;background:rgba(255,209,102,.08);padding:10px 14px;border-radius:8px;font-size:14px}
+.lg ul{padding-left:20px}.lg li{margin:4px 0}
+.lg table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0;display:block;overflow-x:auto}
+.lg th,.lg td{text-align:left;padding:8px;border-bottom:1px solid var(--ln);vertical-align:top}.lg th{color:var(--mu);font-weight:600}
+.lg-foot{text-align:center;color:var(--mu);font-size:13px;padding:0 16px 32px}
+@media print{body{background:#fff;color:#000}.lg{border:0;background:none}.lg h1,.lg h2{color:#000}.lg-top nav,.lg-foot{display:none}}

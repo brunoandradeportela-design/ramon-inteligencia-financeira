@@ -180,11 +180,14 @@ export async function identityRoute(m, p, body, q, req, env, db, D) {
     const c = D.localCustomer({ ...body, plan: ["pro", "premium"].includes(body.plan) ? body.plan : "free" });
     c.id = "usr_" + randomToken(12).replace(/[-_]/g, "").slice(0, 16).toLowerCase();
     c.origin = body.origin || "site"; c.tags = [];
+    const at = nowIso();   // aceite registrado com versão e momento; comunicações opcionais ficam separadas
+    c.consents = { termos_uso: { versao: D.LEGAL_VERSION, aceito_em: at }, politica_privacidade: { versao: D.LEGAL_VERSION, aceito_em: at },
+      comunicacoes: body.marketing_opt_in === true ? { aceito_em: at } : null };
     c.timeline = [{ at: c.created_at, kind: "cadastro", text: `Cadastro no plano ${c.plan_name} (origem: ${c.origin})` }];
     D.recompute(c);
     await db.prepare("INSERT INTO users (id,email,pw,data,created_at) VALUES (?,?,?,?,?)").bind(c.id, c.email, await hashPassword(body.password), JSON.stringify(c), c.created_at).run();
     if (ch) { await kvSet(db, "cpf_idx:" + ch, c.id); await setSec(db, c.id, { mfa: null, cpf_hash: ch, cpf_masked: maskCpf(cpf) }); }
-    await audit(db, req, { user_id: c.id, actor: c.id, action: "conta.criada", resource: "user", entity_id: c.id, meta: { plano: c.plan, cpf: !!ch } });
+    await audit(db, req, { user_id: c.id, actor: c.id, action: "conta.criada", resource: "user", entity_id: c.id, meta: { plano: c.plan, cpf: !!ch, termos_versao: D.LEGAL_VERSION, comunicacoes: !!c.consents.comunicacoes } });
     return new Resp(201, await issue(c.id, { first: true }));
   }
 

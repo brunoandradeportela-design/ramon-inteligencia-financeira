@@ -9,6 +9,7 @@ import { guiasTab } from "./views_guias.js";
 import { settingsExtras } from "./views_hub.js";
 export { allocation };
 export { recoverView, resetView };
+import { UI4 } from "./ui4.js";
 import { onLogin, themeSwitch, theme, searchPill } from "./app.js";
 import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
 import { areaChart, barChart, brl, brlShort, confidence, deco, donut, ringGauge, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
@@ -21,6 +22,7 @@ const problemMsg = e => e instanceof ApiError ? (e.problem.detail || e.problem.t
 
 /* ================================================================ AUTH */
 function authLayout(inner) {
+  if (UI4) return `<div class="a4-panel">${inner}</div>`;
   return `<div class="auth">
     <div class="auth__art" aria-hidden="true"><div><p class="eyebrow" style="color:#c6d3e0">Seu dinheiro gera dados.</p>
       <h2>Nossa inteligência mostra o que eles significam.</h2><p>Consolide, analise, simule e antecipe cenários financeiros e tributários.</p></div></div>

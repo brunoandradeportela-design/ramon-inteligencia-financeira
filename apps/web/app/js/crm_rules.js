@@ -24,6 +24,9 @@ export function isFullName(n) {
   const parts = String(n || "").trim().split(/\s+/).filter(Boolean);
   return parts.length >= 2 && parts[0].length >= 2 && parts.every(p => /^[A-Za-zÀ-ÿ'.-]+$/.test(p));
 }
+/* versão vigente dos Termos de Uso e da Política de Privacidade (apps/web/termos.html e privacidade.html) */
+export const LEGAL_VERSION = "2026-10-08";
+
 export function validateSignup(d) {
   const errors = [];
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email || "")) errors.push({ field: "email", msg: "E-mail inválido" });

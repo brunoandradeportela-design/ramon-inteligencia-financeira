@@ -22,6 +22,7 @@ import { irpfReport } from "../../apps/web/app/js/irpf_report.js";
 import { checkRate } from "./ratelimit.js";
 import { guiasRoute } from "./guias.js";
 import { publicContact, adminContacts } from "./contact.js";
+import { publicMarketRoute, refreshSnapshot } from "./public_market.js";
 import { METRICS_SCHEMA, recordRequest, routeGroup, count as metric, flush as flushMetrics, prune as pruneMetrics, summary as metricsSummary } from "./metrics.js";
 import { eventsView as buildEvents, personalEvents } from "../../apps/web/app/js/event_engine.js";
 import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete, sendMail, mailConfigured } from "./identity.js";
@@ -37,7 +38,7 @@ import { normalizeItem, itemView, PLUGGY_WIDGET } from "../../apps/web/app/js/op
 import { answer as assistantAnswer, DISCLAIMER as ASSIST_DISCLAIMER } from "../../apps/web/app/js/assistant_engine.js";
 import { classifyDoc, guessYear, irpfChecklist, sniff, ALLOWED, DOC_KINDS } from "../../apps/web/app/js/doc_engine.js";
 import { SGS, sgsLastUrl, parseSgs, indicesSnapshot, yahooUrl, brapiUrl, parseYahooChart, parseBrapi, applyQuotes, tickersFrom } from "../../apps/web/app/js/market.js";
-import { validateSignup, localCustomer, metricsFrom, addMonth, PRICE, PLAN_NAME, paymentsFrom, docValid, normalizePhone } from "../../apps/web/app/js/crm_rules.js";
+import { validateSignup, localCustomer, metricsFrom, addMonth, PRICE, PLAN_NAME, paymentsFrom, docValid, normalizePhone, LEGAL_VERSION } from "../../apps/web/app/js/crm_rules.js";
 
 const FEATURES = {
   free: ["alertas_limitados", "conexoes", "dashboard", "documentos", "financas", "orcamento", "patrimonio"],
@@ -286,7 +287,7 @@ async function route(req, env, db, url, ctx) {
   if (p === "/health" || p === "/") return { status: "ok", service: "aurion-api", time: nowIso(), gateway: !!env.ASAAS_API_KEY };
 
   /* ---- identidade: login por e-mail/CPF, MFA, recuperação, sessões, auditoria (identity.js) */
-  const D = { OWNER_ID, ownerEmail, ownerMe, getCustomer, getCustomerByEmail, saveCustomer, meFromCustomer, validateSignup, localCustomer, recompute, docValid, throttle, loginFailed, authUser };
+  const D = { OWNER_ID, ownerEmail, ownerMe, getCustomer, getCustomerByEmail, saveCustomer, meFromCustomer, validateSignup, localCustomer, recompute, docValid, throttle, loginFailed, authUser, LEGAL_VERSION };
   if (/^\/v1\/(auth\/(register|login|mfa\/verify|recover|reset|logout|password)|security|sessions|audit$|admin\/users\/[^/]+\/reset-link$|admin\/audit$)/.test(p)) {
     const out = await identityRoute(m, p, body, q, req, env, db, D);
     if (out !== null) return out;
@@ -491,6 +492,14 @@ async function route(req, env, db, url, ctx) {
     return result;
   }
 
+  /* ---- cotações públicas (login/cadastro 4.0) e disponibilidade de e-mail no cadastro */
+  if (p.startsWith("/v1/public/market")) return publicMarketRoute(m, p, q, env, db, ctx);
+  if (m === "GET" && p === "/v1/auth/email-available") {
+    const email = String(q.email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Problem(422, "Dados inválidos", "E-mail inválido.");
+    return { email, available: !(email === ownerEmail(env) || await getCustomerByEmail(db, email)) };
+  }
+
   /* ---- formulário de contato da página inicial (público) */
   if (m === "POST" && p === "/v1/public/contact") return publicContact(body, req, env, db, { audit, sendMail, mailConfigured, ownerEmail, ownerId: OWNER_ID });
 
@@ -618,6 +627,7 @@ export default {
       await ensureSchema(env.DB);
       if (env.ASAAS_API_KEY) { try { await sync(env, env.DB); } catch (e) { console.error("sync falhou", e.detail || e); } }
       try { await refreshMarket(env, env.DB); } catch (e) { metric("job.falha.mercado"); console.error("mercado falhou", e.message || e); }
+      try { await refreshSnapshot(env, env.DB); } catch (e) { metric("job.falha.mercado_publico"); console.error("mercado público falhou", e.message || e); }
       if (ofConfigured(env)) { try { await ofCron(env, env.DB); } catch (e) { console.error("open finance falhou", e.message || e); } }
       try { const r = await mailCron(env, env.DB, { getCustomer, finLoad, computeTax }); await kvSet(env.DB, "mail_last", { at: nowIso(), ...r }); if (r.sent) metric("mail.enviados", r.sent); if (r.errors) metric("mail.falhas", r.errors); } catch (e) { metric("job.falha.email"); console.error("e-mails falharam", e.message || e); }
       try { if (new Date().getUTCHours() === 6 && new Date().getUTCMinutes() < 15) await pruneMetrics(env.DB); await flushMetrics(env.DB, { force: true }); } catch (e) { console.error("métricas falharam", e.message || e); }

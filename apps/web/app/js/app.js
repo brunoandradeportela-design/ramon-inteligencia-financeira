@@ -3,6 +3,8 @@ import { importData } from "./views_import.js";
 import { api, DEMO, ANALYTICS_DEMO, HAS_API, session, ApiError, actAs } from "./api.js";
 import { esc, icon, errorBox, loading } from "./ui.js";
 import * as V from "./views.js";
+import { UI4 } from "./ui4.js";
+import { mountShell, unmount as unmount4, register4 } from "./auth4.js";
 import { crm } from "./views_crm.js";
 import { payments } from "./views_payments.js";
 import { trader } from "./views_trader.js";
@@ -158,6 +160,12 @@ function parse() {
 async function render() {
   const r = parse();
   const root = document.getElementById("root");
+  if (PUBLIC[r.name] && UI4) {   // experiência 4.0 (homologação): ambiente persistente + formulário no painel de vidro
+    const form = mountShell(root); form.innerHTML = "";
+    await (r.name === "cadastro" ? register4 : PUBLIC[r.name])(form, r);
+    document.title = `Aurion — ${({ entrar: "Entrar", cadastro: "Cadastro", recuperar: "Recuperar acesso", redefinir: "Nova senha" })[r.name]}`; return;
+  }
+  unmount4();
   if (PUBLIC[r.name]) { root.innerHTML = ""; await PUBLIC[r.name](root, r); document.title = `Aurion — ${({ entrar: "Entrar", cadastro: "Cadastro", recuperar: "Recuperar acesso", redefinir: "Nova senha" })[r.name]}`; return; }
   if (!session.token) { location.hash = `#/entrar?next=${encodeURIComponent(r.name)}`; return; }
   try {

@@ -4,6 +4,7 @@
  * (canvas 2D e SVG; nada de WebGL), com redução de movimento e pausa fora da tela.
  * Todos os números do notebook e dos hologramas são da DEMONSTRAÇÃO (dados fictícios, assets/data/home-demo.json). */
 
+import { makeGlobe as makeGlobeShared } from "./globe.js";
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -243,64 +244,8 @@ function createDash(root) {
   return root;
 }
 
-/* ------------------------------------------------------------ globo (canvas 2D, projeção ortográfica) */
-let LAND = null;
-async function landPoints() {
-  if (LAND) return LAND;
-  const m = await (await fetch("assets/data/land-mask.json")).json();
-  const bytes = Uint8Array.from(atob(m.bits), c => c.charCodeAt(0)), pts = [];
-  for (let r = 0; r < m.rows; r++) for (let c = 0; c < m.cols; c++) {
-    const i = r * m.cols + c;
-    if (bytes[i >> 3] & (1 << (7 - (i & 7)))) pts.push([(m.lat0 - r * m.step - m.step / 2) * Math.PI / 180, (-180 + c * m.step + m.step / 2) * Math.PI / 180]);
-  }
-  return (LAND = pts);
-}
-const CITIES = [[-23.55, -46.63], [40.71, -74.0], [51.5, -0.12], [35.68, 139.69], [1.35, 103.82], [-33.86, 151.2], [19.43, -99.13]].map(([a, b]) => [a * Math.PI / 180, b * Math.PI / 180]);
-function makeGlobe(canvas, { speed = 0.12, tilt = -0.32 } = {}) {
-  const ctx = canvas.getContext("2d");
-  let lon0 = -0.87, raf = 0, running = false, last = 0;
-  const size = () => { const d = Math.min(devicePixelRatio || 1, 2), w = canvas.clientWidth || 220; canvas.width = w * d; canvas.height = w * d; return d; };
-  let dpr = size();
-  const proj = (lat, lon) => { // ortográfica com inclinação
-    const x = Math.cos(lat) * Math.sin(lon - lon0), y0 = Math.sin(lat), z0 = Math.cos(lat) * Math.cos(lon - lon0);
-    const y = y0 * Math.cos(tilt) - z0 * Math.sin(tilt), z = y0 * Math.sin(tilt) + z0 * Math.cos(tilt);
-    return [x, -y, z];
-  };
-  function frame(t) {
-    if (!LAND) return;
-    const W = canvas.width, R = W * 0.42, C = W / 2;
-    ctx.clearRect(0, 0, W, W);
-    const g = ctx.createRadialGradient(C - R * .3, C - R * .35, R * .1, C, C, R * 1.12);
-    g.addColorStop(0, "rgba(8,206,255,.28)"); g.addColorStop(.7, "rgba(8,102,255,.12)"); g.addColorStop(1, "rgba(8,102,255,0)");
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(C, C, R * 1.1, 0, 7); ctx.fill();
-    ctx.strokeStyle = "rgba(8,206,255,.75)"; ctx.lineWidth = 1.2 * dpr; ctx.shadowColor = "#08CEFF"; ctx.shadowBlur = 10 * dpr;
-    ctx.beginPath(); ctx.arc(C, C, R, 0, 7); ctx.stroke(); ctx.shadowBlur = 0;
-    ctx.strokeStyle = "rgba(8,206,255,.16)"; ctx.lineWidth = 0.7 * dpr;   // malha
-    for (let lon = 0; lon < 180; lon += 30) { ctx.beginPath(); let first = true; for (let lat = -90; lat <= 90; lat += 6) { const [x, y, z] = proj(lat * Math.PI / 180, lon * Math.PI / 180); if (z < 0) { first = true; continue; } first ? ctx.moveTo(C + x * R, C + y * R) : ctx.lineTo(C + x * R, C + y * R); first = false; } ctx.stroke(); }
-    for (let lon = 180; lon < 360; lon += 30) { ctx.beginPath(); let first = true; for (let lat = -90; lat <= 90; lat += 6) { const [x, y, z] = proj(lat * Math.PI / 180, lon * Math.PI / 180); if (z < 0) { first = true; continue; } first ? ctx.moveTo(C + x * R, C + y * R) : ctx.lineTo(C + x * R, C + y * R); first = false; } ctx.stroke(); }
-    for (let lat = -60; lat <= 60; lat += 30) { ctx.beginPath(); let first = true; for (let lon = 0; lon <= 360; lon += 6) { const [x, y, z] = proj(lat * Math.PI / 180, lon * Math.PI / 180); if (z < 0) { first = true; continue; } first ? ctx.moveTo(C + x * R, C + y * R) : ctx.lineTo(C + x * R, C + y * R); first = false; } ctx.stroke(); }
-    for (const [lat, lon] of LAND) {   // continentes
-      const [x, y, z] = proj(lat, lon); if (z <= 0) continue;
-      ctx.fillStyle = `rgba(${120 + 100 * z | 0},${220 + 30 * z | 0},255,${0.25 + 0.7 * z})`;
-      const s = (0.9 + 1.4 * z) * dpr * (W / (220 * dpr));
-      ctx.fillRect(C + x * R - s / 2, C + y * R - s / 2, s, s);
-    }
-    const vis = CITIES.map(c => proj(...c)).filter(p => p[2] > 0.05);   // conexões ilustrativas
-    ctx.lineWidth = 1 * dpr;
-    for (let i = 1; i < vis.length; i++) {
-      const a = vis[0], b = vis[i], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, lift = 1.25;
-      ctx.strokeStyle = "rgba(8,206,255,.55)"; ctx.beginPath(); ctx.moveTo(C + a[0] * R, C + a[1] * R); ctx.quadraticCurveTo(C + mx * R * lift, C + my * R * lift, C + b[0] * R, C + b[1] * R); ctx.stroke();
-    }
-    for (const p of vis) { ctx.fillStyle = "#ffffff"; ctx.shadowColor = "#08CEFF"; ctx.shadowBlur = 8 * dpr; ctx.beginPath(); ctx.arc(C + p[0] * R, C + p[1] * R, 2.2 * dpr, 0, 7); ctx.fill(); ctx.shadowBlur = 0; }
-    if (running && !RM && !(LITE && canvas.id === "globe-small" && Math.random() < .5)) { lon0 -= speed * Math.min((t - last) / 1000, .05) ; last = t; raf = requestAnimationFrame(frame); }
-  }
-  const start = () => { if (running) return; running = true; last = performance.now(); raf = requestAnimationFrame(frame); };
-  const stop = () => { running = false; cancelAnimationFrame(raf); };
-  landPoints().then(() => { frame(performance.now()); if (!RM) start(); });
-  new IntersectionObserver(es => es.forEach(e => (e.isIntersecting && !RM ? start() : stop()))).observe(canvas);
-  addEventListener("resize", () => { dpr = size(); frame(performance.now()); });
-  return { stop, start };
-}
+/* ------------------------------------------------------------ globo (módulo compartilhado js/globe.js) */
+const makeGlobe = (canvas, o = {}) => makeGlobeShared(canvas, { ...o, lite: () => LITE && canvas.id === "globe-small" });
 
 /* ------------------------------------------------------------ simulação de cenários (juros compostos, hipóteses explícitas) */
 function scenarios({ inicial, aporte, anos, taxas }) {
