@@ -99,6 +99,11 @@ Como reproduzir:
   - Integração: alertas, próximas ações, agenda e Radar Trader abrem a guia já preenchida (botão "Gerar DARF"). O assistente responde código por assunto, valor do DARF em aberto com multa e juros para pagamento hoje e DARE, citando a Lei 9.430/96 e o Sicalc.
   - Passo a passo para ligar o código de barras pelo SERPRO: `docs/INTEGRA-CONTADOR.md`.
 
+- **Tela inicial imersiva 4.0, 08/10/2026.**
+  - Notebook com dashboard de demonstração navegável, três hologramas interativos, apresentação "Ver como funciona", conteúdo oficial e contato real.
+  - Tem modo leve automático e redução de movimento.
+  - Detalhes e testes em `docs/HOME-IMERSIVA-4.0.md`; teste automático em `site_e2e`.
+
 ### Ainda abertos
 - **Código de barras do DARF pela API.** Depende do contrato do Integra Contador (SERPRO) e do certificado e-CNPJ; até lá, o código de barras é gerado no Sicalc com os mesmos dados.
 - **Tabelas de DARE de outros estados.** Só Rondônia está cadastrada; nos outros estados o código é informado pelo usuário.

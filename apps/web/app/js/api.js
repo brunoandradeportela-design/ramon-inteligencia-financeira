@@ -124,6 +124,7 @@ async function demoCall(method, path, body) {
       if (!docValid(body.cpf_cnpj)) throw problem(422, "Dados inválidos", "CPF ou CNPJ inválido.");
       return { invoice_url: null, demo: true, subscription_id: null };
     },
+    "GET /v1/admin/contacts": () => ({ items: [], novos: 0 }),
     "GET /v1/admin/team": () => ({ items: [{ id: d.admin_me.id, name: d.admin_me.name, email: d.admin_me.email, roles: d.admin_me.roles }] }),
     "GET /v1/admin/crm/customers": () => {
       const q = new URLSearchParams(qs || ""), term = norm(q.get("q") || ""), dg = term.includes("@") ? "" : term.replace(/\D/g, ""), digits = dg.length >= 4 ? dg : "";

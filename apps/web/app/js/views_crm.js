@@ -41,7 +41,22 @@ export async function crm(el, r) {
     </section>
     <div id="detail"></div>
     <section class="card section" id="team"></section>
+    <section class="card section" id="sitemsgs" aria-label="Mensagens do site"></section>
     <p class="note">${esc(m.pricing_note)} O CRM mostra dados de cadastro, assinatura e sinais de uso — nunca patrimônio, transações ou impostos do cliente (minimização LGPD). Todo acesso a um cliente fica registrado na trilha de auditoria dele.</p>`;
+
+  async function loadMsgs() {
+    const box = el.querySelector("#sitemsgs");
+    const r = await api.get("/v1/admin/contacts").catch(() => ({ items: [], novos: 0 }));
+    const st = { novo: "novo", respondido: "respondido", arquivado: "arquivado" };
+    box.innerHTML = `<h3>Mensagens do site <span class="right small muted">${r.novos} nova(s) · formulário "Fale com a AURION"</span></h3>
+      ${r.items.length ? `<div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Recebida</th><th>Contato</th><th>Assunto</th><th>Mensagem</th><th>Situação</th></tr></thead>
+        <tbody>${r.items.slice(0, 50).map(x => `<tr><td class="small">${dt(x.created_at)}</td><td class="small"><b>${esc(x.name)}</b><div><a href="mailto:${esc(x.email)}">${esc(x.email)}</a></div></td><td class="small">${esc(x.topic_label)}</td>
+          <td class="small" style="max-width:420px;white-space:pre-wrap">${esc(x.message)}</td>
+          <td><select class="input" data-msg="${esc(x.id)}" aria-label="Situação da mensagem de ${esc(x.name)}" style="min-width:130px">${Object.keys(st).map(k => `<option value="${k}" ${x.status === k ? "selected" : ""}>${st[k]}</option>`).join("")}</select></td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="small muted" style="margin-top:8px">Nenhuma mensagem recebida pelo site ainda.</p>`}`;
+    box.querySelectorAll("[data-msg]").forEach(sel => sel.onchange = async () => { try { await api.patch(`/v1/admin/contacts/${sel.dataset.msg}`, { status: sel.value }); toast("Situação atualizada."); } catch (e) { toast(e.message); } });
+  }
+  loadMsgs();
 
   async function loadList() {
     const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v)).toString();

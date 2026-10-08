@@ -21,9 +21,10 @@ import { backupRoute } from "./backup.js";
 import { irpfReport } from "../../apps/web/app/js/irpf_report.js";
 import { checkRate } from "./ratelimit.js";
 import { guiasRoute } from "./guias.js";
+import { publicContact, adminContacts } from "./contact.js";
 import { METRICS_SCHEMA, recordRequest, routeGroup, count as metric, flush as flushMetrics, prune as pruneMetrics, summary as metricsSummary } from "./metrics.js";
 import { eventsView as buildEvents, personalEvents } from "../../apps/web/app/js/event_engine.js";
-import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete } from "./identity.js";
+import { IDENTITY_SCHEMA, REQ, audit, identityRoute, newSession as idNewSession, touchSession, privacyExport, privacyDelete, sendMail, mailConfigured } from "./identity.js";
 import { Resp, Problem, nowIso, today, money, enc, b64u, randomToken, sha256, safeEqual, hashPassword, checkPassword, kvGet, kvSet, str, numOrNull, isoDate, ageH } from "./shared.js";
 import { financeSummary, transactionsList, portfolioSummary, dashboardSummary, categorize, CATEGORIES } from "../../apps/web/app/js/fin_engine.js";
 import { dedupeTransactions, reconcilePositions, reconcileAccounts, qualityIndicators } from "../../apps/web/app/js/data_quality.js";
@@ -490,9 +491,13 @@ async function route(req, env, db, url, ctx) {
     return result;
   }
 
+  /* ---- formulário de contato da página inicial (público) */
+  if (m === "POST" && p === "/v1/public/contact") return publicContact(body, req, env, db, { audit, sendMail, mailConfigured, ownerEmail, ownerId: OWNER_ID });
+
   /* ---- área do administrador */
   if (p.startsWith("/v1/admin/")) {
     await requireOwner(req, env, db);
+    if (p.startsWith("/v1/admin/contacts")) { const r = await adminContacts(m, p, body, db); if (r) return r; }
     const items = await allCustomers(db);
     if (m === "GET" && p === "/v1/admin/team") return { items: [{ id: OWNER_ID, name: env.OWNER_NAME || "Ramon Junio Araujo Pereira", email: ownerEmail(env), roles: ["admin", "owner"] }] };
     if (m === "GET" && p === "/v1/admin/crm/metrics") return metricsFrom(items, new Date(), "Dados reais do banco; pagamentos do Asaas entram em tempo real pelo webhook.");

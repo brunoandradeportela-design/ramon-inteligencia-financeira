@@ -5,6 +5,7 @@
 const MEM = new Map();
 export const POLICIES = [
   { id: "auth", test: (m, p) => m === "POST" && /^\/v1\/auth\/(login|register|recover|reset|mfa\/verify)$/.test(p), limit: 20 },
+  { id: "contato", test: (m, p) => m === "POST" && p === "/v1/public/contact", limit: 5 },
   { id: "pesado", test: (m, p) => m !== "GET" && /^\/v1\/(imports|documents|trader\/backtests|assistant\/query|simulations|voice\/tts)(\/|$)/.test(p), limit: 40 },
   { id: "geral", test: () => true, limit: 600 },
 ];

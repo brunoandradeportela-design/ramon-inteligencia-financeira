@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AURION — Inteligência financeira e tributária</title>
 <meta name="description" content="Consolide, analise, simule e antecipe cenários financeiros e tributários em um só lugar. Seu dinheiro gera dados. Nossa inteligência mostra o que eles significam.">
-<meta name="theme-color" content="#020b16">
+<meta name="theme-color" content="#03111F">
 <link rel="canonical" href="https://aurionfinance.com.br/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://aurionfinance.com.br/">
@@ -13,131 +13,226 @@
 <meta property="og:description" content="Consolide, analise, simule e antecipe cenários financeiros e tributários em um só lugar.">
 <meta property="og:locale" content="pt_BR">
 <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
-<link rel="preload" href="assets/fonts/figtree-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/figtree-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/img/home/city.svg" as="image" type="image/svg+xml">
 <link rel="stylesheet" href="css/fonts.css">
-<link rel="stylesheet" href="css/landing.css">
-<script src="js/stage.js"></script>
+<link rel="stylesheet" href="css/home.css?v=1">
+<script src="app/js/config.js"></script>
+<script type="module" src="js/home.js?v=1"></script>
 </head>
-<body class="landing">
+<body class="home">
 <a class="skip" href="#conteudo">Pular para o conteúdo</a>
-<div class="stage" id="stage">
 
-  <!-- ============ HERO ============ -->
-  <header class="hero" id="topo">
-    <img class="hero__photo" src="assets/img/hero-laptop.webp?v=2" alt="Notebook exibindo o painel da plataforma AURION com patrimônio, impostos estimados e alertas" width="1488" height="1212" fetchpriority="high">
-    <nav class="nav" aria-label="Principal">
-      <a class="logo" href="#topo" aria-label="AURION — início">AURION</a>
-      <ul class="nav__links">
-        <li><a href="#produto">Produto</a></li>
-        <li><a href="#produto">Soluções</a></li>
-        <li><a href="#planos">Planos</a></li>
-        <li><a href="#conteudo-cta">Conteúdo</a></li>
-        <li><a href="#rodape">Sobre</a></li>
-      </ul>
-      <a class="nav__login" href="app/#/entrar">Entrar</a>
-      <a class="btn btn--primary btn--nav" href="app/#/cadastro">Começar agora <svg class="ico-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
-      <button class="nav__burger" aria-label="Abrir menu" aria-expanded="false" onclick="document.body.classList.toggle('menu-open');this.setAttribute('aria-expanded',document.body.classList.contains('menu-open'))"><span></span><span></span><span></span></button>
-    </nav>
+<!-- cenário imersivo (decorativo) -->
+<div class="scene" aria-hidden="true">
+  <div class="scene__layer scene__sky"></div>
+  <div class="scene__layer scene__city"></div>
+  <div class="scene__layer scene__arch"></div>
+  <canvas class="scene__particles" id="particles"></canvas>
+</div>
 
-    <div class="hero__copy" id="conteudo">
-      <p class="eyebrow">Seu dinheiro gera dados.</p>
-      <h1>Inteligência<br>que transforma<br><span class="accent">decisões.</span></h1>
+<header class="topbar" id="topo">
+  <a class="logo" href="./" aria-label="AURION — página inicial" data-text="AURION"><span class="logo__txt">AURION</span></a>
+  <nav class="menu" id="menu" aria-label="Principal">
+    <ul>
+      <li><a href="#produto">Produto</a></li>
+      <li><a href="#solucoes">Soluções</a></li>
+      <li><a href="#planos">Planos</a></li>
+      <li><a href="#conteudo-publico">Conteúdo</a></li>
+      <li><a href="#sobre">Sobre</a></li>
+    </ul>
+  </nav>
+  <div class="topbar__actions">
+    <a class="btn btn--glass" href="app/#/entrar" data-auth-link>Entrar</a>
+    <a class="btn btn--primary" href="app/#/cadastro" data-cta="topo">Começar agora <svg class="i-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+    <button class="burger" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button>
+  </div>
+</header>
+
+<main id="conteudo">
+  <!-- ======================= HERO ======================= -->
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero__copy">
+      <p class="pill-eyebrow"><span class="dot" aria-hidden="true"></span>Seu dinheiro gera dados.</p>
+      <h1 id="hero-title"><span class="silver">Inteligência<br>que transforma</span><br><span class="electric">decisões.</span><span class="caret" aria-hidden="true"></span></h1>
       <p class="hero__lead">Consolide, analise, simule e antecipe cenários financeiros e tributários em um só lugar.</p>
       <div class="hero__ctas">
-        <a class="btn btn--primary btn--lg" href="app/#/cadastro">Começar agora <svg class="ico-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
-        <a class="btn btn--ghost btn--lg" href="#produto"><svg class="ico-play" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12.6"/><path d="M11.4 9.2v9.6l7.6-4.8z"/></svg> Ver como funciona</a>
+        <a class="btn btn--primary btn--lg" href="app/#/cadastro" data-cta="hero">Começar agora <svg class="i-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+        <button class="btn btn--ghost btn--lg" type="button" data-open-tour><svg class="i-play" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12.6"/><path d="M11.4 9.2v9.6l7.6-4.8z"/></svg>Ver como funciona</button>
       </div>
-      <ul class="checks">
-        <li><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.9"/><path d="M5 8.2l2 2 4-4.3"/></svg>Seus dados protegidos (LGPD)</li>
-        <li><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.9"/><path d="M5 8.2l2 2 4-4.3"/></svg>Integração via Open Finance</li>
-        <li><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.9"/><path d="M5 8.2l2 2 4-4.3"/></svg>Conformidade regulatória</li>
+      <ul class="trust" aria-label="Compromissos">
+        <li><button type="button" data-info="lgpd"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3.5l10 3.6v7.2c0 6.9-4.3 11.8-10 13.7C10.3 26.1 6 21.2 6 14.3V7.1z"/><path d="M11.5 15.5l3.2 3.2 6-6.4"/></svg><span>Seus dados<br>protegidos (LGPD)</span></button></li>
+        <li><button type="button" data-info="openfinance"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12.5"/><path d="M13 19l6-6M12.2 14.5l-1.7 1.7a3 3 0 0 0 4.3 4.3l1.7-1.7M19.8 17.5l1.7-1.7a3 3 0 0 0-4.3-4.3l-1.7 1.7"/></svg><span>Integração via<br>Open Finance</span></button></li>
+        <li><button type="button" data-info="inteligencia"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12.5"/><path d="M10.5 21v-4M14.2 21v-7M17.9 21v-9.5M21.6 21V10"/></svg><span>Inteligência<br>para melhores decisões</span></button></li>
       </ul>
     </div>
-  </header>
 
-  <!-- ============ SELOS ============ -->
-  <section class="trust" aria-label="Conformidade e segurança">
-    <div class="trust__item">
-      <svg class="trust__ico trust__ico--fill" viewBox="0 0 44 44" aria-hidden="true"><path d="M5 11.5L12.5 4h9v5.2h-6.4L10.2 14v7.2H5z"/><path d="M39 11.5L31.5 4h-6.3v5.2h3.3l4.9 4.8v7.2H39z"/><path d="M5 32.5l7.5 7.5h6.4v-5.2h-3.3l-4.9-4.8v-7.2H5z"/><path d="M39 32.5L31.5 40h-9.1v-5.2h6.2l4.9-4.8v-7.2H39z"/><path d="M15.2 17h6.3l4 4-4 4h-6.3l4-4z" opacity=".95"/><path d="M28.8 27h-6.3l-4 4 .1.1h6.2l4-4z" opacity=".75"/></svg>
-      <div><strong>Open Finance</strong><span>Banco Central do Brasil</span></div>
-    </div>
-    <div class="trust__item">
-      <svg class="trust__ico trust__ico--fill" viewBox="0 0 44 44" aria-hidden="true"><path d="M22 3.5L37.5 19 22 25.5 6.5 19zM22 9.6L12.8 18.8 22 22.7l9.2-3.9z" fill-rule="evenodd"/><path d="M6.5 22.5L22 29l15.5-6.5v6.3L22 40.5 6.5 28.8z"/></svg>
-      <div><strong>CVM</strong><span class="small">Comissão de Valores Mobiliários</span></div>
-    </div>
-    <div class="trust__item">
-      <svg class="trust__ico trust__ico--shield" viewBox="0 0 44 44" aria-hidden="true"><path d="M22 5l14 5v10c0 9.6-6 16.4-14 19-8-2.6-14-9.4-14-19V10z"/><path d="M15.5 21.5l4.5 4.5 8.5-9"/></svg>
-      <div><strong>LGPD</strong><span>Lei Geral de Proteção<br>de Dados</span></div>
-    </div>
-    <p class="trust__tag">Tecnologia a favor<br>da sua tranquilidade.</p>
-  </section>
+    <div class="hero__stage" id="stage">
+      <svg class="links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path class="links__p" d="M30 30 C 40 42, 46 46, 52 50"/>
+        <path class="links__p" d="M84 22 C 82 34, 80 40, 78 46"/>
+        <path class="links__p" d="M14 66 C 22 64, 26 62, 30 60"/>
+      </svg>
 
-  <!-- ============ VISÃO COMPLETA ============ -->
-  <section class="vision" id="produto">
-    <div class="vision__copy">
-      <p class="eyebrow">Mais clareza. Mais controle.</p>
-      <h2>Uma visão completa<br>do seu patrimônio.</h2>
-      <p class="vision__lead">Integre suas contas, investimentos e dados tributários para entender o presente, antecipar o futuro e tomar decisões com mais segurança.</p>
-      <a class="link" href="app/#/dashboard">Conheça a plataforma <svg class="ico-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
-    </div>
-    <div class="vision__globe" aria-hidden="true"><img src="assets/img/globe.jpg" alt="" width="684" height="636" loading="lazy"></div>
-    <ul class="features">
-      <li><a href="app/#/dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 2.6A9 9 0 0 1 21.4 9H15z"/></svg>Consolidação</a></li>
-      <li><a href="app/#/financas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-6M10 20V10M15 20V6M20 20V3"/></svg>Análise e insights</a></li>
-      <li><a href="app/#/simulador"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>Simulação de cenários</a></li>
-      <li><a href="app/#/alertas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>Radar de alertas</a></li>
-      <li><a href="app/#/tributacao"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8.5L19 7v14.5H6z"/><path d="M14 2.5V7h5M9 12h7M9 15.5h7M9 19h4"/></svg>Inteligência tributária</a></li>
-    </ul>
-  </section>
+      <button class="holo holo--growth" type="button" data-holo="crescimento" aria-haspopup="dialog" aria-label="Projeção de crescimento — abrir análise">
+        <span class="holo__glass">
+          <span class="holo__title">Projeção de crescimento</span>
+          <span class="holo__big" id="h-growth">+0,0%</span>
+          <svg class="holo__chart" id="h-growth-chart" viewBox="0 0 220 90" aria-hidden="true"></svg>
+          <span class="holo__hint">Clique para analisar</span>
+        </span>
+      </button>
 
-  <!-- ============ PLANOS ============ -->
-  <section class="plans" id="planos">
-    <div class="plans__copy">
-      <p class="eyebrow">Planos</p>
-      <h2>Escolha o plano<br>ideal para você.</h2>
-      <p class="plans__lead">Recursos na medida certa para<br>cada momento da sua jornada.</p>
-      <a class="link" href="app/#/planos">Comparar planos <svg class="ico-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
-    </div>
-    <article class="plan">
-      <h3>Free</h3>
-      <p class="price">R$ 0</p>
-      <ul><li>Dashboard básico</li><li>Patrimônio</li><li>Orçamento</li><li>Alertas limitados</li></ul>
-      <a class="btn btn--outline" href="app/#/cadastro?plano=free">Começar agora</a>
-    </article>
-    <article class="plan plan--pro">
-      <span class="plan__badge">Mais escolhido</span>
-      <h3>Pro</h3>
-      <p class="price">R$ 89,90 <small>/mês</small></p>
-      <ul><li>Inteligência financeira</li><li>Inteligência tributária</li><li>Simulação de cenários</li><li>Radar de alertas</li><li>IA explicativa</li></ul>
-      <a class="btn btn--primary" href="app/#/cadastro?plano=pro">Assinar agora</a>
-    </article>
-    <article class="plan">
-      <h3>Premium</h3>
-      <p class="price">R$ 149,90 <small>/mês</small></p>
-      <ul><li>Cenários avançados</li><li>Inteligência patrimonial</li><li>Maior automação</li><li>Suporte prioritário</li></ul>
-      <a class="btn btn--outline" href="app/#/cadastro?plano=premium">Assinar agora</a>
-    </article>
-  </section>
+      <button class="holo holo--scen" type="button" data-holo="cenarios" aria-haspopup="dialog" aria-label="Cenários simulados — abrir simulador">
+        <span class="holo__glass">
+          <span class="holo__title"><svg class="holo__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 15l3-4 3 2 4-6"/></svg>Cenários simulados</span>
+          <svg class="holo__chart" id="h-scen-chart" viewBox="0 0 220 90" aria-hidden="true"></svg>
+          <span class="holo__hint">Clique para simular</span>
+        </span>
+      </button>
 
-  <!-- ============ CTA ============ -->
-  <section class="cta" id="conteudo-cta">
-    <div>
-      <p class="eyebrow">Dê o primeiro passo</p>
-      <h2>Conecte sua vida financeira<br>a um futuro mais inteligente.</h2>
+      <button class="holo holo--globe" type="button" data-holo="globo" aria-haspopup="dialog" aria-label="Globo financeiro — distribuição geográfica da carteira de demonstração">
+        <span class="holo__glass holo__glass--round">
+          <canvas class="globe" id="globe-small" width="220" height="220"></canvas>
+          <span class="holo__hint">Distribuição geográfica</span>
+        </span>
+      </button>
+
+      <div class="laptop" id="laptop">
+        <div class="laptop__lid">
+          <div class="laptop__bezel">
+            <div class="laptop__screen"><div class="dash-fit"><div class="dash" id="dash" data-dash="hero"></div></div></div>
+          </div>
+        </div>
+        <div class="laptop__base" aria-hidden="true"><span class="laptop__notch"></span></div>
+        <div class="laptop__shadow" aria-hidden="true"></div>
+      </div>
     </div>
-    <div class="cta__action">
-      <a class="btn btn--primary btn--cta" href="app/#/cadastro">Começar gratuitamente <svg class="ico-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
-      <p>Sem cartão de crédito. Cancele quando quiser.</p>
+
+    <div class="hero__foot" aria-hidden="true">
+      <span class="slashes">///</span><span>Dados</span><i>/</i><span>Estratégia</span><i>/</i><span>Crescimento</span>
+      <span class="hero__line"></span><span class="hero__tag">Inteligência financeira para o seu futuro</span>
     </div>
   </section>
 
-  <!-- ============ RODAPÉ ============ -->
-  <footer class="footer" id="rodape">
-    <span class="footer__logo">AURION</span>
-    <p class="footer__tag">Inteligência financeira e tributária para decisões mais conscientes.</p>
-    <nav aria-label="Rodapé"><a href="#produto">Produto</a><a href="#planos">Planos</a><a href="#conteudo-cta">Conteúdo</a><a href="#topo">Sobre</a><a href="mailto:contato@exemplo.com.br">Contato</a></nav>
-    <p class="footer__copy">© 2026 AURION. Todos os direitos reservados.</p>
-  </footer>
-</div>
+  <!-- ======================= PRODUTO ======================= -->
+  <section class="sec" id="produto" aria-labelledby="produto-h">
+    <header class="sec__head">
+      <p class="pill-eyebrow"><span class="dot" aria-hidden="true"></span>Produto</p>
+      <h2 id="produto-h">Uma plataforma, todos os seus números.</h2>
+      <p>Cada módulo abaixo existe no aplicativo. Os números de demonstração são fictícios; os seus aparecem quando você importa extratos e relatórios ou conecta suas contas.</p>
+    </header>
+    <div class="modules">
+      <article class="mod"><h3>Patrimônio consolidado</h3><p>Contas, investimentos e previdência em uma visão só, por classe, instituição e liquidez.</p><div class="mod__acts"><button type="button" class="lnk" data-tour-step="1">Ver demonstração</button><a class="lnk" href="app/#/patrimonio">Abrir no app →</a></div></article>
+      <article class="mod"><h3>Finanças e categorias</h3><p>Entradas, saídas, recorrências e mudanças relevantes, com a origem de cada lançamento.</p><div class="mod__acts"><button type="button" class="lnk" data-tour-step="2">Ver demonstração</button><a class="lnk" href="app/#/financas">Abrir no app →</a></div></article>
+      <article class="mod"><h3>Inteligência tributária</h3><p>Apuração estimada de renda variável, isenção, prejuízos, DARF e DARE com código e vencimento, relatório de apoio ao IRPF.</p><div class="mod__acts"><button type="button" class="lnk" data-tour-step="3">Ver demonstração</button><a class="lnk" href="app/#/tributacao">Abrir no app →</a></div></article>
+      <article class="mod"><h3>Radar de alertas</h3><p>Pontos de atenção com evidência, prioridade, prazo e o próximo passo.</p><div class="mod__acts"><button type="button" class="lnk" data-tour-step="4">Ver demonstração</button><a class="lnk" href="app/#/alertas">Abrir no app →</a></div></article>
+      <article class="mod"><h3>Simulador de cenários</h3><p>Venda de ativos, aportes em PGBL e comparação de cenários antes de decidir — sempre com premissas.</p><div class="mod__acts"><button type="button" class="lnk" data-tour-step="5">Ver demonstração</button><a class="lnk" href="app/#/simulador">Abrir no app →</a></div></article>
+      <article class="mod"><h3>Documentos e assistente</h3><p>Leitura de notas, informes e DARF, checklist do IR e um assistente que explica com fonte.</p><div class="mod__acts"><button type="button" class="lnk" data-tour-step="6">Ver demonstração</button><a class="lnk" href="app/#/documentos">Abrir no app →</a></div></article>
+    </div>
+  </section>
+
+  <!-- ======================= SOLUÇÕES ======================= -->
+  <section class="sec" id="solucoes" aria-labelledby="solucoes-h">
+    <header class="sec__head"><p class="pill-eyebrow"><span class="dot" aria-hidden="true"></span>Soluções</p><h2 id="solucoes-h">Para quem é a AURION.</h2></header>
+    <div class="cards4">
+      <article class="card-g"><h3>Pessoa física</h3><ul><li>Patrimônio e finanças consolidados</li><li>Imposto da bolsa estimado mês a mês</li><li>DARF com código, vencimento, multa e juros</li><li>Alertas de prazos e limites de isenção</li></ul><a class="lnk" href="app/#/cadastro">Criar conta →</a></article>
+      <article class="card-g"><h3>Profissionais (contadores e assessores)</h3><ul><li>Acesso somente leitura concedido pelo cliente</li><li>Relatório de apoio ao IRPF e Excel de auditoria</li><li>Cada consulta registrada na auditoria do cliente</li></ul><a class="lnk" href="app/#/cadastro">Criar conta profissional →</a></article>
+      <article class="card-g"><h3>Investidores</h3><ul><li>Trader Intelligence: desempenho, risco e imposto</li><li>Divulgações públicas da CVM sobre seus ativos</li><li>Backtests reproduzíveis — sem execução de ordens</li></ul><a class="lnk" href="app/#/trader">Abrir Trader Intelligence →</a></article>
+      <article class="card-g"><h3>Empresas</h3><ul><li>Guias DARF de pessoa jurídica: IRPJ e CSLL presumidos, PIS, Cofins e retenções</li><li>DARE estadual pré-preenchido (tabela de Rondônia)</li></ul><p class="note">Contabilidade e folha completas não fazem parte da plataforma.</p><a class="lnk" href="app/#/tributacao?tab=guias">Abrir guias →</a></article>
+    </div>
+  </section>
+
+  <!-- ======================= PLANOS ======================= -->
+  <section class="sec" id="planos" aria-labelledby="planos-h">
+    <header class="sec__head"><p class="pill-eyebrow"><span class="dot" aria-hidden="true"></span>Planos</p><h2 id="planos-h">Escolha o plano ideal para você.</h2><p>Recursos na medida certa para cada momento da sua jornada.</p></header>
+    <div class="plans">
+      <article class="plan"><h3>Free</h3><p class="price">R$ 0</p><ul><li>Dashboard básico</li><li>Patrimônio</li><li>Orçamento</li><li>Alertas limitados</li></ul><a class="btn btn--glass" href="app/#/cadastro?plano=free">Começar agora</a></article>
+      <article class="plan plan--pro"><span class="plan__badge">Mais escolhido</span><h3>Pro</h3><p class="price">R$ 89,90 <small>/mês</small></p><ul><li>Inteligência financeira</li><li>Inteligência tributária e guias DARF/DARE</li><li>Simulação de cenários</li><li>Radar de alertas</li><li>IA explicativa</li></ul><a class="btn btn--primary" href="app/#/cadastro?plano=pro">Assinar agora</a></article>
+      <article class="plan"><h3>Premium</h3><p class="price">R$ 149,90 <small>/mês</small></p><ul><li>Tudo do Pro</li><li>Cenários avançados</li><li>Inteligência patrimonial</li><li>Maior automação</li><li>Suporte prioritário</li></ul><a class="btn btn--glass" href="app/#/cadastro?plano=premium">Assinar agora</a></article>
+    </div>
+    <details class="compare"><summary>Comparar funcionalidades</summary><div class="table-wrap" id="plan-compare"></div></details>
+    <p class="center"><a class="lnk" href="app/#/planos">Ver planos no aplicativo →</a></p>
+  </section>
+
+  <!-- ======================= CONTEÚDO ======================= -->
+  <section class="sec" id="conteudo-publico" aria-labelledby="conteudo-h">
+    <header class="sec__head"><p class="pill-eyebrow"><span class="dot" aria-hidden="true"></span>Conteúdo</p><h2 id="conteudo-h">Fontes oficiais, em um só lugar.</h2>
+      <p>Títulos recentes publicados pela Receita Federal, Banco Central, CVM e Agência Brasil. O conteúdo pertence à fonte; aqui ficam só o título, a data e o link.</p></header>
+    <ul class="news" id="news"><li class="news__empty">Carregando publicações…</li></ul>
+    <p class="center"><a class="lnk" href="app/#/noticias">Ver todas as notícias no aplicativo →</a></p>
+  </section>
+
+  <!-- ======================= SOBRE ======================= -->
+  <section class="sec" id="sobre" aria-labelledby="sobre-h">
+    <header class="sec__head"><p class="pill-eyebrow"><span class="dot" aria-hidden="true"></span>Sobre</p><h2 id="sobre-h">Números explicados, decisões suas.</h2></header>
+    <div class="about">
+      <div class="about__txt">
+        <p>A AURION é uma plataforma de inteligência financeira e tributária. Ela consolida seus dados, calcula com motores determinísticos e regras versionadas, simula cenários, alerta prazos e explica cada número com fonte.</p>
+        <ul class="principles">
+          <li><b>Não é corretora</b> e não executa ordens.</li>
+          <li><b>Não recomenda</b> compra ou venda de ativos: mostra consequências de cenários que você escolhe.</li>
+          <li><b>Estimativas são estimativas</b>: valores tributários vêm com premissas, confiança e versão da regra.</li>
+          <li><b>Seus dados são seus</b>: CPF protegido, verificação em duas etapas, auditoria, exportação e exclusão a qualquer momento.</li>
+        </ul>
+      </div>
+      <form class="contact" id="contact" novalidate>
+        <h3>Fale com a AURION</h3>
+        <label>Nome<input name="name" autocomplete="name" required maxlength="120"></label>
+        <label>E-mail<input name="email" type="email" autocomplete="email" required maxlength="160"></label>
+        <label>Assunto<select name="topic"><option value="duvida">Dúvida sobre a plataforma</option><option value="planos">Planos e contratação</option><option value="profissional">Sou contador ou assessor</option><option value="privacidade">Privacidade e dados (LGPD)</option><option value="outro">Outro</option></select></label>
+        <label>Mensagem<textarea name="message" rows="4" required maxlength="2000"></textarea></label>
+        <label class="hp" aria-hidden="true">Não preencha<input name="website" tabindex="-1" autocomplete="off"></label>
+        <button class="btn btn--primary" type="submit">Enviar mensagem</button>
+        <p class="contact__msg" role="status" aria-live="polite"></p>
+        <p class="note">Usamos estes dados só para responder. Veja seus direitos em Privacidade, dentro do aplicativo.</p>
+      </form>
+    </div>
+  </section>
+
+  <section class="final" aria-label="Comece agora">
+    <h2>Conecte sua vida financeira a um futuro mais inteligente.</h2>
+    <a class="btn btn--primary btn--lg" href="app/#/cadastro" data-cta="final">Começar gratuitamente <svg class="i-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+    <p class="note">Plano Free sem cartão de crédito.</p>
+  </section>
+</main>
+
+<footer class="footer">
+  <a class="logo logo--sm" href="./" aria-label="AURION — página inicial" data-text="AURION"><span class="logo__txt">AURION</span></a>
+  <p>Inteligência financeira e tributária para decisões mais conscientes.</p>
+  <nav aria-label="Rodapé"><a href="#produto">Produto</a><a href="#solucoes">Soluções</a><a href="#planos">Planos</a><a href="#conteudo-publico">Conteúdo</a><a href="#sobre">Sobre</a><a href="#contact">Contato</a><a href="app/#/entrar">Entrar</a></nav>
+  <p class="note">© 2026 AURION. Informação educativa; não é recomendação de investimento nem substitui seu contador.</p>
+</footer>
+
+<!-- ======================= DIÁLOGOS ======================= -->
+<dialog class="panel" id="dlg-holo" aria-labelledby="dlg-holo-t">
+  <div class="panel__head"><h2 id="dlg-holo-t"></h2><span class="demo-tag">Demonstração · dados fictícios</span><button class="x" type="button" data-close aria-label="Fechar">✕</button></div>
+  <div class="panel__body" id="dlg-holo-b"></div>
+</dialog>
+
+<dialog class="panel panel--tour" id="dlg-tour" aria-labelledby="tour-t">
+  <div class="panel__head"><h2 id="tour-t">Como funciona</h2><span class="demo-tag">Demonstração · dados fictícios</span><button class="x" type="button" data-close aria-label="Fechar">✕</button></div>
+  <div class="tour">
+    <div class="tour__screen"><div class="dash-fit"><div class="dash" id="dash-tour" data-dash="tour"></div></div></div>
+    <div class="tour__side">
+      <p class="tour__n" id="tour-n"></p>
+      <h3 id="tour-h"></h3>
+      <p id="tour-p"></p>
+      <div class="tour__bar"><span id="tour-bar"></span></div>
+      <div class="tour__ctl">
+        <button class="btn btn--glass" type="button" data-tour="prev" aria-label="Voltar etapa">‹ Voltar</button>
+        <button class="btn btn--glass" type="button" data-tour="play" aria-label="Pausar apresentação">❚❚ Pausar</button>
+        <button class="btn btn--primary" type="button" data-tour="next" aria-label="Avançar etapa">Avançar ›</button>
+      </div>
+      <a class="lnk" id="tour-app" href="app/#/dashboard">Abrir esta tela no aplicativo →</a>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="panel panel--sm" id="dlg-info" aria-labelledby="dlg-info-t">
+  <div class="panel__head"><h2 id="dlg-info-t"></h2><button class="x" type="button" data-close aria-label="Fechar">✕</button></div>
+  <div class="panel__body" id="dlg-info-b"></div>
+</dialog>
+<noscript><p class="noscript">A demonstração interativa precisa de JavaScript. Os links do menu e os botões de cadastro funcionam normalmente.</p></noscript>
 </body>
 </html>
