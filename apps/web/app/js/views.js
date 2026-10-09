@@ -10,13 +10,16 @@ import { settingsExtras } from "./views_hub.js";
 export { allocation };
 export { recoverView, resetView };
 import { UI4 } from "./ui4.js";
+import { registerTour } from "./tour.js";
+import { stepsTributacao, TOUR_TRIBUTACAO_VERSAO } from "./tour_tributacao.js";
+import { isDemo } from "./tour_explain.js";
 import { onLogin, themeSwitch, theme, searchPill } from "./app.js";
 import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
 import { areaChart, barChart, brl, brlShort, confidence, deco, donut, ringGauge, dt, dtm, empty, esc, hbars, icon, mes, num, PALETTE, pct, sevLabel, toast } from "./ui.js";
 
 const trust = txt => `<p class="trust-line">${icon("info")}<span>${txt}</span></p>`;
 const badge = (s, label) => `<span class="badge b-${esc(s)}">${esc(label || s.replace("_", " "))}</span>`;
-const sampleNote = d => d && d.sample ? `<div class="card" style="margin-bottom:16px;border-color:var(--brand-2)"><p class="small"><b>Exemplo ilustrativo.</b> Estes números não são seus. Envie seus extratos e relatórios da B3 em <a href="#/importar">Importar dados</a> para ver a sua situação real.</p></div>` : "";
+const sampleNote = d => d && d.sample ? `<div class="card" data-tour="aviso-exemplo" style="margin-bottom:16px;border-color:var(--brand-2)"><p class="small"><b>Exemplo ilustrativo.</b> Estes números não são seus. Envie seus extratos e relatórios da B3 em <a href="#/importar">Importar dados</a> para ver a sua situação real.</p></div>` : "";
 const go = h => { location.hash = h; };
 const problemMsg = e => e instanceof ApiError ? (e.problem.detail || e.problem.title) + (e.problem.errors?.length ? " — " + e.problem.errors.map(x => x.msg).join("; ") : "") : String(e.message || e);
 
@@ -341,24 +344,24 @@ export async function tax(el, r, ctx = {}) {
   if (mComp) { tab = "guias"; guiaPrefill = { codigo: "6015", periodo: comp, principal: mComp.darf.valor, origem: "apuracao" }; }
   const draw = () => {
     el.innerHTML = `${sampleNote(t)}
-      ${real && t.limitations[0]?.startsWith("Há vendas sem") ? `<div class="card" style="margin-bottom:16px;border-color:var(--warn, #c98a00)"><p class="small"><b>Faltam compras no histórico.</b> ${esc(t.limitations[0])} <a href="#/importar">Importar negociações</a></p></div>` : ""}
+      ${real && t.limitations[0]?.startsWith("Há vendas sem") ? `<div class="card" data-tour="aviso-compras" style="margin-bottom:16px;border-color:var(--warn, #c98a00)"><p class="small"><b>Faltam compras no histórico.</b> ${esc(t.limitations[0])} <a href="#/importar">Importar negociações</a></p></div>` : ""}
       <div class="grid g-4">
-        <div class="card"><h3>Imposto estimado ${t.year}</h3><div class="kpi">${brl(t.total_tax_due)}</div><p class="note">renda variável · estimativa</p></div>
-        <div class="card"><h3>IRRF (dedo-duro)</h3><div class="kpi">${brl(t.total_irrf)}</div><p class="note">compensado na apuração</p></div>
-        <div class="card"><h3>Ganhos isentos</h3><div class="kpi pos">${brl(t.total_exempt_gain)}</div><p class="note">vendas de ações ≤ R$ 20 mil/mês</p></div>
-        <div class="card"><h3>Qualidade do cálculo</h3><div style="margin-top:14px">${confidence(t.confidence)}</div>
-          <p class="note">${losses.length ? "Prejuízos: " + losses.map(([k, v]) => `${k} ${brl(v)}`).join(", ") : "Sem prejuízos a compensar"}</p></div>
+        <div class="card" data-tour="kpi-imposto"><h3>Imposto estimado ${t.year}</h3><div class="kpi">${brl(t.total_tax_due)}</div><p class="note">renda variável · estimativa</p></div>
+        <div class="card" data-tour="kpi-irrf"><h3>IRRF (dedo-duro)</h3><div class="kpi">${brl(t.total_irrf)}</div><p class="note">compensado na apuração</p></div>
+        <div class="card" data-tour="kpi-isentos"><h3>Ganhos isentos</h3><div class="kpi pos">${brl(t.total_exempt_gain)}</div><p class="note">vendas de ações ≤ R$ 20 mil/mês</p></div>
+        <div class="card" data-tour="kpi-confianca"><h3>Qualidade do cálculo</h3><div style="margin-top:14px">${confidence(t.confidence)}</div>
+          <p class="note" data-tour="kpi-prejuizos">${losses.length ? "Prejuízos: " + losses.map(([k, v]) => `${k} ${brl(v)}`).join(", ") : "Sem prejuízos a compensar"}</p></div>
       </div>
-      <div class="tabs section" role="tablist">${[["resumo", "Apuração mensal"], ["guias", "Guias DARF/DARE"], ["eventos", "Eventos tributários"], ["regras", "Regras e fontes"]].map(([k, l]) =>
+      <div class="tabs section" role="tablist" data-tour="abas">${[["resumo", "Apuração mensal"], ["guias", "Guias DARF/DARE"], ["eventos", "Eventos tributários"], ["regras", "Regras e fontes"]].map(([k, l]) =>
         `<button role="tab" aria-selected="${tab === k}" data-tab="${k}">${l}</button>`).join("")}</div>
       <div id="tabc">${tab === "resumo" ? months() : tab === "guias" ? `<div id="guiasbox">${loadingLine}</div>` : tab === "eventos" ? events() : rulesView()}</div>
       <div class="grid g-2 section">
-        <section class="card"><h3>Premissas</h3><ul class="stack small" style="margin-top:10px">${t.premises.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul></section>
-        <section class="card"><h3>Limitações</h3><ul class="stack small" style="margin-top:10px">${t.limitations.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul>
+        <section class="card" data-tour="premissas"><h3>Premissas</h3><ul class="stack small" style="margin-top:10px">${t.premises.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul></section>
+        <section class="card" data-tour="limitacoes"><h3>Limitações</h3><ul class="stack small" style="margin-top:10px">${t.limitations.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul>
           <p class="note">Snapshot ${esc(t.snapshot_hash.slice(0, 16))}… · mesmo snapshot + mesma versão de regra = mesmo resultado.</p></section>
       </div>
-      ${real ? `<div id="taxextra"></div><div id="irpfbox"></div>` : ""}
-      ${real ? `<section class="card section"><h3>Ajustes da apuração</h3>
+      ${real ? `<div id="taxextra"></div><div id="irpfbox" data-tour="irpf"></div>` : ""}
+      ${real ? `<section class="card section" data-tour="ajustes"><h3>Ajustes da apuração</h3>
         <p class="small muted" style="margin-top:6px">Prejuízos acumulados até 31/12 do ano anterior (veja na sua declaração, ficha Renda Variável, ou no controle do seu contador). Eles abatem os ganhos da mesma modalidade.</p>
         <form id="prior" class="row wrap" style="gap:10px;margin-top:12px;align-items:flex-end">
           ${[["comum", "Operações comuns"], ["daytrade", "Day trade"], ["fii", "Fundos imobiliários"]].map(([k, l]) => `<div class="field"><label for="pl_${k}">${l} (R$)</label>
@@ -383,21 +386,23 @@ export async function tax(el, r, ctx = {}) {
       } catch (x) { toast(problemMsg(x)); }
     });
   };
+  const tourCtx = { t, ev, rules, real, demo: isDemo(t, DEMO), hoje: real ? new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) : t.reference_date,
+    getTab: () => tab, setTab: k => { tab = k; draw(); } };
   const loadingLine = `<div class="skeleton" style="width:40%"></div>`;
-  const months = () => `<section class="card"><div class="table-wrap"><table class="table"><caption class="sr-only">Apuração mensal de renda variável</caption>
-    <thead><tr><th>Mês</th><th class="num">Vendas de ações</th><th>Isenção</th><th class="num">Resultado comum</th><th class="num">Day trade</th><th class="num">FII</th><th class="num">IR bruto</th><th class="num">IRRF</th><th>DARF 6015</th></tr></thead>
-    <tbody>${t.months.map(m => `<tr><td><b>${mes(m.month)}</b></td><td class="num">${brl(m.sales_acoes)}</td><td>${m.exempt ? badge("isento", "até 20 mil") : badge("aberto", "tributável")}</td>
+  const months = () => `<section class="card" data-tour="tabela-mensal"><div class="table-wrap"><table class="table"><caption class="sr-only">Apuração mensal de renda variável</caption>
+    <thead><tr><th data-tour="col-vendas">Mês</th><th class="num">Vendas de ações</th><th data-tour="col-isencao">Isenção</th><th class="num" data-tour="col-resultado">Resultado comum</th><th class="num">Day trade</th><th class="num">FII</th><th class="num" data-tour="col-ir">IR bruto</th><th class="num">IRRF</th><th data-tour="col-darf">DARF 6015</th></tr></thead>
+    <tbody>${t.months.map(m => `<tr data-month="${m.month}"><td><b>${mes(m.month)}</b></td><td class="num">${brl(m.sales_acoes)}</td><td>${m.exempt ? badge("isento", "até 20 mil") : badge("aberto", "tributável")}</td>
       <td class="num">${brl(m.result_comum)}${+m.exempt_gain ? `<div class="small pos">+${brl(m.exempt_gain)} isento</div>` : ""}</td><td class="num">${brl(m.result_daytrade)}</td><td class="num">${brl(m.result_fii)}</td>
       <td class="num">${brl(m.tax_due_gross)}</td><td class="num">${brl(m.irrf)}</td>
       <td style="min-width:170px">${m.darf ? `${badge(m.darf.status)} <b>${brl(m.darf.valor)}</b><div class="small muted">vence ${dt(m.darf.vencimento)}${m.darf.valor_pago ? " · pago " + brl(m.darf.valor_pago) : ""}</div>${real ? (m.darf.status === "pago"
         ? `<button class="btn btn--ghost btn--sm" data-paid="${m.month}" data-undo="1">desfazer</button>`
         : `<button class="btn btn--ghost btn--sm" data-paid="${m.month}" data-val="${m.darf.valor}">marcar pago</button>`) : ""}${m.darf.status !== "pago" ? ` <button class="btn btn--primary btn--sm" data-guia="${m.month}" data-val="${m.darf.valor}">gerar DARF</button>` : ""}` : `<span class="small muted">${+m.tax_due_gross > 0 ? "acumula (< R$ 10)" : "—"}</span>`}</td></tr>`).join("")}</tbody></table></div></section>`;
-  const events = () => ev.items.length ? `<div class="stack">${ev.items.map(e => `<article class="alert ${e.status === "pendente_dado" ? "s-alto" : e.status === "isento" ? "s-oportunidade" : "s-informativo"}">
+  const events = () => ev.items.length ? `<div class="stack" data-tour="eventos">${ev.items.map(e => `<article data-ev-status="${esc(e.status)}" class="alert ${e.status === "pendente_dado" ? "s-alto" : e.status === "isento" ? "s-oportunidade" : "s-informativo"}">
       <h4>${esc(e.ticker)} · ${e.kind === "daytrade" ? "Day trade" : "Venda"} em ${dt(e.date)} ${badge(e.status)}</h4>
       <p>Valor de venda ${brl(e.sale_value)} · custo ${e.cost_basis === "?" ? "<b>não informado</b>" : brl(e.cost_basis)} · resultado <b class="${+e.result < 0 ? "neg" : ""}">${e.result === "?" ? "—" : brl(e.result)}</b></p>
       <div class="meta"><span>Regra ${esc(e.rule.code)} v${esc(e.rule.version)}</span><span>Fontes: ${esc(e.rule.sources.join(", "))}</span><span>Origem: ${esc(e.source)}</span>${confidence(e.confidence)}</div>
       ${e.notes.length ? `<div class="explain">${e.notes.map(esc).join("<br>")}</div>` : ""}</article>`).join("")}</div>` : empty("Nenhum evento tributário no ano.");
-  const rulesView = () => `<div class="stack">${rules.items.map(x => `<article class="card">
+  const rulesView = () => `<div class="stack" data-tour="regras">${rules.items.map(x => `<article class="card" data-rule="${esc(x.code)}">
       <h3>${esc(x.title)} <span class="right">${badge(x.status === "validated" ? "validado" : "pendente", x.status === "validated" ? "validada" : "pendente")}</span></h3>
       <p class="small muted" style="margin-top:6px">${esc(x.code)} · versão ${esc(x.version)} · vigência desde ${dt(x.validity.start)}${x.validity.end ? " até " + dt(x.validity.end) : ""}${x.usable_in_calculation ? "" : " · <b>não usada em cálculo</b>"}</p>
       <p class="small" style="margin-top:8px"><b>Fórmula:</b> ${esc(x.formula)}</p>
@@ -405,6 +410,7 @@ export async function tax(el, r, ctx = {}) {
       ${x.sources.length ? `<p class="small" style="margin-top:6px"><b>Fontes:</b> ${x.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.id)} — ${esc(s.title)}</a>`).join("; ")}</p>` : ""}
     </article>`).join("")}<p class="note">${esc(rules.catalog.note)}</p></div>`;
   draw();
+  registerTour("tributacao", TOUR_TRIBUTACAO_VERSAO, stepsTributacao(), tourCtx, { autostart: r.params?.get("tour") === "1" });
 }
 
 function upsell(what, e) {

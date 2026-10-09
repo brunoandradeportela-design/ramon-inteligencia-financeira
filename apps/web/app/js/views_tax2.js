@@ -41,10 +41,10 @@ export async function taxExtras(el, t) {
   const q = t.quality;
   el.innerHTML = `
     <div class="grid g-2 section">
-      <section class="card"><h3>Qualidade do cálculo <span class="right small muted">${Math.round((q?.score || 0) * 100)}%</span></h3>
+      <section class="card" data-tour="qualidade"><h3>Qualidade do cálculo <span class="right small muted">${Math.round((q?.score || 0) * 100)}%</span></h3>
         <ul class="stack small" style="margin-top:10px">${(q?.factors || []).map(f => `<li><b>${f.ok ? "✓" : "!"} ${esc(f.factor)}</b> — ${esc(f.detail)}${f.improve ? `<div class="muted">Para elevar: ${esc(f.improve)}</div>` : ""}</li>`).join("")}</ul>
         <p class="note">${esc(q?.note || "")}</p></section>
-      <section class="card"><h3>Auditoria do cálculo</h3>
+      <section class="card" data-tour="auditoria"><h3>Auditoria do cálculo</h3>
         <ul class="stack small" style="margin-top:10px"><li>Cálculo <code>${esc(t.calculation_id)}</code></li><li>Motor ${esc(t.engine_version)} · regras ${esc(Object.entries(t.rule_versions).map(([k, v]) => `${k}@${v}`).join(", "))}</li>
           <li>Entradas (hash) <code>${esc(t.snapshot_hash.slice(0, 24))}…</code></li></ul>
         <div class="row wrap" style="gap:8px;margin-top:12px"><button class="btn btn--primary btn--sm" id="xls">Baixar Excel de auditoria</button><button class="btn btn--ghost btn--sm" id="ver">Reprocessar e conferir</button></div>

@@ -5,6 +5,7 @@ import { esc, icon, errorBox, loading } from "./ui.js";
 import * as V from "./views.js";
 import { UI4 } from "./ui4.js";
 import { mountShell, unmount as unmount4, register4 } from "./auth4.js";
+import { clearTour, currentTour, startTour } from "./tour.js";
 import { crm } from "./views_crm.js";
 import { payments } from "./views_payments.js";
 import { trader } from "./views_trader.js";
@@ -95,7 +96,8 @@ const palette = {
       ["Compartilhar com meu contador", "shield", "#/configuracoes"],
     ].map(([label, ic, h]) => ({ grp: "Ações", label, ic, kw: h === "#/tributacao" ? "imposto darf ir" : "", run: () => { location.hash = h; } }));
     const th = THEMES.map(([k, ic, l]) => ({ grp: "Aparência", label: "Tema " + l, ic, run: () => theme.set(k) }));
-    return [...pages, ...(admin ? [] : acts), ...th, { grp: "Conta", label: "Sair", ic: "logout", run: () => document.querySelector("[data-logout]")?.click() }];
+    const tour = currentTour() ? [{ grp: "Ajuda", label: "Fazer o tour desta página", ic: "bulb", kw: "tour ajuda guia explicar", run: () => setTimeout(() => startTour({ from: 0 }), 60) }] : [];
+    return [...tour, ...pages, ...(admin ? [] : acts), ...th, { grp: "Conta", label: "Sair", ic: "logout", run: () => document.querySelector("[data-logout]")?.click() }];
   },
   ensure() {
     if (this.el) return;
@@ -165,7 +167,7 @@ async function render() {
     await (r.name === "cadastro" ? register4 : PUBLIC[r.name])(form, r);
     document.title = `Aurion — ${({ entrar: "Entrar", cadastro: "Cadastro", recuperar: "Recuperar acesso", redefinir: "Nova senha" })[r.name]}`; return;
   }
-  unmount4();
+  unmount4(); clearTour();
   if (PUBLIC[r.name]) { root.innerHTML = ""; await PUBLIC[r.name](root, r); document.title = `Aurion — ${({ entrar: "Entrar", cadastro: "Cadastro", recuperar: "Recuperar acesso", redefinir: "Nova senha" })[r.name]}`; return; }
   if (!session.token) { location.hash = `#/entrar?next=${encodeURIComponent(r.name)}`; return; }
   try {
@@ -210,15 +212,15 @@ function shell(admin = false) {
     <div class="main">
       <div class="gtop">
         <header class="gnav">
-          <button class="icon-btn burger" data-burger aria-label="Abrir menu">${icon("menu")}</button>
-          <a class="gnav__logo" href="../index.html" title="Página inicial">${LOGO}<span>AURION</span></a>
-          <nav class="gnav__menu" aria-label="Navegação principal">${nav}</nav>
+          <button class="icon-btn burger" data-burger aria-label="Abrir menu" data-tour="menu">${icon("menu")}</button>
+          <a class="gnav__logo" href="../index.html" title="Página inicial" data-tour="logo">${LOGO}<span>AURION</span></a>
+          <nav class="gnav__menu" aria-label="Navegação principal" data-tour="menu">${nav}</nav>
           <div class="gnav__right">
             <span class="chip hide-m" title="Data de referência dos cálculos">${refMonth()}</span>
-            <div class="dd theme-dd"><button type="button" class="chip" data-dd data-theme-lbl aria-haspopup="true" aria-expanded="false" aria-label="Tema da interface"></button>
+            <div class="dd theme-dd" data-tour="tema"><button type="button" class="chip" data-dd data-theme-lbl aria-haspopup="true" aria-expanded="false" aria-label="Tema da interface"></button>
               <div class="menu" role="menu"><p class="lbl-sec">Tema</p>${THEMES.map(([k, ic, l]) => `<button type="button" role="menuitemradio" data-theme-btn="${k}" aria-pressed="${theme.pref === k}">${icon(ic)}<span>${l}</span></button>`).join("")}</div></div>
-            <a class="icon-btn" href="${HAS_API && !admin ? "#/notificacoes" : "#/alertas"}" aria-label="Notificações">${icon("bell")}<span class="dot" data-dot hidden></span></a>
-            <div class="dd"><button type="button" class="avatar-btn" data-dd aria-haspopup="true" aria-expanded="false" aria-label="Conta de ${esc(me?.name || "usuário")}"><span class="avatar">${esc((me?.name || "?")[0].toUpperCase())}</span>${icon("chevd")}</button>
+            <a class="icon-btn" href="${HAS_API && !admin ? "#/notificacoes" : "#/alertas"}" aria-label="Notificações" data-tour="sino">${icon("bell")}<span class="dot" data-dot hidden></span></a>
+            <div class="dd" data-tour="avatar"><button type="button" class="avatar-btn" data-dd aria-haspopup="true" aria-expanded="false" aria-label="Conta de ${esc(me?.name || "usuário")}"><span class="avatar">${esc((me?.name || "?")[0].toUpperCase())}</span>${icon("chevd")}</button>
               <div class="menu" role="menu"><p class="lbl-sec">${esc(me?.name || "Minha conta")}</p>${ACCOUNT.map(([k, t, ic]) => `<a href="#/${k}" data-nav="${k}" role="menuitem">${icon(ic)}<span>${t}</span></a>`).join("")}
                 <div class="sep"></div><button type="button" data-logout role="menuitem">${icon("logout")}<span>Sair</span></button></div></div>
           </div>

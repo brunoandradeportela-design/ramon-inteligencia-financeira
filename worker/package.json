@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node --test test/importers.test.mjs test/tax_market.test.mjs test/alerts_sims.test.mjs test/openfinance.test.mjs test/assistant_docs.test.mjs test/compliance.test.mjs test/data_alloc.test.mjs test/tax_regression.test.mjs test/trader_events.test.mjs test/doc_extract.test.mjs test/irpf_report.test.mjs test/guias.test.mjs test/market_public.test.mjs"
+    "test": "node --test test/importers.test.mjs test/tax_market.test.mjs test/alerts_sims.test.mjs test/openfinance.test.mjs test/assistant_docs.test.mjs test/compliance.test.mjs test/data_alloc.test.mjs test/tax_regression.test.mjs test/trader_events.test.mjs test/doc_extract.test.mjs test/irpf_report.test.mjs test/guias.test.mjs test/market_public.test.mjs test/tour_explain.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4"

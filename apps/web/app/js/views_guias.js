@@ -21,15 +21,15 @@ export async function guiasTab(el, { me, prefill = null, onPaid = null } = {}) {
     const lista = await api.get("/v1/tax/guias").catch(() => ({ items: [] }));
     el.innerHTML = `
       <div class="row between wrap" style="gap:12px;margin-bottom:14px">
-        <div class="seg" role="group" aria-label="Tipo de guia"><button type="button" data-modo="darf" aria-pressed="${modo === "darf"}">DARF · federal</button><button type="button" data-modo="dare" aria-pressed="${modo === "dare"}">DARE · estadual</button></div>
+        <div class="seg" role="group" aria-label="Tipo de guia" data-tour="guia-tipo"><button type="button" data-modo="darf" aria-pressed="${modo === "darf"}">DARF · federal</button><button type="button" data-modo="dare" aria-pressed="${modo === "dare"}">DARE · estadual</button></div>
         <a class="small" href="${esc(receitas.sicalc_url)}" target="_blank" rel="noopener">Sicalc da Receita ↗</a></div>
       <div class="grid g-dash2" style="align-items:start">
-        <section class="card" id="gform"></section>
-        <section class="card" id="gres">${ultimo ? "" : `<h3>Guia</h3><p class="small muted" style="margin-top:8px">Preencha os dados ao lado. O sistema confere o código de receita, o CPF ou CNPJ e o vencimento legal, e calcula multa e juros se o pagamento for depois do vencimento.</p>
+        <section class="card" id="gform" data-tour="guia-form"></section>
+        <section class="card" id="gres" data-tour="guia-resultado">${ultimo ? "" : `<h3>Guia</h3><p class="small muted" style="margin-top:8px">Preencha os dados ao lado. O sistema confere o código de receita, o CPF ou CNPJ e o vencimento legal, e calcula multa e juros se o pagamento for depois do vencimento.</p>
           <ul class="stack small" style="margin-top:12px"><li>• <b>DARF</b>: sai pronta para pagar no internet banking ("DARF sem código de barras"). Com código de barras, pelo Sicalc${receitas.integra_contador ? " ou direto aqui (Integra Contador)" : ""}.</li>
           <li>• <b>DARE</b>: dados conferidos e prontos para emitir no portal da Secretaria de Fazenda, que gera o código de barras.</li></ul>`}</section>
       </div>
-      <section class="card section"><h3>Guias geradas</h3>${lista.items.length ? `<div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Guia</th><th>Período</th><th>CPF/CNPJ</th><th>Vencimento</th><th class="num">Total</th><th>Situação</th><th></th></tr></thead>
+      <section class="card section" data-tour="guia-lista"><h3>Guias geradas</h3>${lista.items.length ? `<div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Guia</th><th>Período</th><th>CPF/CNPJ</th><th>Vencimento</th><th class="num">Total</th><th>Situação</th><th></th></tr></thead>
         <tbody>${lista.items.map(g => `<tr><td><b>${g.tipo} ${esc(g.receita.codigo)}</b>${g.uf ? " · " + esc(g.uf) : ""}<div class="small muted">${esc(g.receita.descricao)}</div></td><td>${esc(g.periodo || "—")}</td><td class="small">${esc(g.documento)}</td>
           <td>${dt(g.vencimento)}</td><td class="num">${brl(g.total)}</td><td>${badgeSit(g.situacao)}</td>
           <td style="white-space:nowrap"><button class="btn btn--ghost btn--sm" data-open="${esc(g.id)}">abrir</button> <button class="btn btn--ghost btn--sm" data-del="${esc(g.id)}" aria-label="Apagar guia ${esc(g.receita.codigo)}">apagar</button></td></tr>`).join("")}</tbody></table></div>`
