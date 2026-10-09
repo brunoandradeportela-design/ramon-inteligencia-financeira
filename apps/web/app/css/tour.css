@@ -43,3 +43,4 @@
 html.tour-on body{overscroll-behavior:contain}
 @media (prefers-reduced-motion:reduce){.tour-hole,.tour-pop{transition:none!important;animation:none!important}}
 @media print{.tour-ov,.tour-invite,.tour-btn{display:none!important}}
+[data-tour-slot] .tour-btn{margin:10px 0 0}

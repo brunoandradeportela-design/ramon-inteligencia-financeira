@@ -154,3 +154,16 @@ export function vendasSemCompra(ev, o = {}) {
   return out(o, v.length ? `${plural(v.length, "venda sem compra registrada", "vendas sem compra registrada")}: ${lista(v.map(vendaTxt))}.` : "Nenhuma venda sem compra registrada.");
 }
 export function maiorVenda(t) { return [...(t?.months || [])].sort((a, b) => n(b.sales_acoes) - n(a.sales_acoes))[0] || null; }
+
+/* ------------------------------------------------------------------ guia exibida na aba Guias */
+export function guiaResultado(g, lista = [], o = {}) {
+  if (!g) {
+    const u = (lista || [])[0];
+    return out(o, u ? `Nenhuma guia aberta agora. A mais recente da lista é ${u.tipo} ${u.receita?.codigo || ""} de ${brl(u.total)}, vencimento ${dataBR(u.vencimento)}. Gere ou abra uma guia para ver o cálculo aqui.`.replace("  ", " ")
+      : "Nenhuma guia gerada ainda. Ao gerar uma, este painel mostra vencimento legal e, se houver atraso, multa e juros calculados.");
+  }
+  const v = g.valores || {};
+  if (g.tipo === "DARE") return out(o, `DARE ${g.uf || ""} código ${g.receita?.codigo}: principal de ${brl(v.principal)}, vencimento ${dataBR(g.vencimento)}. Multa e juros estaduais são calculados pela Secretaria de Fazenda ao emitir o código de barras.`);
+  if (g.situacao === "em_atraso") return out(o, `DARF ${g.receita?.codigo} venceu em ${dataBR(g.vencimento)}: ${v.atraso_dias} dia(s) de atraso. Principal ${brl(v.principal)} + multa de ${String(v.multa_pct).replace(".", ",")}% (${brl(v.multa)}) + juros de ${String(v.juros_pct).replace(".", ",")}% (${brl(v.juros)}) = ${brl(v.total)}, válido para pagamento em ${dataBR(g.pagamento)}.`);
+  return out(o, `DARF ${g.receita?.codigo} no prazo: pague ${brl(v.total ?? v.principal)} até ${dataBR(g.vencimento)}, sem multa nem juros.`);
+}

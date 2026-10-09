@@ -14,11 +14,15 @@ const copyBtn = (v, label) => `<button type="button" class="btn btn--ghost btn--
 const quarters = () => { const y = +hojeBr().slice(0, 4), out = []; for (let a = y; a >= y - 3; a--) for (let t = 4; t >= 1; t--) out.push(`${a}-T${t}`); return out; };
 
 let receitas = null;
+/* estado lido pelo tour (somente leitura): a guia exibida e a lista de guias geradas */
+const estadoTour = { ultimo: null, lista: [] };
+export const guiasEstado = () => estadoTour;
 export async function guiasTab(el, { me, prefill = null, onPaid = null } = {}) {
   if (!receitas) receitas = await api.get("/v1/tax/guias/receitas");
   let modo = prefill?.tipo === "DARE" ? "dare" : "darf", ultimo = null;
   const draw = async () => {
     const lista = await api.get("/v1/tax/guias").catch(() => ({ items: [] }));
+    estadoTour.ultimo = ultimo; estadoTour.lista = lista.items || [];
     el.innerHTML = `
       <div class="row between wrap" style="gap:12px;margin-bottom:14px">
         <div class="seg" role="group" aria-label="Tipo de guia" data-tour="guia-tipo"><button type="button" data-modo="darf" aria-pressed="${modo === "darf"}">DARF · federal</button><button type="button" data-modo="dare" aria-pressed="${modo === "dare"}">DARE · estadual</button></div>

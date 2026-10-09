@@ -1,4 +1,4 @@
-# Tour guiado da página Tributação — relatório
+# Tours guiados — relatório (Tributação, Visão Geral, Patrimônio, Finanças, Radar e Simulador)
 
 **Data:** 08/10/2026
 **Origem:** `docs/PROMPT-TOUR-TRIBUTACAO.md`
@@ -154,8 +154,8 @@ São 37 passos no catálogo. Os que não se aplicam saem da contagem, por isso a
 
 ## 6. Limitações
 
-- **Resultado da guia:** o passo explica a regra de multa (0,33% ao dia, limitada a 20%) e de juros (Selic acumulada mais 1%), conferida em `guia_engine.js`. Ele não lê os valores da última guia exibida, porque esse painel é gerado sob demanda.
-- **Cobertura:** por enquanto, só a página Tributação tem tour. O motor já está pronto para as outras páginas.
+- **Resolvido em 09/10/2026:** o passo "Resultado: vencimento, multa e juros" agora lê a guia exibida na aba Guias (dias de atraso, multa, juros, total e data válida para pagamento). Sem guia aberta, ele cita a mais recente da lista. A leitura é feita pela função `guiasEstado()`, somente leitura, em `views_guias.js`.
+- **Páginas ainda sem tour:** Notícias, Trader Intelligence, Inteligência (assistente), Documentos, Importar, Conexões e Configurações.
 
 ## 7. Como adicionar o tour a outra página
 
@@ -168,3 +168,30 @@ São 37 passos no catálogo. Os que não se aplicam saem da contagem, por isso a
    ```
    O `ctx` deve conter os dados e, se a página tiver abas, `getTab` e `setTab`.
 5. O botão, a busca, o convite e a persistência passam a funcionar sozinhos. O roteador limpa o tour na troca de página.
+
+## 8. Tours das outras páginas (09/10/2026)
+
+O mesmo motor foi levado às páginas principais. Os catálogos estão em `apps/web/app/js/tour_paginas.js`. As frases com números ficam em `apps/web/app/js/tour_explain2.js`: são funções puras que repetem as fórmulas de `fin_engine.js` e `alert_engine.js`. Os testes estão em `worker/test/tour_paginas.test.mjs` (8 testes).
+
+| Página | Passos | Números explicados com os dados reais |
+|---|---|---|
+| **Visão Geral** | 14 (inclui a barra superior) | Patrimônio total = investimentos + saldo em conta, com a curva estimada e a variação. Imposto do ano e barras por mês. Alertas abertos e prioritários. Peso de cada classe. Liquidez = saldo ÷ despesa média, em meses. Mudanças de gasto (≥ 30% e R$ 100). Próximas ações. Resumo final com pendências |
+| **Patrimônio** | 9 a 10 | Soma das posições. Custo conhecido e cobertura. Resultado = valor − custo, em R$ e %. Liquidez em até D+2. Pesos por classe. Maior posição e HHI (limites 0,15 e 0,25). Posições sem custo |
+| **Finanças** | 11 a 12 | Entradas e saídas, sem aplicações, resgates e fatura. Saldo e taxa de poupança = saldo ÷ entradas. Saldo das contas. Melhor e pior mês. Participação de cada categoria. Recorrências (3 ou mais meses, variação abaixo de 60%). Mudanças de gasto |
+| **Radar** | 6 | Alertas em aberto por gravidade. Prioridade = impacto × urgência × relevância × confiança. Ciclo novo, visto, resolvido. Os 3 mais prioritários com o link de cada um |
+| **Simulador** | 7 | Posições disponíveis e simulações salvas. Os dois cenários (venda e PGBL) com as abas trocadas automaticamente. O tour não executa simulação |
+
+**Como abrir:** pelo botão "Tour da página" (na Visão Geral, ele fica abaixo da saudação, porque essa página não tem cabeçalho), pela busca Ctrl K ou por `#/<página>?tour=1`. Cada página guarda o próprio progresso (`aurion.tour.<página>`).
+
+**Testes**
+- **Unitários:** 95 no total, todos aprovados.
+- **Playwright:** as 5 páginas percorridas pelo teclado em 1440 e 390 px, no modo demonstração e com uma conta real (extrato, posição da B3 e negociações). Nenhum balão saiu da tela, não houve requisição de escrita e o console não teve erros.
+- **Tributação:** continua com 36 passos.
+- **Regressão:** as 17 suítes ponta a ponta, pytest e ruff aprovados.
+
+**Ajustes encontrados no teste**
+- Sem a cobertura de custo informada (`result_coverage`), a frase não diz "0%".
+- O passo de referências de mercado só aparece quando o cartão existe.
+- No painel inicial, a explicação do imposto deixou de dizer que as barras somam o total. Na demonstração, as barras mostram o imposto mensal antes do IRRF e do mínimo por guia, então a soma delas não bate com o total.
+
+**Capturas:** `docs/visual-check/tour/visao-geral-liquidez-1440.png`, `financas-poupanca-390.png`, `patrimonio-concentracao-1440.png` e `guia-atraso-1440.png`.

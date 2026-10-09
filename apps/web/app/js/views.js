@@ -5,13 +5,14 @@ import { documentsReal } from "./views_docs.js";
 import { loginReal, recoverView, resetView, securitySection, privacyReal } from "./views_identity.js";
 import { wireTxEdits, allocation, dataHubSection } from "./views_finance2.js";
 import { taxExtras, irpfSection } from "./views_tax2.js";
-import { guiasTab } from "./views_guias.js";
+import { guiasTab, guiasEstado } from "./views_guias.js";
 import { settingsExtras } from "./views_hub.js";
 export { allocation };
 export { recoverView, resetView };
 import { UI4 } from "./ui4.js";
 import { registerTour } from "./tour.js";
 import { stepsTributacao, TOUR_TRIBUTACAO_VERSAO } from "./tour_tributacao.js";
+import { stepsDashboard, stepsPatrimonio, stepsFinancas, stepsRadar, stepsSimulador, TOUR_PAGINAS_VERSAO } from "./tour_paginas.js";
 import { isDemo } from "./tour_explain.js";
 import { onLogin, themeSwitch, theme, searchPill } from "./app.js";
 import { validateSignup, maskPhone, STAGES, docValid } from "./crm_rules.js";
@@ -183,47 +184,47 @@ export async function dashboard(el, r) {
   const allocTotal = d.allocation.reduce((s, a) => s + +a.value, 0);
   const sevIc = { critico: "radar", alto: "file", atencao: "receipt", informativo: "info", oportunidade: "trend" };
   el.innerHTML = `${sampleNote(d)}
-    <div class="hero">
-      <div><h2>Olá, <span>bem-vindo de volta!</span></h2><p>Aqui está um panorama completo da sua vida financeira.</p></div>
+    <div class="hero" data-tour="dash-hero">
+      <div><h2>Olá, <span>bem-vindo de volta!</span></h2><p>Aqui está um panorama completo da sua vida financeira.</p><span data-tour-slot></span></div>
       ${searchPill()}
       <a class="promo" href="#/simulador"><b>Decisões melhores para um futuro maior.</b>${deco.city()}<span class="go" aria-hidden="true">${icon("chev")}</span></a>
     </div>
     ${r.params.get("primeiro") ? `<div class="card" style="margin-bottom:18px;border-color:var(--brand-2)"><h3>${icon("ai")} Seu primeiro diagnóstico</h3>
       <p class="small muted" style="margin-top:6px">Envie seus extratos (OFX/CSV) e os relatórios da B3 em <a href="#/importar">Importar dados</a> para que os motores consolidem seus números reais.</p></div>` : ""}
     <div class="dash-r1">
-      <section class="card" aria-label="Patrimônio total">${cardHead("wealth", "Patrimônio total", "#/patrimonio", "Como evoluiu meu patrimônio?")}
+      <section class="card" aria-label="Patrimônio total" data-tour="dash-patrimonio">${cardHead("wealth", "Patrimônio total", "#/patrimonio", "Como evoluiu meu patrimônio?")}
         <div class="kpi-row"><div class="kpi">${brl(nw.total)}</div><span class="delta ${up ? "delta--up" : "delta--down"}">${up ? "▲ +" : "▼ −"}${pct(Math.abs(nw.variation_pct))} <span style="font-weight:500">vs. mês anterior</span></span></div>
         ${areaChart(series, { h: 128, w: 420, label: `Evolução patrimonial: de ${brl(series[0])} para ${brl(series.at(-1))}`, labels: nw.series.map(s => mes(s.month).split("/")[0]), tag: brlShort(nw.total) })}
         <p class="note">Evolução ${esc(nw.series_kind)}.</p></section>
-      <section class="card" aria-label="Impostos estimados">${cardHead("receipt", "Impostos estimados (ano)", "#/tributacao", "Quanto de imposto estimado tenho no ano?")}
+      <section class="card" aria-label="Impostos estimados" data-tour="dash-impostos">${cardHead("receipt", "Impostos estimados (ano)", "#/tributacao", "Quanto de imposto estimado tenho no ano?")}
         <p class="small muted" style="margin-top:8px">${esc(tax.scope.charAt(0).toUpperCase() + tax.scope.slice(1))}</p>
         <div class="kpi-row" style="margin-top:4px"><div class="kpi">${brl(tax.estimated)}</div><span class="delta delta--up">Isento no ano: ${brl(tax.exempt)}</span></div>
         ${barChart(monthly.map(m => ({ label: mes(m.month).split("/")[0], value: m.value })), { h: 96, label: "Imposto estimado por mês" })}
         <div class="row between wrap" style="margin-top:10px;gap:8px"><span class="note" style="margin:0">Estimativa · não é valor pago</span>${confidence(tax.confidence)}</div></section>
-      <section class="card alerts-card" aria-label="Alertas">${cardHead("radar", "Alertas", "#/alertas", "Quais são meus alertas prioritários?")}
+      <section class="card alerts-card" aria-label="Alertas" data-tour="dash-alertas">${cardHead("radar", "Alertas", "#/alertas", "Quais são meus alertas prioritários?")}
         ${ringGauge(d.alerts.open, { tone: d.alerts.open ? "neg" : "ok" })}
         <p class="lbl">pontos de atenção${d.alerts.critical ? `<b>${d.alerts.critical} prioritário(s)</b>` : ""}</p>
         <a class="btn btn--ghost btn--sm" href="#/alertas">Ver radar ${icon("arrow")}</a></section>
     </div>
     <div class="dash-r2">
-      <section class="card" aria-label="Minha alocação"><div class="card-h"><span class="ttl-ico" aria-hidden="true">${icon("layers")}</span><h3><a href="#/alocacao">Minha alocação ${icon("chev", "chev")}</a></h3>
-          <div class="seg" role="group" aria-label="Agrupar alocação"><button type="button" data-by="classe" aria-pressed="true">Por classe</button><button type="button" data-by="inst" aria-pressed="false">Por instituição</button></div></div>
+      <section class="card" aria-label="Minha alocação" data-tour="dash-alocacao"><div class="card-h"><span class="ttl-ico" aria-hidden="true">${icon("layers")}</span><h3><a href="#/alocacao">Minha alocação ${icon("chev", "chev")}</a></h3>
+          <div class="seg" role="group" aria-label="Agrupar alocação" data-tour="dash-alocacao-seg"><button type="button" data-by="classe" aria-pressed="true">Por classe</button><button type="button" data-by="inst" aria-pressed="false">Por instituição</button></div></div>
         <div class="alloc" id="allocbox"></div></section>
-      <section class="card" aria-label="Próximas ações">${cardHead("target", "Próximas ações", "#/alertas", "O que devo fazer primeiro?")}
+      <section class="card" aria-label="Próximas ações" data-tour="dash-acoes">${cardHead("target", "Próximas ações", "#/alertas", "O que devo fazer primeiro?")}
         ${d.next_actions.length ? `<ul class="actions next" style="margin-top:6px">${d.next_actions.slice(0, 4).map(a => `<li><span class="sev-ico sev-${a.severity}" aria-hidden="true">${icon(sevIc[a.severity] || "info")}</span>
           <div><b>${esc(a.title)}</b><span>${esc(a.detail)}</span></div>${a.action ? `<a class="btn btn--ghost btn--sm" href="#${a.action.route}">${esc(a.action.label)}</a>` : ""}</li>`).join("")}</ul>
           <a class="small" style="display:inline-flex;gap:4px;align-items:center;font-weight:700;margin-top:6px" href="#/alertas">Ver todas →</a>` : empty("Nenhuma ação pendente.")}</section>
     </div>
     <div class="dash-r3">
-      <section class="card" aria-label="O que mudou">${cardHead("trend", "O que mudou", "#/financas", "O que mudou nos meus gastos?")}
+      <section class="card" aria-label="O que mudou" data-tour="dash-mudou">${cardHead("trend", "O que mudou", "#/financas", "O que mudou nos meus gastos?")}
         ${d.changes.length ? `<ul class="chg" style="margin-top:8px">${d.changes.slice(0, 4).map(c => `<li><span class="ci" aria-hidden="true">${icon(catIcon(c.category))}</span>
           <div><b>${esc(c.category)}</b><span>${brl(c.last)} no último mês · ref. ${brl(c.baseline)}</span></div>
           <span class="d ${c.delta_pct > 0 ? "neg" : "pos"}">${c.delta_pct > 0 ? "↑" : "↓"} ${c.delta_pct > 0 ? "+" : ""}${pct(c.delta_pct, 0)}</span><a class="cv" href="#/financas" aria-label="Ver ${esc(c.category)}">${icon("chev")}</a></li>`).join("")}</ul>`
           : `<p class="muted small" style="margin-top:10px">Sem mudanças relevantes no período.</p>`}</section>
-      <section class="card" aria-label="Liquidez">${cardHead("drop", "Liquidez", "#/financas", "Minha reserva de liquidez é suficiente?")}
+      <section class="card" aria-label="Liquidez" data-tour="dash-liquidez">${cardHead("drop", "Liquidez", "#/financas", "Minha reserva de liquidez é suficiente?")}
         <div class="liq"><div><div class="kpi">${brl(d.liquidity.cash)}</div>
           <p class="small muted" style="margin-top:6px">em conta · cobre ~${(d.liquidity.months_covered || 0).toFixed(1).replace(".", ",")} mês(es) da despesa média de ${brl(d.liquidity.avg_monthly_expense)}</p></div>${deco.bars()}</div></section>
-      <section class="card how" aria-label="Como calculamos">${cardHead("bulb", "Como calculamos", "", "Como vocês calculam os números?")}
+      <section class="card how" aria-label="Como calculamos" data-tour="dash-como">${cardHead("bulb", "Como calculamos", "", "Como vocês calculam os números?")}
         <p class="small muted" style="margin:10px 0 16px;max-width:78%">Os números vêm de motores determinísticos com regras versionadas. A IA apenas explica. Cada estimativa mostra premissas, fonte e confiança.</p>
         <a class="btn btn--ghost btn--sm pill" href="#/tributacao?tab=regras">Ver regras e fontes ${icon("arrow")}</a>${deco.layers()}</section>
     </div>`;
@@ -235,6 +236,7 @@ export async function dashboard(el, r) {
       <ul class="legend">${items.map((a, i) => `<li><i style="background:${PALETTE[i % 5]}"></i><span>${esc(a.group)}</span><b>${pct(a.weight, 0)}</b></li>`).join("")}</ul>${deco.layers()}`;
   };
   drawAlloc(d.allocation, "Composição do patrimônio por classe");
+  registerTour("dashboard", TOUR_PAGINAS_VERSAO, stepsDashboard(), { d, sample: !!d.sample, demo: isDemo(d, DEMO) }, { autostart: r?.params?.get("tour") === "1" });
   el.querySelectorAll("[data-by]").forEach(b => b.addEventListener("click", async () => {
     el.querySelectorAll("[data-by]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
     if (b.dataset.by === "classe") return drawAlloc(d.allocation, "Composição do patrimônio por classe");
@@ -250,39 +252,40 @@ export async function dashboard(el, r) {
 }
 
 /* ================================================================ PATRIMÔNIO */
-export async function portfolio(el) {
+export async function portfolio(el, r) {
   const p = await api.get("/v1/portfolio/consolidated");
   const money = v => v == null ? "—" : brl(v);
   el.innerHTML = `${sampleNote(p)}
     <div class="grid g-4">
-      <div class="card"><h3>Patrimônio consolidado</h3><div class="kpi">${brl(p.total)}</div></div>
-      <div class="card"><h3>Valor aplicado</h3><div class="kpi">${brl(p.invested)}</div>${p.result_coverage != null && p.result_coverage < 0.999 ? `<p class="small muted">custo conhecido de ${pct(p.result_coverage, 0)} da carteira · importe as negociações da B3</p>` : ""}</div>
-      <div class="card"><h3>Resultado</h3><div class="kpi ${+p.result < 0 ? "neg" : "pos"}">${brl(p.result)}</div><span class="delta ${p.result_pct >= 0 ? "delta--up" : "delta--down"}">${pct(p.result_pct)}</span></div>
-      <div class="card"><h3>Liquidez em até D+2</h3><div class="kpi">${pct(p.liquidity.share, 0)}</div><p class="small muted">${brl(p.liquidity.d2_or_less)}</p></div>
+      <div class="card" data-tour="pat-total"><h3>Patrimônio consolidado</h3><div class="kpi">${brl(p.total)}</div></div>
+      <div class="card" data-tour="pat-aplicado"><h3>Valor aplicado</h3><div class="kpi">${brl(p.invested)}</div>${p.result_coverage != null && p.result_coverage < 0.999 ? `<p class="small muted">custo conhecido de ${pct(p.result_coverage, 0)} da carteira · importe as negociações da B3</p>` : ""}</div>
+      <div class="card" data-tour="pat-resultado"><h3>Resultado</h3><div class="kpi ${+p.result < 0 ? "neg" : "pos"}">${brl(p.result)}</div><span class="delta ${p.result_pct >= 0 ? "delta--up" : "delta--down"}">${pct(p.result_pct)}</span></div>
+      <div class="card" data-tour="pat-liquidez"><h3>Liquidez em até D+2</h3><div class="kpi">${pct(p.liquidity.share, 0)}</div><p class="small muted">${brl(p.liquidity.d2_or_less)}</p></div>
     </div>
     ${marketCard(p)}
     <div class="grid g-dash2 section">
-      <section class="card"><h3>Composição</h3><div class="row wrap" style="gap:24px;margin-top:14px">${donut(p.allocation, { size: 170, label: "Composição por classe" })}
+      <section class="card" data-tour="pat-composicao"><h3>Composição</h3><div class="row wrap" style="gap:24px;margin-top:14px">${donut(p.allocation, { size: 170, label: "Composição por classe" })}
         <ul class="legend" style="flex:1;min-width:200px">${p.allocation.map((a, i) => `<li><i style="background:${PALETTE[i]}"></i><span>${esc(a.group)} · ${brl(a.value)}</span><b>${pct(a.weight)}</b></li>`).join("")}</ul></div></section>
-      <section class="card"><h3>Concentração e custódia</h3>
+      <section class="card" data-tour="pat-concentracao"><h3>Concentração e custódia</h3>
         <p class="small" style="margin-top:10px">Maior posição: <b>${esc(p.concentration.largest_position)}</b> (${pct(p.concentration.largest_weight)}) · índice HHI ${String(p.concentration.hhi).replace(".", ",")}</p>
         <p class="note">${esc(p.concentration.reading)}.</p>
         ${hbars(p.by_custodian.map(c => ({ label: c.custodian, value: c.value })))}</section>
     </div>
-    <section class="card section"><h3>Posições <span class="right small muted">${p.positions.length} ativos</span></h3>
+    <section class="card section" data-tour="pat-posicoes"><h3>Posições <span class="right small muted">${p.positions.length} ativos</span></h3>
       <div class="table-wrap"><table class="table" style="margin-top:10px"><caption class="sr-only">Posições consolidadas</caption>
       <thead><tr><th>Ativo</th><th>Classe</th><th>Custódia</th><th class="num">Qtd.</th><th class="num">Aplicado</th><th class="num">Valor</th><th class="num">Resultado</th><th class="num">Peso</th><th>Origem</th></tr></thead>
       <tbody>${p.positions.map(x => `<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.group)}</td><td>${esc(x.custodian)}</td><td class="num">${x.quantity === "1" ? "—" : num(x.quantity)}</td>
         <td class="num">${money(x.invested)}</td><td class="num">${brl(x.value)}</td><td class="num ${+x.result < 0 ? "neg" : "pos"}">${money(x.result)}</td><td class="num">${pct(x.weight)}</td>
         <td class="small muted">${esc(x.price_source)}${x.as_of ? " · " + dt(x.as_of) : ""}</td></tr>`).join("")}</tbody></table></div>
       ${trust("Informação descritiva. A plataforma não recomenda compra ou venda de ativos (fora do escopo do MVP e sujeita à regulação da CVM).")}</section>`;
+  registerTour("patrimonio", TOUR_PAGINAS_VERSAO, stepsPatrimonio(), { p, sample: !!p.sample, demo: isDemo(p, DEMO) }, { autostart: r?.params?.get("tour") === "1" });
 }
 
 function marketCard(p) {
   const mk = p.market;
   if (!mk && !p.quotes_as_of) return "";
   const cell = (label, x, sub) => `<div><span class="small muted">${label}</span><div style="font-size:20px;font-weight:600;margin-top:2px">${x ? pct(x.value) : "—"}</div><span class="small muted">${sub || ""}</span></div>`;
-  return `<section class="card section"><h3>Referências de mercado <span class="right small muted">${p.quotes_as_of ? "cotações de fechamento até " + dt(p.quotes_as_of) : ""}</span></h3>
+  return `<section class="card section" data-tour="pat-mercado"><h3>Referências de mercado <span class="right small muted">${p.quotes_as_of ? "cotações de fechamento até " + dt(p.quotes_as_of) : ""}</span></h3>
     ${mk ? `<div class="grid g-4" style="margin-top:12px">
       ${cell("Selic (meta)", mk.selic_meta, mk.selic_meta ? "ao ano · definida pelo Copom" : "")}
       ${cell("CDI em 12 meses", mk.cdi_12m, mk.cdi_aa ? "hoje " + pct(mk.cdi_aa.value) + " ao ano" : "")}
@@ -294,39 +297,40 @@ function marketCard(p) {
 }
 
 /* ================================================================ FINANÇAS */
-export async function finance(el) {
+export async function finance(el, r) {
   const [f, tx] = await Promise.all([api.get("/v1/finance/summary"), api.get("/v1/finance/transactions?limit=100")]);
   const editable = HAS_API && !f.sample && !tx.sample;
   const cats = editable ? (await api.get("/v1/finance/categories").catch(() => ({ items: [] }))).items : [];
   el.innerHTML = `${sampleNote(f)}
     <div class="grid g-4">
-      <div class="card"><h3>Entradas (${mes(f.period.from)}–${mes(f.period.to)})</h3><div class="kpi pos">${brl(f.totals.income)}</div></div>
-      <div class="card"><h3>Saídas</h3><div class="kpi">${brl(f.totals.expense)}</div></div>
-      <div class="card"><h3>Saldo do período</h3><div class="kpi">${brl(f.totals.net)}</div><span class="delta delta--neutral">Taxa de poupança ${pct(f.totals.savings_rate, 0)}</span></div>
-      <div class="card"><h3>Saldo em contas</h3><div class="kpi">${brl(f.liquidity.cash)}</div><p class="small muted">${f.accounts.length} contas</p></div>
+      <div class="card" data-tour="fin-entradas"><h3>Entradas (${mes(f.period.from)}–${mes(f.period.to)})</h3><div class="kpi pos">${brl(f.totals.income)}</div></div>
+      <div class="card" data-tour="fin-saidas"><h3>Saídas</h3><div class="kpi">${brl(f.totals.expense)}</div></div>
+      <div class="card" data-tour="fin-saldo"><h3>Saldo do período</h3><div class="kpi">${brl(f.totals.net)}</div><span class="delta delta--neutral">Taxa de poupança ${pct(f.totals.savings_rate, 0)}</span></div>
+      <div class="card" data-tour="fin-contas"><h3>Saldo em contas</h3><div class="kpi">${brl(f.liquidity.cash)}</div><p class="small muted">${f.accounts.length} contas</p></div>
     </div>
     <div class="grid g-2 section">
-      <section class="card"><h3>Fluxo mensal</h3>
+      <section class="card" data-tour="fin-fluxo"><h3>Fluxo mensal</h3>
         <div role="img" aria-label="Entradas e saídas por mês" style="display:flex;gap:10px;align-items:flex-end;height:150px;margin-top:14px">
         ${(() => { const mx = Math.max(...f.series.flatMap(s => [+s.income, +s.expense]), 1); return f.series.map(s => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px" title="${mes(s.month)}: +${brl(s.income)} / -${brl(s.expense)}">
           <div style="display:flex;gap:3px;align-items:flex-end;height:120px"><i style="width:10px;height:${+s.income / mx * 120}px;background:var(--c3);border-radius:3px"></i><i style="width:10px;height:${+s.expense / mx * 120}px;background:var(--c1);border-radius:3px"></i></div>
           <span class="small muted">${mes(s.month).split("/")[0]}</span></div>`).join(""); })()}</div>
         <p class="small muted" style="margin-top:8px"><span style="color:var(--c3)">■</span> Entradas <span style="color:var(--c1);margin-left:10px">■</span> Saídas · aplicações e faturas de cartão não entram como despesa</p></section>
-      <section class="card"><h3>Despesas por categoria</h3>${hbars(f.by_category.slice(0, 7).map(c => ({ label: `${c.category} · ${pct(c.share, 0)}`, value: c.value })))}</section>
+      <section class="card" data-tour="fin-categorias"><h3>Despesas por categoria</h3>${hbars(f.by_category.slice(0, 7).map(c => ({ label: `${c.category} · ${pct(c.share, 0)}`, value: c.value })))}</section>
     </div>
     <div class="grid g-2 section">
-      <section class="card"><h3>Recorrências detectadas</h3><ul class="stack small" style="margin-top:12px">${f.recurring.map(x => `<li class="row between"><span>${esc(x.description)} <span class="muted">· ${esc(x.category)}</span></span><b>${brl(x.monthly)}/mês</b></li>`).join("") || "<li class='muted'>Nenhuma.</li>"}</ul></section>
-      <section class="card"><h3>Mudanças relevantes</h3>${f.changes.length ? `<ul class="stack small" style="margin-top:12px">${f.changes.map(c => `<li><b>${esc(c.category)}</b>: ${brl(c.last)} no último mês, contra ${brl(c.baseline)} de referência (${c.delta_pct > 0 ? "+" : ""}${pct(c.delta_pct, 0)}).</li>`).join("")}</ul>` : "<p class='small muted'>Sem mudanças relevantes.</p>"}
+      <section class="card" data-tour="fin-recorrencias"><h3>Recorrências detectadas</h3><ul class="stack small" style="margin-top:12px">${f.recurring.map(x => `<li class="row between"><span>${esc(x.description)} <span class="muted">· ${esc(x.category)}</span></span><b>${brl(x.monthly)}/mês</b></li>`).join("") || "<li class='muted'>Nenhuma.</li>"}</ul></section>
+      <section class="card" data-tour="fin-mudancas"><h3>Mudanças relevantes</h3>${f.changes.length ? `<ul class="stack small" style="margin-top:12px">${f.changes.map(c => `<li><b>${esc(c.category)}</b>: ${brl(c.last)} no último mês, contra ${brl(c.baseline)} de referência (${c.delta_pct > 0 ? "+" : ""}${pct(c.delta_pct, 0)}).</li>`).join("")}</ul>` : "<p class='small muted'>Sem mudanças relevantes.</p>"}
         <p class="note">${esc(f.reading)}.</p></section>
     </div>
-    ${(f.cards || []).length ? `<section class="card section"><h3>Cartões</h3><div class="grid g-3" style="margin-top:10px">${f.cards.map(c => `<div class="card" style="box-shadow:none"><b class="small">${esc(c.name)}</b> <span class="small muted">${esc(c.institution || "")}</span>
+    ${(f.cards || []).length ? `<section class="card section" data-tour="fin-cartoes"><h3>Cartões</h3><div class="grid g-3" style="margin-top:10px">${f.cards.map(c => `<div class="card" style="box-shadow:none"><b class="small">${esc(c.name)}</b> <span class="small muted">${esc(c.institution || "")}</span>
       <div class="kpi" style="font-size:22px">${brl(Math.abs(+c.balance))}</div><p class="small muted">fatura atual · gastos em ${mes(c.month)}: ${brl(c.month_spend)}</p></div>`).join("")}</div></section>` : ""}
-    <section class="card section"><h3>Transações <span class="right small muted">${tx.total} no total</span></h3>
+    <section class="card section" data-tour="fin-transacoes"><h3>Transações <span class="right small muted">${tx.total} no total</span></h3>
       ${editable ? `<p class="small muted" style="margin-top:4px">Corrija a categoria quando precisar: o lançamento original fica preservado e a correção entra na sua trilha de auditoria.</p>` : ""}
       <div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th>Origem</th></tr></thead>
       <tbody>${tx.items.map(t => `<tr><td>${dt(t.date)}</td><td>${esc(t.description)}</td><td>${editable ? `<select class="input" data-cat="${esc(t.id)}" style="padding:3px 8px;min-width:150px" aria-label="Categoria de ${esc(t.description)}">${[...new Set([t.category, ...cats])].map(c => `<option ${c === t.category ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${t.category_overridden ? `<div class="small muted">corrigida · original: ${esc(t.original_category)}</div>` : ""}` : esc(t.category)}</td>
         <td class="num ${+t.amount < 0 ? "" : "pos"}">${brl(t.amount)}</td><td class="small muted">${esc(t.source)}${editable ? ` · <a href="#" data-lin="${esc(t.id)}">origem</a>` : ""}</td></tr><tr hidden data-linrow="${esc(t.id)}"><td colspan="5"></td></tr>`).join("")}</tbody></table></div></section>`;
-  if (editable) wireTxEdits(el, () => finance(el));
+  if (editable) wireTxEdits(el, () => finance(el, r));
+  registerTour("financas", TOUR_PAGINAS_VERSAO, stepsFinancas(), { f, tx, editable, sample: !!f.sample, demo: isDemo(f, DEMO) }, { autostart: r?.params?.get("tour") === "1" });
 }
 
 /* ================================================================ TRIBUTAÇÃO */
@@ -387,7 +391,7 @@ export async function tax(el, r, ctx = {}) {
     });
   };
   const tourCtx = { t, ev, rules, real, demo: isDemo(t, DEMO), hoje: real ? new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) : t.reference_date,
-    getTab: () => tab, setTab: k => { tab = k; draw(); } };
+    getTab: () => tab, setTab: k => { tab = k; draw(); }, guias: guiasEstado };
   const loadingLine = `<div class="skeleton" style="width:40%"></div>`;
   const months = () => `<section class="card" data-tour="tabela-mensal"><div class="table-wrap"><table class="table"><caption class="sr-only">Apuração mensal de renda variável</caption>
     <thead><tr><th data-tour="col-vendas">Mês</th><th class="num">Vendas de ações</th><th data-tour="col-isencao">Isenção</th><th class="num" data-tour="col-resultado">Resultado comum</th><th class="num">Day trade</th><th class="num">FII</th><th class="num" data-tour="col-ir">IR bruto</th><th class="num">IRRF</th><th data-tour="col-darf">DARF 6015</th></tr></thead>
@@ -419,7 +423,7 @@ function upsell(what, e) {
 }
 
 /* ================================================================ SIMULADOR */
-export async function simulator(el) {
+export async function simulator(el, r) {
   let pf, sims;
   pf = HAS_API ? await api.get("/v1/portfolio/consolidated") : await api.demo("/v1/portfolio/consolidated");
   const realSim = HAS_API && !pf.sample;               // com dados importados, simula sobre as negociações reais
@@ -432,14 +436,14 @@ export async function simulator(el) {
   const draw = () => {
     el.innerHTML = `
       <p class="small muted" style="margin-bottom:10px">Planejamento tributário simulado: compare o cenário atual com cenários hipotéticos. Impacto estimado, com premissas e limites — não há promessa de economia.</p>
-      <div class="tabs" role="tablist">${[["venda", "Venda de ativos"], ["pgbl", "Aporte em PGBL/VGBL"]].map(([k, l]) => `<button role="tab" aria-selected="${tab === k}" data-tab="${k}">${l}</button>`).join("")}</div>
-      ${realSim ? "" : `<div class="card" style="margin-bottom:16px;border-color:var(--brand-2)"><p class="small"><b>Exemplo ilustrativo.</b> ${HAS_API ? 'Importe suas negociações da B3 em <a href="#/importar">Importar dados</a> para simular sobre a sua carteira real.' : "Modo demonstração."}</p></div>`}
-      <div class="grid g-dash2"><section class="card">${tab === "venda" ? saleForm() : pgblForm()}<p class="err" id="err" role="alert"></p></section>
-        <section class="card"><h3>Como funciona</h3><p class="small muted" style="margin-top:8px">O simulador compara o <b>cenário atual</b> com uma alternativa e mostra imposto estimado, liquidez gerada, diferença e premissas.
+      <div class="tabs" role="tablist" data-tour="sim-abas">${[["venda", "Venda de ativos"], ["pgbl", "Aporte em PGBL/VGBL"]].map(([k, l]) => `<button role="tab" aria-selected="${tab === k}" data-tab="${k}">${l}</button>`).join("")}</div>
+      ${realSim ? "" : `<div class="card" data-tour="sim-exemplo" style="margin-bottom:16px;border-color:var(--brand-2)"><p class="small"><b>Exemplo ilustrativo.</b> ${HAS_API ? 'Importe suas negociações da B3 em <a href="#/importar">Importar dados</a> para simular sobre a sua carteira real.' : "Modo demonstração."}</p></div>`}
+      <div class="grid g-dash2"><section class="card" data-tour="sim-form">${tab === "venda" ? saleForm() : pgblForm()}<p class="err" id="err" role="alert"></p></section>
+        <section class="card" data-tour="sim-como"><h3>Como funciona</h3><p class="small muted" style="margin-top:8px">O simulador compara o <b>cenário atual</b> com uma alternativa e mostra imposto estimado, liquidez gerada, diferença e premissas.
           O resultado é reprodutível (hash de versão) e usa as mesmas regras da Central Tributária. <b>O sistema mostra consequências; quem decide é você ou seu contador.</b></p>
           ${trust("Não é recomendação de investimento. Perguntas do tipo “devo vender?” não são respondidas pela plataforma.")}</section></div>
-      <div id="out" class="section"></div>
-      ${sims.items.length ? `<section class="card section"><h3>Simulações salvas</h3><ul class="stack small" style="margin-top:10px">${sims.items.slice(0, 6).map(s =>
+      <div id="out" class="section" data-tour="sim-resultado"></div>
+      ${sims.items.length ? `<section class="card section" data-tour="sim-salvas"><h3>Simulações salvas</h3><ul class="stack small" style="margin-top:10px">${sims.items.slice(0, 6).map(s =>
         `<li class="row between"><span>${esc(s.kind === "pgbl" ? "Aporte PGBL" : s.results?.[1]?.name || "Venda")} · ${dtm(s.created_at)}</span><code class="muted">${esc((s.reproducibility_hash || "").slice(0, 10))}</code></li>`).join("")}</ul></section>` : ""}`;
     el.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { tab = b.dataset.tab; draw(); });
     el.querySelector("#sf")?.addEventListener("submit", runSale);
@@ -508,6 +512,7 @@ export async function simulator(el) {
     <section class="card section"><h3>Diferença estimada: ${brl(res.difference)}</h3><ul class="stack small" style="margin-top:10px">${res.premises.map(p => `<li>• ${esc(p)}</li>`).join("")}</ul>
       <p class="small muted" style="margin-top:8px">Regra ${esc(res.rule.code)} v${esc(res.rule.version)} · fontes ${esc(res.rule.sources.join(", "))} · ${confidence(res.confidence)}</p><p class="note">${esc(res.disclaimer)}</p></section>`;
   draw();
+  registerTour("simulador", TOUR_PAGINAS_VERSAO, stepsSimulador(), { pf, sims, real: realSim, demo: !realSim, getTab: () => tab, setTab: k => { tab = k; draw(); } }, { autostart: r?.params?.get("tour") === "1" });
 }
 
 /* ================================================================ ALERTAS */
@@ -518,10 +523,10 @@ export async function alerts(el, r, ctx) {
     const note = sampleNote(res);
     const items = res.items.filter(a => filter === "todos" || (filter === "abertos" ? a.status !== "resolvido" : a.status === "resolvido"));
     el.innerHTML = `
-      ${note}<div class="row between wrap" style="margin-bottom:14px"><p class="muted small">Priorização: impacto × urgência × relevância × confiança. Cor sempre acompanhada de rótulo e ícone.</p>
-        <div class="theme-switch" role="group" aria-label="Filtro">${[["abertos", "Em aberto"], ["resolvidos", "Resolvidos"], ["todos", "Todos"]].map(([k, l]) => `<button type="button" aria-pressed="${filter === k}" data-f="${k}">${l}</button>`).join("")}</div></div>
+      ${note}<div class="row between wrap" style="margin-bottom:14px"><p class="muted small" data-tour="radar-criterio">Priorização: impacto × urgência × relevância × confiança. Cor sempre acompanhada de rótulo e ícone.</p>
+        <div class="theme-switch" role="group" aria-label="Filtro" data-tour="radar-filtro">${[["abertos", "Em aberto"], ["resolvidos", "Resolvidos"], ["todos", "Todos"]].map(([k, l]) => `<button type="button" aria-pressed="${filter === k}" data-f="${k}">${l}</button>`).join("")}</div></div>
       ${res.limited ? `<div class="trust-line" style="margin-bottom:12px">${icon("info")}<span>Plano Free mostra até 3 alertas. <a href="#/planos">Radar completo no Pro</a>.</span></div>` : ""}
-      <div class="stack">${items.length ? items.map(a => `<article class="alert s-${a.severity} ${a.status === "resolvido" ? "is-resolved" : ""}" aria-label="${esc(sevLabel[a.severity])}: ${esc(a.title)}">
+      <div class="stack" data-tour="radar-lista">${items.length ? items.map(a => `<article class="alert s-${a.severity} ${a.status === "resolvido" ? "is-resolved" : ""}" aria-label="${esc(sevLabel[a.severity])}: ${esc(a.title)}">
         <h4><span class="sev-ico sev-${a.severity}" style="width:22px;height:22px;font-size:11px" aria-hidden="true">!</span>${esc(a.title)} ${badge(a.severity, sevLabel[a.severity])} ${a.status !== "novo" ? badge(a.status === "resolvido" ? "pago" : "classificado", a.status) : ""}</h4>
         <p>${esc(a.detail)}</p>
         ${a.evidence?.length ? `<div class="evidence">${a.evidence.map(e => `<span>${esc(e.label)}: <b>${/^-?\d+\.\d{2}$/.test(e.value) ? brl(e.value) : esc(e.value)}</b></span>`).join("")}</div>` : ""}
@@ -539,6 +544,7 @@ export async function alerts(el, r, ctx) {
     });
   };
   draw();
+  registerTour("radar", TOUR_PAGINAS_VERSAO, stepsRadar(), { res, sample: !!res.sample, demo: isDemo(res, DEMO) }, { autostart: r?.params?.get("tour") === "1" });
 }
 
 /* ================================================================ DOCUMENTOS */

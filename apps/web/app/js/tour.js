@@ -27,7 +27,8 @@ export const tourButton = pageId => `<button type="button" class="tour-btn" data
 /** a página informa seu catálogo; mostra o botão no cabeçalho, o convite da primeira visita ou abre direto (?tour=1) */
 export function registerTour(pageId, versao, steps, ctx, { autostart = false } = {}) {
   reg = { pageId, versao: String(versao), steps, ctx };
-  const head = document.querySelector("[data-pagehead] h1")?.parentElement;
+  const ph = document.querySelector("[data-pagehead]");
+  const head = document.querySelector("[data-tour-slot]") || (ph && !ph.hidden ? ph.querySelector("h1")?.parentElement : null);   // Visão Geral não tem cabeçalho: usa o espaço reservado na própria página
   if (head && !head.querySelector("[data-tour-start]")) head.insertAdjacentHTML("beforeend", tourButton(pageId));
   if (run) return;                                  // re-registro durante o tour (a página redesenhou): mantém o tour aberto
   if (autostart) return void setTimeout(() => startTour(), 60);   // depois de a casca devolver o foco à página
