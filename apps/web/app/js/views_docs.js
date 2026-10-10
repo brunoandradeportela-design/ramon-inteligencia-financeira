@@ -1,4 +1,6 @@
 /* Documentos (dados reais): cofre de arquivos do cliente + checklist da declaração do IRPF montado com os dados dele. */
+import { registerTour } from "./tour.js";
+import { stepsDocumentos, TOUR_PAGINAS2_VERSAO } from "./tour_paginas2.js";
 import { api, ApiError } from "./api.js";
 import { dt, esc, icon, toast, empty } from "./ui.js";
 import { readDocument } from "./views_docread.js";
@@ -14,7 +16,7 @@ export async function documentsReal(el, year) {
   const kindOpts = sel => Object.entries(kinds).map(([k, l]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${esc(l)}</option>`).join("");
   el.innerHTML = `
     <div class="grid g-dash2" style="align-items:start">
-      <section class="card"><h3>Guardar documento</h3>
+      <section class="card" data-tour="doc-guardar"><h3>Guardar documento</h3>
         <p class="small muted" style="margin-top:6px">PDF, imagem, planilha ou texto até 8 MB. Informes de rendimentos, notas de corretagem, comprovantes de DARF, recibos de saúde e educação. Para entrar nos cálculos, extratos e relatórios da B3 vão em <a href="#/importar">Importar dados</a>.</p>
         <form id="uf" class="stack" style="margin-top:12px">
           <div class="field"><label for="file">Arquivo</label><input class="input" style="padding-top:7px" type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.csv,.ofx,.txt,.xlsx,.docx" required></div>
@@ -22,7 +24,7 @@ export async function documentsReal(el, year) {
             <div class="field"><label for="yr">Ano-calendário</label><select class="input" id="yr">${[thisYear, thisYear - 1, thisYear - 2, thisYear - 3].map(y => `<option ${y === year ? "selected" : ""}>${y}</option>`).join("")}</select></div></div>
           <button class="btn btn--primary">Guardar</button></form><p class="err" id="err" role="alert"></p>
         <p class="note">${size(res.used_bytes)} usados de ${size(res.quota_bytes)}. Os arquivos ficam na sua conta e só você acessa.</p></section>
-      <section class="card"><h3>Declaração do IR ${ck.delivery_year} <span class="right small muted">ano-calendário ${ck.year}</span></h3>
+      <section class="card" data-tour="doc-checklist"><h3>Declaração do IR ${ck.delivery_year} <span class="right small muted">ano-calendário ${ck.year}</span></h3>
         <div class="row between" style="margin-top:8px"><span class="small"><b>${ck.done}</b> de ${ck.total} itens prontos</span>
           <select class="input" id="cky" style="max-width:120px;padding:4px 8px">${[thisYear, thisYear - 1, thisYear - 2].map(y => `<option ${y === year ? "selected" : ""}>${y}</option>`).join("")}</select></div>
         <div style="height:6px;border-radius:9px;background:var(--line);margin-top:8px"><div style="height:6px;border-radius:9px;background:var(--pos);width:${ck.total ? Math.round(ck.done / ck.total * 100) : 0}%"></div></div>
@@ -31,7 +33,7 @@ export async function documentsReal(el, year) {
           <div><b class="small">${esc(i.title)}</b><div class="small muted">${esc(i.detail)}</div></div><span class="sr-only">${i.done ? "pronto" : "pendente"}</span></li>`).join("")}</ul>
         <p class="note">Checklist montado com seus dados importados ou conectados. Confira com seu contador.</p></section>
     </div>
-    <section class="card section"><h3>Meus documentos <span class="right small muted">${res.items.length}</span></h3>
+    <section class="card section" data-tour="doc-lista"><h3>Meus documentos <span class="right small muted">${res.items.length}</span></h3>
       ${res.items.length ? `<div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Documento</th><th>Tipo</th><th>Ano</th><th class="num">Tamanho</th><th>Guardado em</th><th></th></tr></thead>
       <tbody>${res.items.map(d => `<tr><td><b>${esc(d.title)}</b><div class="small muted">${esc(d.filename)}${d.status === "conferido" ? ' · <span class="pos">conferido</span>' : ""}</div></td>
         <td><select class="input" data-kind="${esc(d.id)}" style="padding:4px 8px;min-width:170px">${kindOpts(d.kind)}</select></td>
@@ -68,4 +70,5 @@ export async function documentsReal(el, year) {
     if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Confirmar"; return; }
     try { await api.del(`/v1/documents/${b.dataset.del}`); toast("Documento apagado."); documentsReal(el, year); } catch (x) { toast(msg(x)); }
   });
+  registerTour("documentos", TOUR_PAGINAS2_VERSAO, stepsDocumentos(), { res }, { autostart: /[?&]tour=1/.test(location.hash) });
 }

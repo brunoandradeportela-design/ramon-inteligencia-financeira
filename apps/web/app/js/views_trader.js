@@ -1,5 +1,7 @@
 /* AURION Trader Intelligence — telas. "AURION não executa a operação. AURION entende a operação."
  * Não há botão de comprar/vender ordem: registrar uma operação é anotar algo que você já fez na sua corretora. */
+import { registerTour } from "./tour.js";
+import { stepsTrader, TOUR_PAGINAS2_VERSAO } from "./tour_paginas2.js";
 import { api, ApiError, HAS_API } from "./api.js";
 import { areaChart, brl, dt, dtm, empty, esc, num, pct, toast } from "./ui.js";
 
@@ -23,23 +25,24 @@ function candleChart(cs, { h = 220 } = {}) {
 export async function trader(el, r) {
   if (!HAS_API) { el.innerHTML = `<section class="card">${empty("O Trader Intelligence funciona com a sua conta no site oficial.")}</section>`; return; }
   const tab = TABS.some(([k]) => k === r.params.get("tab")) ? r.params.get("tab") : "visao";
-  el.innerHTML = `${banner}<div class="tabs" role="tablist" style="flex-wrap:wrap">${TABS.map(([k, l]) => `<a role="tab" aria-selected="${k === tab}" href="#/trader?tab=${k}" class="${k === tab ? "on" : ""}" style="padding:8px 12px;text-decoration:none">${l}</a>`).join("")}</div><div id="tb" class="section"></div>`;
+  el.innerHTML = `<div data-tour="tr-banner">${banner}</div><div class="tabs" role="tablist" style="flex-wrap:wrap" data-tour="tr-abas">${TABS.map(([k, l]) => `<a role="tab" aria-selected="${k === tab}" href="#/trader?tab=${k}" class="${k === tab ? "on" : ""}" style="padding:8px 12px;text-decoration:none">${l}</a>`).join("")}</div><div id="tb" class="section"></div>`;
   const box = el.querySelector("#tb");
-  try { await (VIEWS[tab] || VIEWS.visao)(box, r); }
+  try { const res = await (VIEWS[tab] || VIEWS.visao)(box, r); if ((tab === "visao" || !VIEWS[tab]) && res) registerTour("trader", TOUR_PAGINAS2_VERSAO, stepsTrader(), { o: res }, { autostart: /[?&]tour=1/.test(location.hash) }); }
   catch (e) { box.innerHTML = e.status === 402 ? `<div class="card"><h3>Trader Intelligence faz parte do plano Pro</h3><p class="small muted" style="margin-top:6px">${esc(msg(e))}</p><a class="btn btn--primary" style="margin-top:12px" href="#/planos">Conhecer os planos</a></div>` : `<div class="card" role="alert">${esc(msg(e))}</div>`; }
 }
 
 const VIEWS = {
   async visao(el) {
     const o = await api.get("/v1/trader/overview");
-    el.innerHTML = `<div class="grid g-4">${kpi("Resultado líquido (fechadas)", sign(o.totals.net_pnl), `bruto ${brl(o.totals.gross_pnl)} · custos ${brl(o.totals.costs)}`)}
+    el.innerHTML = `<div class="grid g-4" data-tour="tr-kpis">${kpi("Resultado líquido (fechadas)", sign(o.totals.net_pnl), `bruto ${brl(o.totals.gross_pnl)} · custos ${brl(o.totals.costs)}`)}
       ${kpi("Imposto estimado das operações", brl(o.totals.tax_estimate), `apuração do ano: ${brl(o.tax.total_tax_due)}`)}${kpi("Taxa de acerto", pct(o.win_rate, 0), `profit factor ${o.profit_factor == null ? "—" : o.profit_factor.toFixed(2).replace(".", ",")}`)}
       ${kpi("Drawdown máximo", sign(o.max_drawdown), `${o.totals.trades} operações fechadas`)}</div>
-      <div class="grid g-2 section"><section class="card"><h3>Posições abertas</h3>${o.open.length ? `<ul class="stack small" style="margin-top:10px">${o.open.map(p => `<li class="row between"><span><b>${esc(p.ticker)}</b> · ${p.side === "long" ? "comprado" : "vendido"} ${num(Math.abs(p.quantity))}</span><span>preço médio ${brl(p.avg_price)}</span></li>`).join("")}</ul>` : `<p class="small muted" style="margin-top:8px">Nenhuma posição aberta pelas operações registradas.</p>`}</section>
-      <section class="card"><h3>Performance por estratégia</h3>${o.by_strategy.length ? `<ul class="stack small" style="margin-top:10px">${o.by_strategy.map(s => `<li class="row between"><span>${esc(s.key)} · ${s.trades} op.</span>${sign(s.net_pnl)}</li>`).join("")}</ul>` : `<p class="small muted" style="margin-top:8px">Associe operações a estratégias para comparar.</p>`}</section></div>
-      <div class="grid g-3 section">${kpi("Ativos acompanhados", o.watched.length, o.watched.slice(0, 6).join(", ") || "crie uma watchlist")}${kpi("Registros no journal", o.journal_entries)}${kpi("Backtests", o.backtests)}</div>
-      ${o.tax.next_darf ? `<section class="card section"><h3>Próximo DARF</h3><p class="small" style="margin-top:6px">${brl(o.tax.next_darf.valor)} · competência ${esc(o.tax.next_darf.competencia)} · vence ${dt(o.tax.next_darf.vencimento)} (${esc(o.tax.next_darf.status)})</p></section>` : ""}
+      <div class="grid g-2 section"><section class="card" data-tour="tr-abertas"><h3>Posições abertas</h3>${o.open.length ? `<ul class="stack small" style="margin-top:10px">${o.open.map(p => `<li class="row between"><span><b>${esc(p.ticker)}</b> · ${p.side === "long" ? "comprado" : "vendido"} ${num(Math.abs(p.quantity))}</span><span>preço médio ${brl(p.avg_price)}</span></li>`).join("")}</ul>` : `<p class="small muted" style="margin-top:8px">Nenhuma posição aberta pelas operações registradas.</p>`}</section>
+      <section class="card" data-tour="tr-estrategia"><h3>Performance por estratégia</h3>${o.by_strategy.length ? `<ul class="stack small" style="margin-top:10px">${o.by_strategy.map(s => `<li class="row between"><span>${esc(s.key)} · ${s.trades} op.</span>${sign(s.net_pnl)}</li>`).join("")}</ul>` : `<p class="small muted" style="margin-top:8px">Associe operações a estratégias para comparar.</p>`}</section></div>
+      <div class="grid g-3 section" data-tour="tr-ferramentas">${kpi("Ativos acompanhados", o.watched.length, o.watched.slice(0, 6).join(", ") || "crie uma watchlist")}${kpi("Registros no journal", o.journal_entries)}${kpi("Backtests", o.backtests)}</div>
+      ${o.tax.next_darf ? `<section class="card section" data-tour="tr-darf"><h3>Próximo DARF</h3><p class="small" style="margin-top:6px">${brl(o.tax.next_darf.valor)} · competência ${esc(o.tax.next_darf.competencia)} · vence ${dt(o.tax.next_darf.vencimento)} (${esc(o.tax.next_darf.status)})</p></section>` : ""}
       ${o.has_data ? "" : `<section class="card section">${empty("Registre operações (Operações) ou importe as negociações da B3 em Importar dados.")}</section>`}`;
+    return o;
   },
 
   async mercado(el, r) {

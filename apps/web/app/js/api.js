@@ -13,9 +13,13 @@ export const ANALYTICS_DEMO = true;
 const REAL = p => !!BASE && /^\/v1\/(auth|me|theme-preference|admin|billing|imports|market|tax\/settings|tax\/darfs|tax\/rules|tax\/calculations|tax\/irpf-report|tax\/guias|simulations|openfinance|documents|assistant|security|sessions|audit|privacy|consents|institutions|data-quality|allocation|trader|events|notifications|sharing|integrations|voice|analytics|finance\/categories|finance\/transactions\/tra_[A-Za-z0-9_-]+|alerts\/alr_[a-f0-9]+)(\/|\?|$)/.test(p);
 /* painéis que usam os dados importados pelo cliente; sem dados próprios, mostram o exemplo */
 const HYBRID_DATA = p => !!BASE && /^\/v1\/(finance\/summary|finance\/transactions|portfolio\/consolidated|dashboard|tax\/summary|tax\/events|alerts)(\?|$)/.test(p);
+/* o que já se sabe sobre os dados da conta (para a faixa "Seus dados" só aparecer enquanto não houver dados próprios) */
+export const dataSeen = { real: (() => { try { const v = sessionStorage.getItem("aurion.dados"); return v == null ? null : v === "1"; } catch { return null; } })() };
+const markData = real => { if (real) dataSeen.real = true; else if (dataSeen.real == null) dataSeen.real = false; try { sessionStorage.setItem("aurion.dados", dataSeen.real ? "1" : "0"); } catch { /* sem armazenamento */ } };
 async function hybridGet(p) {
   const r = await http("GET", p);
-  if (r && r.has_data === false) return { ...(await demoCall("GET", p)), sample: true };
+  if (r && r.has_data === false) { markData(false); return { ...(await demoCall("GET", p)), sample: true }; }
+  if (r && r.has_data === true) markData(true);
   return r;
 }
 const TOKEN_KEY = "ramon.token";

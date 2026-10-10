@@ -136,7 +136,7 @@ export async function securitySection(el) {
   if (DEMO) { el.innerHTML = ""; return; }
   const [sec, ss] = await Promise.all([api.get("/v1/security"), api.get("/v1/sessions")]);
   el.innerHTML = `
-    <section class="card section"><h3>Segurança da conta</h3>
+    <section class="card section" data-tour="cfg-seguranca"><h3>Segurança da conta</h3>
       <div class="grid g-2" style="margin-top:12px">
         <div><b class="small">CPF para entrar</b><p class="small muted" style="margin-top:4px">${sec.cpf_masked ? `Cadastrado: <b>${esc(sec.cpf_masked)}</b>. Você pode entrar com e-mail ou CPF.` : "Cadastre o CPF para entrar também com ele. Guardamos só uma impressão protegida, nunca o número em claro."}</p>
           <form id="cpff" class="row" style="gap:8px;margin-top:8px"><label class="sr-only" for="cpf">CPF</label><input class="input" id="cpf" inputmode="numeric" placeholder="000.000.000-00" style="max-width:200px"><button class="btn btn--ghost btn--sm">${sec.cpf_masked ? "Trocar" : "Cadastrar"}</button></form></div>
@@ -147,7 +147,7 @@ export async function securitySection(el) {
         <p class="small muted" style="margin-top:4px">${sec.mfa_enabled ? `Ativa. Restam <b>${sec.recovery_codes_left}</b> códigos de recuperação.` : "Desativada. Use um aplicativo autenticador (Google Authenticator, Microsoft Authenticator, Authy…)."}</p>
         <div id="mfa" style="margin-top:8px">${sec.mfa_enabled ? `<form id="mfad" class="row" style="gap:8px"><input class="input" id="dcode" placeholder="código do app" style="max-width:180px" autocomplete="one-time-code"><button class="btn btn--danger btn--sm">Desativar MFA</button></form>` : `<button class="btn btn--primary btn--sm" id="mfas">Ativar MFA</button>`}</div></div>
       <p class="err" id="serr" role="alert"></p></section>
-    <section class="card section"><h3>Sessões e dispositivos <span class="right small muted">${ss.items.length}</span></h3>
+    <section class="card section" data-tour="cfg-sessoes"><h3>Sessões e dispositivos <span class="right small muted">${ss.items.length}</span></h3>
       <div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Dispositivo</th><th>Local aproximado</th><th>Entrou em</th><th>Último uso</th><th></th></tr></thead>
       <tbody>${ss.items.map(s => `<tr><td><b>${esc(s.device || "—")}</b>${s.current ? ` <span class="badge b-ativo">esta sessão</span>` : ""}</td><td class="small">${esc(s.place || "—")}</td><td class="small muted">${dtm(s.created_at)}</td><td class="small muted">${dtm(s.last_seen_at)}</td>
         <td>${s.current ? "" : `<button class="btn btn--ghost btn--sm" data-rev="${esc(s.id)}">Encerrar</button>`}</td></tr>`).join("")}</tbody></table></div>

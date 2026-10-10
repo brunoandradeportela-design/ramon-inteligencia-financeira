@@ -73,11 +73,11 @@ export async function allocation(el) {
 export async function dataHubSection(el) {
   let dq, inst, cons;
   try { [dq, inst, cons] = await Promise.all([api.get("/v1/data-quality"), api.get("/v1/institutions"), api.get("/v1/consents")]); }
-  catch (x) { el.innerHTML = ""; return; }
+  catch (x) { el.innerHTML = ""; return null; }
   const bar = v => `<div style="height:6px;border-radius:9px;background:var(--line);margin-top:4px"><div style="height:6px;border-radius:9px;background:var(--pos);width:${Math.round(v * 100)}%"></div></div>`;
   const ind = { freshness: "Atualização", completeness: "Completude", validity: "Validade", consistency: "Consistência", duplicates: "Sem duplicidade" };
   el.innerHTML = `
-    <section class="card section"><h3>Qualidade dos dados <span class="right small muted">nota geral ${pct(dq.overall, 0)}</span></h3>
+    <section class="card section" data-tour="con-qualidade"><h3>Qualidade dos dados <span class="right small muted">nota geral ${pct(dq.overall, 0)}</span></h3>
       <div class="grid g-4" style="margin-top:10px">${Object.entries(dq.indicators).map(([k, v]) => `<div><span class="small">${ind[k]}</span> <b class="small">${pct(v, 0)}</b>${bar(v)}</div>`).join("")}</div>
       ${dq.tips.length ? `<ul class="stack small" style="margin-top:12px">${dq.tips.map(t => `<li>• ${esc(t)}</li>`).join("")}</ul>` : ""}
       <p class="note">${esc(dq.note)} ${dq.freshness_days != null ? `Dado mais recente: há ${dq.freshness_days} dia(s).` : ""}</p>
@@ -87,11 +87,12 @@ export async function dataHubSection(el) {
         <tbody>${dq.sources.map(s => `<tr><td>${s.kind === "open_finance" ? "Open Finance · " : "Arquivo · "}${esc(s.name)}${s.state ? ` <span class="small muted">(${esc(CONN[s.state] || s.state)})</span>` : ""}</td><td class="small">${s.at ? dtm(s.at) : "—"}</td>
           <td class="small">${s.records ? Object.entries(s.records).filter(([, v]) => v).map(([k, v]) => `${v} ${({ transactions: "lanç.", accounts: "contas", holdings: "posições", trades: "negoc." })[k] || k}`).join(", ") : "—"}${s.rejected ? ` · <span class="neg">${s.rejected} recusado(s)</span>` : ""}</td>
           <td class="small muted">${s.checksum ? `<code>${esc(s.checksum.slice(0, 10))}</code> · ${esc(s.parser)}` : ""}</td></tr>`).join("")}</tbody></table></div>` : ""}</section>
-    <section class="card section"><h3>Consentimentos</h3>${cons.items.length ? `<div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Instituição</th><th>Escopo</th><th>Finalidade</th><th>Validade</th><th>Situação</th></tr></thead>
+    <section class="card section" data-tour="con-consentimentos"><h3>Consentimentos</h3>${cons.items.length ? `<div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Instituição</th><th>Escopo</th><th>Finalidade</th><th>Validade</th><th>Situação</th></tr></thead>
       <tbody>${cons.items.map(c => `<tr><td><b>${esc(c.institution)}</b><div class="small muted">${esc(c.provider)}</div></td><td class="small">${esc(c.scope.join(", "))}</td><td class="small">${esc(c.purpose)}</td><td class="small">${dt(c.created_at)} a ${dt(c.expires_at)}</td>
         <td><span class="badge b-${c.status === "ativo" ? "ativo" : "classificado"}">${esc(c.status)}</span>${c.revoked_at ? `<div class="small muted">revogado em ${dt(c.revoked_at)}</div>` : ""}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="small muted" style="margin-top:8px">Nenhum consentimento de Open Finance ainda. Cada conexão registra escopo, finalidade, validade (12 meses) e revogação.</p>`}</section>
     <section class="card section"><h3>Matriz de cobertura <span class="right small muted">${esc(inst.provider)}</span></h3>${inst.configured ? `<div class="table-wrap"><table class="table" style="margin-top:10px"><thead><tr><th>Instituição</th><th>Tipo</th><th>Conta</th><th>Cartão</th><th>Investimentos</th><th>Situação</th></tr></thead>
       <tbody>${inst.items.slice(0, 60).map(i => `<tr><td>${esc(i.name)}</td><td>${esc(i.type)}</td><td>${i.accounts ? "Sim" : "—"}</td><td>${i.credit_cards ? "Sim" : "—"}</td><td>${i.investments ? "Sim" : "—"}</td><td class="small">${esc(i.status)}</td></tr>`).join("")}</tbody></table></div><p class="note">Lista obtida do provedor em ${dtm(inst.fetched_at)}.</p>`
       : `<p class="small muted" style="margin-top:8px">${esc(inst.note)}</p>`}</section>`;
+  return dq;
 }

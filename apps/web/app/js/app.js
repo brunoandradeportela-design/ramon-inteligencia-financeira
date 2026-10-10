@@ -1,6 +1,6 @@
 import { importData } from "./views_import.js";
 /* Shell da aplicação: roteamento por hash, sessão, tema (Claro/Escuro/Sistema) e navegação. */
-import { api, DEMO, ANALYTICS_DEMO, HAS_API, session, ApiError, actAs } from "./api.js";
+import { api, DEMO, ANALYTICS_DEMO, HAS_API, session, ApiError, actAs, dataSeen } from "./api.js";
 import { esc, icon, errorBox, loading } from "./ui.js";
 import * as V from "./views.js";
 import { UI4 } from "./ui4.js";
@@ -74,7 +74,7 @@ document.addEventListener("click", e => {
   else if (e.target.closest(".gnav__menu a") || (document.body.classList.contains("nav-open") && !e.target.closest(".gnav__menu"))) document.body.classList.remove("nav-open");
   if (e.target.closest("[data-cmdk]")) { e.preventDefault(); palette.open(); }
   if (e.target.closest("[data-exit-actas]")) { e.preventDefault(); actAs.set(null); location.hash = "#/configuracoes"; location.reload(); }
-  if (e.target.closest("[data-logout]")) { actAs.set(null); api.post("/v1/auth/logout").catch(() => {}); session.set(null); me = null; location.hash = "#/entrar"; }
+  if (e.target.closest("[data-logout]")) { resetDataSeen(); actAs.set(null); api.post("/v1/auth/logout").catch(() => {}); session.set(null); me = null; location.hash = "#/entrar"; }
 });
 document.addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && session.token && !PUBLIC[parse().name]) { e.preventDefault(); palette.toggle(); }
@@ -185,6 +185,7 @@ async function render() {
     main.innerHTML = loading();
     document.title = `AURION — ${TITLES[r.name] || "Início"}`;
     await view(main, r, { me, refresh: () => render() });
+    const hb = document.querySelector("[data-hybrid-bar]"); if (hb) hb.hidden = dataSeen.real !== false;   // some quando a conta já tem dados próprios
     decorate(main);
     if (!main._deco) { let pend = 0; main._deco = new MutationObserver(() => { if (!pend) pend = requestAnimationFrame(() => { pend = 0; decorate(main); }); }); main._deco.observe(main, { childList: true, subtree: true }); }
     main.focus({ preventScroll: true });
@@ -225,7 +226,7 @@ function shell(admin = false) {
                 <div class="sep"></div><button type="button" data-logout role="menuitem">${icon("logout")}<span>Sair</span></button></div></div>
           </div>
         </header>
-        ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note"><b>Seus dados:</b> os painéis mostram os seus números quando você envia arquivos em <a href="#/importar">Importar dados</a> ou conecta seu banco em <a href="#/conexoes">Conexões</a>; até lá, exibem um exemplo.</div>` : ""}
+        ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note" data-hybrid-bar ${dataSeen.real === false ? "" : "hidden"}><b>Seus dados:</b> os painéis mostram os seus números quando você envia arquivos em <a href="#/importar">Importar dados</a> ou conecta seu banco em <a href="#/conexoes">Conexões</a>; até lá, exibem um exemplo.</div>` : ""}
         ${actAs.id ? `<div class="demo-bar" role="note"><b>Somente leitura:</b> você está vendo os dados de ${esc(actAs.name || "um cliente")}, que concedeu acesso. Cada consulta fica registrada na auditoria do cliente. <a href="#" data-exit-actas>Voltar à minha conta</a></div>` : ""}
       </div>
       <div class="content">
@@ -247,7 +248,8 @@ function updateShell(name) {
   theme.apply();
 }
 
-export function onLogin(token, user) { session.set(token); me = user; document.querySelector(".shell")?.remove(); }
+const resetDataSeen = () => { dataSeen.real = null; try { sessionStorage.removeItem("aurion.dados"); } catch { /* sem armazenamento */ } };
+export function onLogin(token, user) { resetDataSeen(); session.set(token); me = user; document.querySelector(".shell")?.remove(); }
 window.addEventListener("hashchange", render);
 theme.apply();
 render();

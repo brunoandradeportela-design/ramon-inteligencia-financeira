@@ -1,4 +1,4 @@
-# Tours guiados — relatório (Tributação, Visão Geral, Patrimônio, Finanças, Radar e Simulador)
+# Tours guiados — relatório (todas as páginas do cliente)
 
 **Data:** 08/10/2026
 **Origem:** `docs/PROMPT-TOUR-TRIBUTACAO.md`
@@ -155,7 +155,9 @@ São 37 passos no catálogo. Os que não se aplicam saem da contagem, por isso a
 ## 6. Limitações
 
 - **Resolvido em 09/10/2026:** o passo "Resultado: vencimento, multa e juros" agora lê a guia exibida na aba Guias (dias de atraso, multa, juros, total e data válida para pagamento). Sem guia aberta, ele cita a mais recente da lista. A leitura é feita pela função `guiasEstado()`, somente leitura, em `views_guias.js`.
-- **Páginas ainda sem tour:** Notícias, Trader Intelligence, Inteligência (assistente), Documentos, Importar, Conexões e Configurações.
+- **Resolvido em 10/10/2026:** todas as páginas do cliente têm tour (ver seção 9).
+- **Trader Intelligence:** o tour cobre a aba Visão Trader. As outras 13 abas são explicadas no passo "Áreas do Trader", porque cada aba é uma rota própria.
+- **Modo demonstração** (endereço sem a API): Notícias, Trader, Importar e Conexões mostram só um aviso nesse modo e não têm tour.
 
 ## 7. Como adicionar o tour a outra página
 
@@ -195,3 +197,29 @@ O mesmo motor foi levado às páginas principais. Os catálogos estão em `apps/
 - No painel inicial, a explicação do imposto deixou de dizer que as barras somam o total. Na demonstração, as barras mostram o imposto mensal antes do IRRF e do mínimo por guia, então a soma delas não bate com o total.
 
 **Capturas:** `docs/visual-check/tour/visao-geral-liquidez-1440.png`, `financas-poupanca-390.png`, `patrimonio-concentracao-1440.png` e `guia-atraso-1440.png`.
+
+## 9. Tours das páginas restantes (10/10/2026)
+
+Os catálogos estão em `apps/web/app/js/tour_paginas2.js` e as frases com números em `apps/web/app/js/tour_explain3.js`. As frases repetem as regras de `daily_engine.js`, `trader_engine.js` e `data_quality.js`. Os testes estão em `worker/test/tour_paginas2.test.mjs` (5 testes).
+
+| Página | Passos | Números explicados com os dados reais |
+|---|---|---|
+| **Notícias** | 6 | Data e blocos do AURION Daily, que é montado por regras e não por IA. Notícias coletadas, fontes e quantas são ligadas à carteira. Regra de relevância: 3 pontos por ativo citado e 1 ponto por tema da carteira. Motivo da notícia mais relevante. Fontes sem publicação recente |
+| **Trader Intelligence** | 8 | Resultado líquido = bruto − custos, nas operações fechadas. Imposto estimado por operação (15%, 20% no day trade e no FII, 0% em mês isento), comparado com a apuração da Tributação. Taxa de acerto = operações com lucro ÷ operações. Profit factor = ganhos ÷ perdas. Drawdown máximo |
+| **Inteligência** | 5 | Explica evidências, fontes, guardrails da CVM e auditoria das respostas. O tour não envia perguntas |
+| **Documentos** | 4 | Documentos guardados e conferidos, espaço usado. Checklist do IR: itens prontos, percentual e o que falta |
+| **Importar** | 4 | Importações feitas, com o total de lançamentos, contas, posições e negociações, e a mais recente |
+| **Conexões** | 3 | Situação do Open Finance. Nota de qualidade dos dados = média ponderada de atualização (20%), completude (25%), validade (15%), consistência (25%) e ausência de duplicidade (15%) |
+| **Configurações** | 7 | Aparência, perfil, e-mails, compartilhamento com o contador, integrações, segurança e sessões |
+
+**Correção junto com os tours**
+- A faixa "Seus dados: os painéis mostram os seus números quando você envia arquivos…" aparecia mesmo para quem já tinha dados.
+- Agora ela só aparece enquanto a conta não tem dados próprios. Isso vem da resposta `has_data` dos painéis e fica guardado na sessão do navegador; entrar ou sair da conta zera essa informação.
+- Testado com duas contas: na conta com dados a faixa fica oculta; na conta vazia, ela aparece.
+
+**Testes**
+- 100 testes unitários aprovados.
+- **Playwright:** as 7 páginas percorridas pelo teclado em 1440 e 390 px com uma conta real. As 6 páginas anteriores foram percorridas de novo. Nenhum balão saiu da tela, não houve requisição de escrita e o console não teve erros.
+- **Regressão:** as 17 suítes ponta a ponta, pytest e ruff aprovados.
+
+**Capturas:** `docs/visual-check/tour/trader-acerto-1440.png` e `conexoes-qualidade-390.png`.

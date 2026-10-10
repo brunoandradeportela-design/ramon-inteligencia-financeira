@@ -22,15 +22,15 @@ export async function connectionsReal(el) {
   const st = await api.get("/v1/openfinance");
   const trustLine = `<div class="trust-line" style="margin-top:16px">${icon("shield")}<span>Nunca pedimos nem guardamos a senha do seu banco. A autorização acontece no ambiente da instituição, pelo Open Finance regulado pelo Banco Central, e você pode desconectar quando quiser.</span></div>`;
   if (!st.configured) {
-    el.innerHTML = `<section class="card" style="max-width:760px"><h3>Conexão automática com bancos e corretoras</h3>
+    el.innerHTML = `<section class="card" style="max-width:760px" data-tour="con-of"><h3>Conexão automática com bancos e corretoras</h3>
       <p class="small" style="margin-top:8px">Em breve você poderá conectar suas contas pelo <b>Open Finance</b> e manter extratos, cartões e investimentos atualizados todos os dias, sem enviar arquivos.</p>
       <p class="small muted" style="margin-top:8px">Enquanto a conexão automática é ativada, envie seus extratos (OFX/CSV) e os relatórios da B3 — os painéis, o imposto, os alertas e o simulador já funcionam com eles.</p>
       <a class="btn btn--primary" style="margin-top:14px" href="#/importar">Importar dados</a>${trustLine}</section>`;
-    return;
+    return st;
   }
   const items = st.items || [];
   el.innerHTML = `
-    <div class="row between wrap" style="margin-bottom:14px;gap:12px"><p class="muted small" style="max-width:720px">Conecte bancos, cartões e corretoras pelo Open Finance. Os dados chegam no mesmo formato das importações e alimentam patrimônio, finanças, imposto e alertas. Atualização automática diária.</p>
+    <div class="row between wrap" style="margin-bottom:14px;gap:12px" data-tour="con-of"><p class="muted small" style="max-width:720px">Conecte bancos, cartões e corretoras pelo Open Finance. Os dados chegam no mesmo formato das importações e alimentam patrimônio, finanças, imposto e alertas. Atualização automática diária.</p>
       <button class="btn btn--primary" id="add">+ Conectar banco ou corretora</button></div>
     <p class="err" id="oferr" role="alert"></p>
     <div class="grid g-3">${items.map(c => { const [k, l] = BADGE[c.state] || BADGE.desconhecido; return `<article class="card">
@@ -74,4 +74,5 @@ export async function connectionsReal(el) {
     try { await api.del(`/v1/openfinance/items/${b.dataset.del}`); toast("Instituição desconectada e dados removidos."); connectionsReal(el); }
     catch (x) { toast(msg(x)); b.disabled = false; }
   });
+  return st;
 }

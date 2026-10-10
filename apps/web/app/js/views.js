@@ -12,6 +12,7 @@ export { recoverView, resetView };
 import { UI4 } from "./ui4.js";
 import { registerTour } from "./tour.js";
 import { stepsTributacao, TOUR_TRIBUTACAO_VERSAO } from "./tour_tributacao.js";
+import { stepsInteligencia, stepsConexoes, stepsConfiguracoes, TOUR_PAGINAS2_VERSAO } from "./tour_paginas2.js";
 import { stepsDashboard, stepsPatrimonio, stepsFinancas, stepsRadar, stepsSimulador, TOUR_PAGINAS_VERSAO } from "./tour_paginas.js";
 import { isDemo } from "./tour_explain.js";
 import { onLogin, themeSwitch, theme, searchPill } from "./app.js";
@@ -574,7 +575,7 @@ export async function documents(el) {
 
 /* ================================================================ CONEXÕES */
 export async function connections(el, r) {
-  if (HAS_API) { await connectionsReal(el); const box = document.createElement("div"); el.appendChild(box); return dataHubSection(box); }
+  if (HAS_API) { const st = await connectionsReal(el); const box = document.createElement("div"); el.appendChild(box); const dq = await dataHubSection(box); registerTour("conexoes", TOUR_PAGINAS2_VERSAO, stepsConexoes(), { st, dq }, { autostart: /[?&]tour=1/.test(location.hash) }); return; }
   if (r.sub === "retorno") return connectReturn(el, r);
   const [res, inst] = await Promise.all([api.get("/v1/connections"), api.get("/v1/institutions")]);
   const labels = { accounts: "Contas e saldos", transactions: "Transações", credit_cards: "Cartões de crédito", investments: "Investimentos (Open Investment)" };
@@ -640,10 +641,10 @@ async function connectReturn(el, r) {
 export async function assistant(el, r) {
   const hist = [];
   el.innerHTML = `<div class="grid g-dash2" style="align-items:start">
-    <section class="card"><div class="chat" id="chat"><div class="msg msg--ai">Olá! Eu explico o que os motores da plataforma calcularam — patrimônio, finanças, impostos estimados, alertas e simulações. Todo número vem de um motor, com evidência.</div></div>
-      <form id="qf" class="row" style="gap:8px;margin-top:16px"><label class="sr-only" for="q">Pergunta</label><input class="input" id="q" maxlength="800" placeholder="Pergunte, por exemplo: Por que meu imposto aumentou?" autocomplete="off"><button class="btn btn--primary">Enviar</button></form>
-      <div class="suggest" style="margin-top:12px">${["Por que meu imposto aumentou?", "O que mudou nos meus gastos?", "Quais alertas existem?", "Quanto eu tenho de patrimônio?", "Quais documentos faltam para o IR?"].map(s => `<button type="button" data-s="${esc(s)}">${esc(s)}</button>`).join("")}</div></section>
-    <section class="card"><h3>Como a IA funciona aqui</h3><ul class="stack small" style="margin-top:10px">
+    <section class="card" data-tour="ia-chat"><div class="chat" id="chat"><div class="msg msg--ai">Olá! Eu explico o que os motores da plataforma calcularam — patrimônio, finanças, impostos estimados, alertas e simulações. Todo número vem de um motor, com evidência.</div></div>
+      <form id="qf" class="row" style="gap:8px;margin-top:16px" data-tour="ia-pergunta"><label class="sr-only" for="q">Pergunta</label><input class="input" id="q" maxlength="800" placeholder="Pergunte, por exemplo: Por que meu imposto aumentou?" autocomplete="off"><button class="btn btn--primary">Enviar</button></form>
+      <div class="suggest" style="margin-top:12px" data-tour="ia-sugestoes">${["Por que meu imposto aumentou?", "O que mudou nos meus gastos?", "Quais alertas existem?", "Quanto eu tenho de patrimônio?", "Quais documentos faltam para o IR?"].map(s => `<button type="button" data-s="${esc(s)}">${esc(s)}</button>`).join("")}</div></section>
+    <section class="card" data-tour="ia-como"><h3>Como a IA funciona aqui</h3><ul class="stack small" style="margin-top:10px">
       <li>• Classifica a intenção e consulta o motor certo (Financeiro, Patrimônio, Tributário, Simulação, Documentos).</li>
       <li>• Checagem de consistência: nenhum número sem evidência é exibido.</li>
       <li>• Pedidos de recomendação de compra/venda são bloqueados (regulação CVM).</li>
@@ -668,6 +669,7 @@ export async function assistant(el, r) {
   el.querySelector("#qf").onsubmit = e => { e.preventDefault(); const i = el.querySelector("#q"); ask(i.value); i.value = ""; };
   el.firstElementChild.addEventListener("click", e => { const b = e.target.closest("[data-s]"); if (b) ask(b.dataset.s); });
   if (r.params.get("q")) ask(r.params.get("q"));
+  registerTour("inteligencia", TOUR_PAGINAS2_VERSAO, stepsInteligencia(), {}, { autostart: /[?&]tour=1/.test(location.hash) });
 }
 
 /* ================================================================ PLANOS / CONFIG / PRIVACIDADE */
@@ -711,9 +713,9 @@ export async function plans(el, r, { me }) {
 
 export async function settings(el, r, { me }) {
   el.innerHTML = `<div class="grid g-2">
-    <section class="card"><h3>Aparência</h3><p class="small muted" style="margin-top:6px">Claro, Escuro ou seguir o sistema operacional. A preferência fica salva neste dispositivo e no seu perfil. Trocar o tema nunca altera dados ou cálculos.</p>
+    <section class="card" data-tour="cfg-aparencia"><h3>Aparência</h3><p class="small muted" style="margin-top:6px">Claro, Escuro ou seguir o sistema operacional. A preferência fica salva neste dispositivo e no seu perfil. Trocar o tema nunca altera dados ou cálculos.</p>
       <div style="margin-top:14px">${themeSwitch()}</div></section>
-    <section class="card"><h3>Perfil</h3><ul class="stack small" style="margin-top:10px"><li><b>Nome:</b> ${esc(me.name)}</li><li><b>E-mail:</b> ${esc(me.email)}</li><li><b>Profissão:</b> ${esc(me.profession || "—")}</li>${me.roles?.includes("owner") ? `<li><b>Papel:</b> dono e administrador</li><li><b>CPF:</b> ${me.profile?.cpf_configured ? esc(me.profile.cpf_masked) + " (configurado no servidor)" : "configurado apenas no servidor (variável RAMON_OWNER_CPF)"}</li>` : ""}<li><b>Telefone:</b> ${esc(me.phone || "—")}</li><li><b>Plano:</b> ${esc(me.plan)}</li>
+    <section class="card" data-tour="cfg-perfil"><h3>Perfil</h3><ul class="stack small" style="margin-top:10px"><li><b>Nome:</b> ${esc(me.name)}</li><li><b>E-mail:</b> ${esc(me.email)}</li><li><b>Profissão:</b> ${esc(me.profession || "—")}</li>${me.roles?.includes("owner") ? `<li><b>Papel:</b> dono e administrador</li><li><b>CPF:</b> ${me.profile?.cpf_configured ? esc(me.profile.cpf_masked) + " (configurado no servidor)" : "configurado apenas no servidor (variável RAMON_OWNER_CPF)"}</li>` : ""}<li><b>Telefone:</b> ${esc(me.phone || "—")}</li><li><b>Plano:</b> ${esc(me.plan)}</li>
       <li><b>Objetivos:</b> ${esc((me.profile?.objetivos || []).join(", ") || "—")}</li></ul></section>
     ${HAS_API ? "" : `<section class="card"><h3>Notificações</h3><label class="check" style="margin-top:10px"><input type="checkbox" checked> Alertas no aplicativo</label>
       <label class="check" style="margin-top:8px"><input type="checkbox"> Resumo semanal por e-mail</label><p class="note">Apenas alertas de severidade “atenção” ou maior; alertas repetidos não são reenviados.</p></section>`}
@@ -723,6 +725,7 @@ export async function settings(el, r, { me }) {
   if (me.acting) return;
   settingsExtras(el.querySelector("#hubbox"), me).catch(() => {});
   securitySection(el.querySelector("#secbox"));
+  registerTour("configuracoes", TOUR_PAGINAS2_VERSAO, stepsConfiguracoes(), {}, { autostart: /[?&]tour=1/.test(location.hash) });
 }
 
 export async function privacy(el) {
