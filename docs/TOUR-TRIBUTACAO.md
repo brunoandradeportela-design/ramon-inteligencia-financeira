@@ -156,7 +156,7 @@ São 37 passos no catálogo. Os que não se aplicam saem da contagem, por isso a
 
 - **Resolvido em 09/10/2026:** o passo "Resultado: vencimento, multa e juros" agora lê a guia exibida na aba Guias (dias de atraso, multa, juros, total e data válida para pagamento). Sem guia aberta, ele cita a mais recente da lista. A leitura é feita pela função `guiasEstado()`, somente leitura, em `views_guias.js`.
 - **Resolvido em 10/10/2026:** todas as páginas do cliente têm tour (ver seção 9).
-- **Trader Intelligence:** o tour cobre a aba Visão Trader. As outras 13 abas são explicadas no passo "Áreas do Trader", porque cada aba é uma rota própria.
+- **Resolvido em 14/10/2026:** as 13 abas do Trader e as 3 páginas do administrador também têm tour (seção 10).
 - **Modo demonstração** (endereço sem a API): Notícias, Trader, Importar e Conexões mostram só um aviso nesse modo e não têm tour.
 
 ## 7. Como adicionar o tour a outra página
@@ -223,3 +223,39 @@ Os catálogos estão em `apps/web/app/js/tour_paginas2.js` e as frases com núme
 - **Regressão:** as 17 suítes ponta a ponta, pytest e ruff aprovados.
 
 **Capturas:** `docs/visual-check/tour/trader-acerto-1440.png` e `conexoes-qualidade-390.png`.
+
+## 10. Abas do Trader e páginas do administrador (14/10/2026)
+
+**Abas do Trader Intelligence**
+- Cada aba é uma rota própria (`#/trader?tab=<aba>`) e por isso tem um tour próprio (`trader-<aba>`), com progresso guardado separadamente.
+- O catálogo está em `apps/web/app/js/tour_trader.js` e as frases com números em `apps/web/app/js/tour_explain4.js`, que repetem as fórmulas de `trader_engine.js`.
+- Cada aba passou a devolver os dados que desenhou, para o tour ler os mesmos números da tela.
+
+| Aba | Números explicados com os dados reais |
+|---|---|
+| Mercado | Último preço e variação; médias de 20 e 50 pregões e a leitura entre elas; IFR(14) com as faixas de 30 e 70; volatilidade anual (desvio dos retornos diários × √252); faixa de 52 semanas; fonte e data da coleta |
+| Watchlist, Operações, Estratégias, Journal | Listas e ativos; registros em vigor por origem (correções e anulações ficam no histórico); estratégias ligadas a modelos; tags mais usadas |
+| Backtest | Execuções guardadas e o retorno da mais recente; explica o que significa "fora da amostra", slippage e reprodução |
+| Performance | Bruto − custos = líquido, menos o imposto estimado; payoff = ganho médio ÷ perda média; expectativa por operação; sequências de ganhos e perdas; melhor ativo |
+| Análise Tributária | Imposto do ano pela apuração e prejuízos a compensar; quantas operações geraram imposto ou tiveram lucro isento; por que a soma por operação pode diferir da apuração mensal |
+| Risco | VaR 95% de 1 dia = valor × volatilidade ÷ √252 × 1,645, com um exemplo de ativo e a soma sem diversificação; pior dia e pior semana; tamanho e perda médios |
+| Paper, Radar, Divulgações, Eventos | Resultado e acerto simulados (fora dos impostos); alertas por gravidade e o mais importante; explicação das divulgações da CVM e do calendário de eventos |
+
+**Páginas do administrador**
+- O catálogo e as frases estão em `apps/web/app/js/tour_admin.js`.
+- **CRM:**
+  - conversão = pagantes ÷ cadastrados;
+  - ativação = clientes que passaram de "novo cadastro" ÷ cadastrados;
+  - MRR = soma das mensalidades dos pagantes; ARR = MRR × 12;
+  - ticket médio = MRR ÷ pagantes, comparado à meta;
+  - inadimplência;
+  - funil por etapa.
+- **Pagamentos:** recebido (bruto e líquido de taxas), a receber, em atraso, estornado e cobranças sem vínculo, conforme os filtros aplicados.
+- **Operações:** disponibilidade = 1 − respostas 5xx ÷ requisições, comparada à meta de 99,5%; latência p95 comparada à meta de 500 ms; falhas de login.
+
+**Testes**
+- `worker/test/tour_trader_admin.test.mjs`, com 6 testes; 106 testes unitários no total, todos aprovados.
+- **Playwright:** as 13 abas com uma conta real e as 3 páginas do administrador com o dono, em 1440 px e 390 px. Nenhum balão saiu da tela, não houve requisição de escrita e o console não teve erros.
+- **Regressão:** as 17 suítes ponta a ponta, pytest e ruff aprovados.
+
+**Capturas:** `docs/visual-check/tour/trader-risco-1440.png` e `crm-indicadores-1440.png`.

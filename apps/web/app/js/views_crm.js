@@ -1,4 +1,6 @@
 /* CRM — acompanhamento de todos os clientes (área do administrador). */
+import { registerTour } from "./tour.js";
+import { stepsCrm, TOUR_ADMIN_VERSAO } from "./tour_admin.js";
 import { api, DEMO } from "./api.js";
 import { barChart, brl, dt, dtm, empty, esc, icon, pct, toast } from "./ui.js";
 import { STAGES, PRICE } from "./crm_rules.js";
@@ -13,7 +15,7 @@ export async function crm(el, r) {
   let selected = r.params.get("cliente") || null;
   const [m] = await Promise.all([api.get("/v1/admin/crm/metrics")]);
   el.innerHTML = `
-    <div class="grid crm-kpis">
+    <div class="grid crm-kpis" data-tour="crm-kpis">
       ${kpi("Clientes cadastrados", m.total, `+${m.new_7d} em 7 dias · +${m.new_30d} em 30 dias`)}
       ${kpi("Pagantes", m.paying, `conversão ${pct(m.conversion, 0)} · ativação ${pct(m.activation, 0)}`)}
       ${kpi("Receita recorrente (MRR)", brl(m.mrr), `ARR ${brl(m.arr)}`)}
@@ -22,16 +24,16 @@ export async function crm(el, r) {
       ${kpi("Inadimplentes", m.overdue, `${brl(m.overdue_value)}/mês em aberto`, m.overdue ? "neg" : "")}
     </div>
     <div class="grid g-dash2 section">
-      <section class="card"><h3>Funil de clientes <span class="right small muted">clique para filtrar</span></h3>
+      <section class="card" data-tour="crm-funil"><h3>Funil de clientes <span class="right small muted">clique para filtrar</span></h3>
         <ul class="funnel" style="margin-top:12px">${m.stages.map(s => `<li><button type="button" data-stage="${s.key}" aria-pressed="${f.stage === s.key}">
           <span>${esc(s.label)}</span><span class="funnel__bar"><i class="st-bg-${s.key}" style="width:${m.total ? Math.max(3, s.count / m.total * 100) : 0}%"></i></span><b>${s.count}</b></button></li>`).join("")}</ul></section>
-      <section class="card"><h3>Cadastros por semana</h3>
+      <section class="card" data-tour="crm-semana"><h3>Cadastros por semana</h3>
         ${barChart(m.signups_by_week.map(w => ({ label: dt(w.week_start).slice(0, 5), value: w.signups })), { h: 110, label: "Cadastros por semana" }).replace(/R\$\s?[\d.,]+/g, "")}
         <p class="small muted" style="margin-top:10px">Profissões: ${m.by_profession.map(p => `${esc(p.profession)} (${p.count})`).join(" · ")}</p>
         <p class="small muted">Planos: ${m.by_plan.map(p => `${esc(p.plan)} ${p.count}`).join(" · ")}</p></section>
     </div>
     <section class="card section">
-      <form id="ff" class="row wrap" style="gap:10px" role="search">
+      <form id="ff" class="row wrap" style="gap:10px" role="search" data-tour="crm-busca">
         <label class="sr-only" for="fq">Buscar</label><input class="input" id="fq" style="flex:1;min-width:220px" placeholder="Buscar por nome, e-mail, telefone ou profissão" value="${esc(f.q)}">
         <label class="sr-only" for="fs">Etapa</label><select class="input" id="fs" style="width:auto"><option value="">Todas as etapas</option>${STAGES.map(([k, l]) => `<option value="${k}" ${f.stage === k ? "selected" : ""}>${l}</option>`).join("")}</select>
         <label class="sr-only" for="fp">Plano</label><select class="input" id="fp" style="width:auto"><option value="">Todos os planos</option><option value="free">Free</option><option value="pro">Pro</option><option value="premium">Premium</option></select>
@@ -41,7 +43,7 @@ export async function crm(el, r) {
     </section>
     <div id="detail"></div>
     <section class="card section" id="team"></section>
-    <section class="card section" id="sitemsgs" aria-label="Mensagens do site"></section>
+    <section class="card section" id="sitemsgs" aria-label="Mensagens do site" data-tour="crm-msgs"></section>
     <p class="note">${esc(m.pricing_note)} O CRM mostra dados de cadastro, assinatura e sinais de uso — nunca patrimônio, transações ou impostos do cliente (minimização LGPD). Todo acesso a um cliente fica registrado na trilha de auditoria dele.</p>`;
 
   async function loadMsgs() {
@@ -190,6 +192,7 @@ export async function crm(el, r) {
       <span>${a.roles.includes("owner") ? '<span class="badge b-ativo">Dono</span> ' : ""}<span class="badge b-classificado">Administrador</span></span></li>`).join("")}</ul>
       <p class="note">O dono tem acesso total: CRM geral, todas as telas da plataforma e gestão de administradores.</p>`;
   } catch { teamBox.remove(); }
+  registerTour("crm", TOUR_ADMIN_VERSAO, stepsCrm(), { m }, { autostart: /[?&]tour=1/.test(location.hash) });
 }
 
 function kpi(label, value, sub, cls = "") {

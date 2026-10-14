@@ -1,4 +1,6 @@
 /* Pagamentos — visão geral de TODAS as cobranças (Asaas + registros manuais), área do dono/administrador. */
+import { registerTour } from "./tour.js";
+import { stepsPagamentos, TOUR_ADMIN_VERSAO } from "./tour_admin.js";
 import { api, DEMO } from "./api.js";
 import { brl, dt, dtm, empty, esc, icon, toast } from "./ui.js";
 import { PAY_METHOD, PAY_STATUS } from "./crm_rules.js";
@@ -11,10 +13,10 @@ export async function payments(el) {
   const today = new Date().toISOString().slice(0, 10);
   const f = { q: "", status: "", method: "", origin: "", date_from: "", date_to: "" };
   el.innerHTML = `
-    <section class="card" id="gw"><div class="skeleton" style="height:70px"></div></section>
-    <div class="grid crm-kpis section" id="kp"></div>
+    <section class="card" id="gw" data-tour="pag-gw"><div class="skeleton" style="height:70px"></div></section>
+    <div class="grid crm-kpis section" id="kp" data-tour="pag-kpis"></div>
     <section class="card section">
-      <form id="pf" class="row wrap" style="gap:10px" role="search">
+      <form id="pf" class="row wrap" style="gap:10px" role="search" data-tour="pag-filtros">
         <label class="sr-only" for="pq">Buscar</label><input class="input" id="pq" style="flex:1;min-width:200px" placeholder="Buscar por cliente, e-mail ou id da cobrança">
         <label class="sr-only" for="ps">Status</label><select class="input" id="ps" style="width:auto"><option value="">Todos os status</option>${PAY_STATUS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
         <label class="sr-only" for="pm">Forma</label><select class="input" id="pm" style="width:auto"><option value="">Todas as formas</option>${Object.entries(PAY_METHOD).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
@@ -23,7 +25,7 @@ export async function payments(el) {
         <label class="small muted" for="pd2">Até</label><input class="input" id="pd2" type="date" style="width:auto">
         <button class="btn btn--ghost" type="button" id="pcsv">${icon("doc")} Exportar CSV</button>
       </form>
-      <div id="plist" style="margin-top:12px"></div>
+      <div id="plist" style="margin-top:12px" data-tour="pag-lista"></div>
     </section>
     <p class="note">Fonte: cobranças do Asaas (recebidas pelo webhook em tempo real e conferidas por sincronização automática) e pagamentos registrados manualmente no CRM. “Sem vínculo” = cobrança feita no Asaas para alguém que não tem conta na plataforma — nada fica de fora. Valor líquido = após a taxa do Asaas.</p>`;
 
@@ -93,6 +95,7 @@ export async function payments(el) {
     toast(`${last.items.length} pagamentos exportados.`);
   };
   await Promise.all([loadGateway(!DEMO), load()]);
+  registerTour("pagamentos", TOUR_ADMIN_VERSAO, stepsPagamentos(), { res: last }, { autostart: /[?&]tour=1/.test(location.hash) });
 }
 
 function kpi(label, value, sub, cls = "") {
