@@ -1,0 +1,31 @@
+# AURION — hospedagem HostGator (Apache). Site estático; a API continua na Cloudflare.
+Options -Indexes
+DirectoryIndex index.html
+AddDefaultCharset UTF-8
+AddType application/manifest+json .webmanifest
+AddType application/json .json
+AddType image/svg+xml .svg
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # sempre HTTPS
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+  # www -> domínio principal
+  RewriteCond %{HTTP_HOST} ^www\.aurionfinance\.com\.br$ [NC]
+  RewriteRule ^ https://aurionfinance.com.br%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  # service worker e dados públicos sempre conferidos com o servidor
+  <FilesMatch "(sw\.js|\.json)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  <FilesMatch "\.(css|js|svg|png|jpg|woff2)$">
+    Header set Cache-Control "public, max-age=3600"
+  </FilesMatch>
+</IfModule>

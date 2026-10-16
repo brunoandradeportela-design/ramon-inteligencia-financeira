@@ -1,0 +1,8 @@
+---
+# Implantação na HostGator (cPanel › Git Version Control › "Deploy HEAD Commit").
+# Copia o site estático (apps/web) para a pasta do domínio aurionfinance.com.br.
+# Preserva .well-known (certificado SSL automático) e cgi-bin, que o cPanel usa.
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home1/ramonj52/aurionfinance.com.br/
+    - /bin/rsync -a --delete --exclude 'CNAME' --exclude '.well-known' --exclude 'cgi-bin' apps/web/ $DEPLOYPATH
