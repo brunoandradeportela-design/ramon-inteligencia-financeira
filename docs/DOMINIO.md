@@ -48,3 +48,16 @@ Arquivos já preparados no site: `CNAME`, `robots.txt` (a área `/app/` não é 
 ## Observação de marca
 
 O domínio usa o nome **Aurion Finance**, enquanto o site exibe a marca **Fintechs** (conforme a arte aprovada). Se a marca oficial passar a ser Aurion Finance, é preciso trocar logotipo, títulos e textos — e verificar a disponibilidade da marca no INPI.
+
+---
+
+## 5. Migração para a HostGator (16/10/2026)
+
+O site passou a ser servido pela hospedagem compartilhada da HostGator. A API continua no Cloudflare Workers (`config.js` não mudou).
+
+- **Registro.br:** o domínio continua registrado lá; os servidores DNS foram trocados para `ns40.hostgator.com.br` e `ns41.hostgator.com.br`. A zona antiga do Registro.br (A/AAAA do GitHub Pages) deixou de valer.
+- **HostGator (cPanel br40, usuário ramonj52, IP 192.185.212.200):** domínio adicional `aurionfinance.com.br` com pasta `/home1/ramonj52/aurionfinance.com.br`. A zona DNS (A, www, mail, SPF, DKIM) é gerenciada no Editor de Zona DNS do cPanel.
+- **Publicação:** cPanel → Git Version Control clona este repositório em `/home1/ramonj52/repositories/aurion`; o `.cpanel.yml` copia `apps/web/` para a pasta do domínio (mantém `.well-known`, `cgi-bin` e ignora `CNAME`).
+- **Atualização automática:** tarefa cron no cPanel, minuto 17 a cada 3 horas: `git pull --ff-only` + `rsync` de `apps/web/`. Para publicar na hora: Git Version Control → aurion → Pull or Deploy → Update from Remote e Deploy HEAD Commit.
+- **HTTPS:** `apps/web/.htaccess` força HTTPS e redireciona `www` para o domínio sem www. O certificado vem do AutoSSL do cPanel depois que o DNS propagar (cPanel → SSL/TLS Status → Run AutoSSL, se não emitir sozinho).
+- **Voltar ao GitHub Pages:** no Registro.br, voltar a usar o DNS do Registro.br e recriar os registros da seção 1. O GitHub Pages segue publicado como reserva.
