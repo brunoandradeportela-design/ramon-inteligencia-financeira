@@ -1,0 +1,60 @@
+/* App instalável: barra de abas no celular, avisos de atualização/offline e página "Instalar o app". Usa os tokens de glass.css. */
+
+/* ---------- barra de abas inferior (só no celular) */
+.tabbar{display:none}
+@media (max-width:860px){
+  .tabbar{display:grid;grid-template-columns:repeat(var(--tabs,5),1fr);position:fixed;left:0;right:0;bottom:0;z-index:40;
+    padding:6px max(6px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px));
+    background:var(--surface-2);border-top:1px solid var(--glass-bd);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);box-shadow:0 -10px 30px -18px rgba(31,80,160,.35)}
+  :root[data-theme="light"] .tabbar{background:rgba(255,255,255,.92)}
+  :root[data-theme="dark"] .tabbar{background:rgba(10,22,40,.94)}
+  .shell[data-role="admin"] .tabbar{--tabs:4}
+  .tabbar a,.tabbar button{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:48px;justify-content:center;padding:4px 2px;border:0;background:none;
+    font:inherit;font-size:11px;font-weight:600;color:var(--ink-3);text-decoration:none;border-radius:14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .tabbar svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  .tabbar [aria-current="page"]{color:var(--brand);background:var(--brand-soft)}
+  .tabbar a:focus-visible,.tabbar button:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+  .tab-dot{position:absolute;top:6px;left:calc(50% + 7px);width:8px;height:8px;border-radius:50%;background:var(--neg);box-shadow:0 0 0 2px var(--solid)}
+  .shell .content{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+  .shell ~ .toast,.toast{bottom:calc(76px + env(safe-area-inset-bottom,0px));left:12px;right:12px;max-width:none}
+  /* o menu lateral continua acessível pelo botão "Mais" da barra */
+}
+
+/* app instalado: respeita o recorte da câmera e a barra de status */
+.is-standalone .gtop{padding-top:max(10px,env(safe-area-inset-top,0px))}
+.is-standalone .gnav__logo{pointer-events:none}
+
+/* ---------- avisos (nova versão, sem internet, instalado) */
+.pwa-banner{position:fixed;z-index:70;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));width:min(560px,calc(100% - 24px));
+  display:flex;align-items:center;gap:10px;padding:10px 10px 10px 14px;border-radius:16px;background:var(--solid);color:var(--ink);border:1px solid var(--line-strong);box-shadow:var(--shadow);font-size:13.5px}
+.pwa-banner>svg{flex:none;width:20px;height:20px;fill:none;stroke:var(--brand);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pwa-banner[data-pwa-banner="offline"]>svg{stroke:var(--warn)}
+.pwa-banner span{flex:1;min-width:0}
+.pwa-banner .btn{flex:none}
+.pwa-x{flex:none;width:32px;height:32px;border:0;border-radius:10px;background:none;color:var(--ink-3);font-size:20px;line-height:1;cursor:pointer}
+.pwa-x:hover{background:var(--brand-soft)}
+@media (max-width:860px){body:has(.tabbar) .tour-invite{left:12px;right:12px;max-width:none;bottom:calc(78px + env(safe-area-inset-bottom,0px))}.shell ~ .pwa-banner,body:has(.tabbar) .pwa-banner{bottom:calc(78px + env(safe-area-inset-bottom,0px))}}
+
+/* ---------- página Instalar o app */
+.pwa-page{max-width:760px;margin:0 auto;padding:calc(24px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(48px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:18px;color:var(--ink)}
+.pwa-back{color:var(--ink-3);font-weight:600;font-size:14px;text-decoration:none;align-self:flex-start}
+.pwa-hero{display:flex;gap:20px;align-items:center}
+.pwa-icon{border-radius:22px;box-shadow:var(--glow);flex:none}
+.pwa-hero .eyebrow{margin:0 0 4px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--brand)}
+.pwa-hero h1{margin:0 0 6px;font-size:clamp(24px,4.5vw,34px);line-height:1.15;text-wrap:balance}
+.pwa-hero p{margin:0;max-width:60ch}
+.pwa-action{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.pwa-action .btn--lg{min-height:52px;padding:0 26px;font-size:16px;display:inline-flex;align-items:center;gap:10px}
+.pwa-action .btn svg{width:18px;height:18px}
+.pwa-steps{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px;font-size:15px}
+.pwa-ok{display:flex;align-items:center;gap:8px;margin:0;font-weight:600;color:var(--pos)}
+.pwa-ok svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2}
+.pwa-plat{margin:0}
+.pwa-feats{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pwa-feats li{display:flex;gap:12px;align-items:flex-start}
+.pwa-feats li>svg{flex:none;width:24px;height:24px;fill:none;stroke:var(--brand);stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;margin-top:2px}
+.pwa-feats p{margin:2px 0 0}
+.pwa-other summary{cursor:pointer;font-weight:600}
+.pwa-other h3{font-size:14px;margin:14px 0 4px}
+.pwa-other ol{margin:0;padding-left:20px;font-size:14px;color:var(--ink-2)}
+@media (max-width:560px){.pwa-hero{flex-direction:column;align-items:flex-start}.pwa-feats{grid-template-columns:1fr}.pwa-action .btn--lg{width:100%;justify-content:center}}

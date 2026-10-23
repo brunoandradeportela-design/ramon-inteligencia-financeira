@@ -11,6 +11,7 @@ import { payments } from "./views_payments.js";
 import { trader } from "./views_trader.js";
 import { news, notifications } from "./views_hub.js";
 import { ops } from "./views_ops.js";
+import { installView, installMenuItem, tabBar } from "./pwa.js";
 
 const NAV = [
   ["dashboard", "Visão Geral", "grid"], ["financas", "Finanças", "wallet"], ["patrimonio", "Patrimônio", "wealth"], ["alocacao", "Minha Alocação", "layers"],
@@ -19,6 +20,8 @@ const NAV = [
 ];
 const PRIMARY = ["dashboard", "financas", "patrimonio", "tributacao", "simulador", "alertas", "noticias"];
 const ADMIN_NAV = [["crm", "CRM · Clientes", "target"], ["pagamentos", "Pagamentos", "finance"], ["operacoes", "Operações", "chart"]];
+const TABS = [["dashboard", "Início", "home"], ["financas", "Finanças", "wallet"], ["tributacao", "Impostos", "receipt"], ["alertas", "Radar", "radar"]];
+const ADMIN_TABS = [["crm", "Clientes", "target"], ["pagamentos", "Pagamentos", "finance"], ["operacoes", "Operações", "chart"]];
 const ACCOUNT = [["configuracoes", "Configurações", "gear"], ["privacidade", "Privacidade", "shield"], ["planos", "Planos", "plan"]];
 const SUBS = {
   financas: "Entradas, saídas, categorias e a origem de cada lançamento.", patrimonio: "Posições consolidadas por classe, instituição e liquidez.",
@@ -167,6 +170,7 @@ async function render() {
     await (r.name === "cadastro" ? register4 : PUBLIC[r.name])(form, r);
     document.title = `Aurion — ${({ entrar: "Entrar", cadastro: "Cadastro", recuperar: "Recuperar acesso", redefinir: "Nova senha" })[r.name]}`; return;
   }
+  if (r.name === "instalar") { unmount4(); clearTour(); root.innerHTML = ""; await installView(root); return; }   // página pública do app instalável
   unmount4(); clearTour();
   if (PUBLIC[r.name]) { root.innerHTML = ""; await PUBLIC[r.name](root, r); document.title = `Aurion — ${({ entrar: "Entrar", cadastro: "Cadastro", recuperar: "Recuperar acesso", redefinir: "Nova senha" })[r.name]}`; return; }
   if (!session.token) { location.hash = `#/entrar?next=${encodeURIComponent(r.name)}`; return; }
@@ -223,12 +227,13 @@ function shell(admin = false) {
             <a class="icon-btn" href="${HAS_API && !admin ? "#/notificacoes" : "#/alertas"}" aria-label="Notificações" data-tour="sino">${icon("bell")}<span class="dot" data-dot hidden></span></a>
             <div class="dd" data-tour="avatar"><button type="button" class="avatar-btn" data-dd aria-haspopup="true" aria-expanded="false" aria-label="Conta de ${esc(me?.name || "usuário")}"><span class="avatar">${esc((me?.name || "?")[0].toUpperCase())}</span>${icon("chevd")}</button>
               <div class="menu" role="menu"><p class="lbl-sec">${esc(me?.name || "Minha conta")}</p>${ACCOUNT.map(([k, t, ic]) => `<a href="#/${k}" data-nav="${k}" role="menuitem">${icon(ic)}<span>${t}</span></a>`).join("")}
-                <div class="sep"></div><button type="button" data-logout role="menuitem">${icon("logout")}<span>Sair</span></button></div></div>
+                ${installMenuItem()}<div class="sep"></div><button type="button" data-logout role="menuitem">${icon("logout")}<span>Sair</span></button></div></div>
           </div>
         </header>
         ${DEMO ? `<div class="demo-bar" role="note"><b>Modo demonstração</b> — dados fictícios calculados pelos motores do backend (snapshot de 27/09/2026). Nenhum dado real é coletado.</div>` : ANALYTICS_DEMO && !admin ? `<div class="demo-bar" role="note" data-hybrid-bar ${dataSeen.real === false ? "" : "hidden"}><b>Seus dados:</b> os painéis mostram os seus números quando você envia arquivos em <a href="#/importar">Importar dados</a> ou conecta seu banco em <a href="#/conexoes">Conexões</a>; até lá, exibem um exemplo.</div>` : ""}
         ${actAs.id ? `<div class="demo-bar" role="note"><b>Somente leitura:</b> você está vendo os dados de ${esc(actAs.name || "um cliente")}, que concedeu acesso. Cada consulta fica registrada na auditoria do cliente. <a href="#" data-exit-actas>Voltar à minha conta</a></div>` : ""}
       </div>
+      ${tabBar(admin ? ADMIN_TABS : TABS)}
       <div class="content">
         <div class="pagehead" data-pagehead hidden><div><h1 data-title>Início</h1><p data-sub></p></div>${searchPill()}</div>
         <main id="view" tabindex="-1"></main>
@@ -243,6 +248,9 @@ function updateShell(name) {
   const t = document.querySelector("[data-title]"); if (t) t.textContent = TITLES[name] || "Início";
   const sub = document.querySelector("[data-sub]"); if (sub) sub.textContent = SUBS[name] || "";
   const ph = document.querySelector("[data-pagehead]"); if (ph) ph.hidden = name === "dashboard";
+  const tabKeys = [...document.querySelectorAll("[data-tab]")].map(a => a.dataset.tab);
+  document.querySelectorAll("[data-tab]").forEach(a => (a.dataset.tab === name || (a.dataset.tab === "__mais" && !tabKeys.includes(name))) ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  const td = document.querySelector("[data-tab-dot]"); if (td) td.hidden = !alertsOpen;
   const c = document.querySelector("[data-alert-count]"); if (c) { c.textContent = alertsOpen; c.hidden = !alertsOpen; }
   const d = document.querySelector("[data-dot]"); if (d) d.hidden = !alertsOpen;
   theme.apply();

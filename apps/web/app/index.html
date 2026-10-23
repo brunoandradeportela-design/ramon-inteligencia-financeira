@@ -2,7 +2,7 @@
 <html lang="pt-BR" data-theme="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AURION — Plataforma</title>
 <meta name="robots" content="noindex">
 <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
@@ -10,11 +10,15 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-180.png">
 <meta name="theme-color" content="#e9f2ff">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="AURION">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="../css/fonts.css">
 <link rel="stylesheet" href="css/app.css?v=7">
 <link rel="stylesheet" href="css/glass.css?v=1">
 <link rel="stylesheet" href="css/auth4.css?v=3">
 <link rel="stylesheet" href="css/tour.css?v=3">
+<link rel="stylesheet" href="css/pwa.css?v=1">
 <script>
   /* aplica o tema antes da primeira pintura (evita flash) — RN-12: só apresentação */
   (function(){try{var p=localStorage.getItem('ramon.theme')||'light';var d=p==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):p;document.documentElement.setAttribute('data-theme',d);}catch(e){}})();
@@ -24,7 +28,6 @@
 </head>
 <body>
 <div id="root" aria-live="polite"><div class="content"><div class="skeleton" style="width:40%"></div></div></div>
-<script>if ("serviceWorker" in navigator && location.protocol === "https:") addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));</script>
 <noscript>Esta aplicação requer JavaScript.</noscript>
 </body>
 </html>

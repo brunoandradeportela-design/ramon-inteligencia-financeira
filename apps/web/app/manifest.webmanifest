@@ -1,16 +1,31 @@
 {
+  "id": "/app/",
   "name": "AURION — Inteligência Financeira e Tributária",
   "short_name": "AURION",
-  "description": "Consolide, analise, simule e antecipe cenários financeiros e tributários.",
+  "description": "Seu painel financeiro e tributário: patrimônio, impostos, DARF, radar de alertas e simulações, com os seus dados.",
   "lang": "pt-BR",
+  "dir": "ltr",
   "start_url": "./#/dashboard",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#020b16",
-  "theme_color": "#020b16",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#e9f2ff",
+  "theme_color": "#e9f2ff",
+  "categories": ["finance", "business", "productivity"],
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Impostos e DARF", "short_name": "Impostos", "description": "Apuração mensal, DARFs e relatório do IRPF", "url": "./#/tributacao", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Radar de alertas", "short_name": "Radar", "description": "Pontos de atenção com prioridade e próximo passo", "url": "./#/alertas", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Importar extratos", "short_name": "Importar", "description": "Enviar extratos e relatórios da B3", "url": "./#/importar", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Simulador", "short_name": "Simular", "description": "Simular uma decisão antes de tomá-la", "url": "./#/simulador", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ],
+  "screenshots": [
+    { "src": "img/screens/celular-inicio.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Visão geral do patrimônio, impostos e alertas" },
+    { "src": "img/screens/celular-impostos.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Apuração mensal e DARF" },
+    { "src": "img/screens/computador-inicio.png", "sizes": "1440x900", "type": "image/png", "form_factor": "wide", "label": "Painel completo no computador" }
   ]
 }
