@@ -2,7 +2,7 @@
  * Guarda SÓ a interface (HTML, CSS, JS, ícones e fontes do próprio site) para o app abrir rápido e funcionar sem internet.
  * Respostas da API (outro domínio) e a pasta /data/ nunca são guardadas: dados financeiros só vêm da rede (ADR-006).
  * A lista PRECACHE é conferida por worker/test/pwa.test.mjs: todo arquivo de app/js e app/css precisa estar nela. */
-const VERSION = "aurion-app-v5";
+const VERSION = "aurion-app-v6";
 const PRECACHE = [
   "./",
   "index.html",
@@ -14,12 +14,16 @@ const PRECACHE = [
   "img/bull.svg",
   "../css/fonts.css",
   "../assets/img/favicon.svg",
+  "../assets/brand/aurion-symbol.svg",
+  "../assets/brand/aurion-symbol-dark.svg",
+  "../assets/fonts/montserrat-latin-700-normal.woff2",
   "js/alert_engine.js",
   "js/allocation.js",
   "js/api.js",
   "js/app.js",
   "js/assistant_engine.js",
   "js/auth4.js",
+  "js/brand.js",
   "js/config.js",
   "js/crm_rules.js",
   "js/daily_engine.js",
@@ -71,6 +75,7 @@ const PRECACHE = [
   "js/views_trader.js",
   "css/app.css",
   "css/auth4.css",
+  "css/brand.css",
   "css/glass.css",
   "css/pwa.css",
   "css/tour.css"

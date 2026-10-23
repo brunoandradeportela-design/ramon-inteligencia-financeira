@@ -2,6 +2,7 @@
  * Cotações: reais, do serviço centralizado (market_store.js), sempre com fonte, horário e rótulo atrasado/fechamento.
  * Patrimônio e carteira: FICTÍCIOS (quantidades inventadas) valorizados pelas cotações reais. Nada de dados de clientes,
  * nenhuma ordem, nenhuma movimentação: é um ambiente público e isolado da sessão do usuário. */
+import { brandSymbol } from "./brand.js";
 import { market, subscribe, item, select, history, setInterval_, refreshNow } from "./market_store.js";
 import { INSTRUMENTS, TIPO_LABEL } from "./market_public.js";
 
@@ -236,7 +237,7 @@ export function createDash4(root, { onAccount } = {}) {
   }
   function draw(anim = false) {
     if (disposed) return;
-    root.innerHTML = `<nav class="d4-side" aria-label="Menu da demonstração"><span class="d4-logo">AURION</span>
+    root.innerHTML = `<nav class="d4-side" aria-label="Menu da demonstração"><span class="d4-logo">${brandSymbol()}AURION</span>
         ${SECS.map(([k, t]) => `<button type="button" class="d4-nav" data-nav="${k}" aria-current="${st.sec === k}">${ico(k)}<span>${t}</span></button>`).join("")}
         <button type="button" class="d4-nav d4-nav--b" data-nav="configuracoes" aria-current="${st.sec === "configuracoes"}">${ico("configuracoes")}<span>Configurações</span></button></nav>
       <div class="d4-main"><div class="d4-top"><span class="d4-chip">${esc(new Date().toLocaleDateString("pt-BR", { month: "short", year: "numeric" }).replace(".", "").replace(" de ", " "))}</span>

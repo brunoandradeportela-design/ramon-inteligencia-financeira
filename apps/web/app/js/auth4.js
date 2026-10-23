@@ -3,6 +3,7 @@
  * do Ibovespa, touro low-poly, globo com B3/NYSE/Nasdaq clicáveis e o notebook com o dashboard de demonstração.
  * Direita: painel de vidro com o formulário. Tudo sincronizado pelo market_store (mesmos números em todos os lugares).
  * Sem WebGL: canvas 2D, SVG e transformações CSS. Com redução de movimento, tudo fica estático. */
+import { brandSymbol } from "./brand.js";
 import { api, ApiError, DEMO, HAS_API } from "./api.js";
 import { onLogin } from "./app.js";
 import { validateSignup, maskPhone, docValid, PRICE, PLAN_NAME, LEGAL_VERSION } from "./crm_rules.js";
@@ -37,8 +38,8 @@ export function mountShell(root) {
   root.innerHTML = `<div class="a4" id="a4">
     <div class="a4-sky" aria-hidden="true"><i class="a4-grid"></i><i class="a4-glow1"></i><i class="a4-glow2"></i></div>
     <section class="a4-world" aria-label="Ambiente financeiro de demonstração">
-      <header class="a4-brand"><a href="../index.html" class="a4-logo" data-text="AURION" aria-label="AURION — voltar ao site"><span>AURION</span></a>
-        <p>INTELIGÊNCIA FINANCEIRA PARA O SEU PRÓXIMO NÍVEL</p></header>
+      <header class="a4-brand"><a href="../index.html" class="a4-logo" data-text="AURION" aria-label="AURION — voltar ao site">${brandSymbol()}<span>AURION</span></a>
+        <p>INTELIGÊNCIA FINANCEIRA, TRIBUTÁRIA E DE MERCADO</p></header>
       <div class="a4-tickwrap"><div class="a4-tick" role="list" aria-label="Cotações (dados atrasados ou de fechamento)"></div>
         <p class="a4-tsrc" aria-live="polite"></p></div>
       <div class="a4-stage">

@@ -5,7 +5,7 @@ body{margin:0;background:radial-gradient(900px 500px at 20% 0,#0d2a52,transparen
 a{color:var(--cy)}
 .lg-top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;max-width:880px;margin:0 auto;padding:20px 16px}
 .lg-top nav{display:flex;gap:16px;font-size:14px}
-.lg-logo{font-weight:800;letter-spacing:.1em;font-size:22px;text-decoration:none;background:linear-gradient(180deg,#fff,#8aa3c0);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lg-logo{display:inline-flex;align-items:center;gap:10px;text-decoration:none}.lg-logo img{height:27px;width:auto}.lg-logo span{font-family:"Montserrat","Figtree",system-ui,sans-serif;font-weight:700;letter-spacing:.08em;font-size:22px;background:linear-gradient(180deg,#fff,#8aa3c0);-webkit-background-clip:text;background-clip:text;color:transparent}
 .lg{max-width:880px;margin:0 auto 40px;padding:28px clamp(16px,4vw,44px);border-radius:20px;background:rgba(10,22,40,.75);border:1px solid var(--ln)}
 .lg h1{margin:0 0 6px;font-size:clamp(26px,4vw,36px);color:#fff}
 .lg h2{margin:28px 0 8px;font-size:19px;color:#fff}

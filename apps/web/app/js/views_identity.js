@@ -1,5 +1,6 @@
 /* AURION Identity no app: login por e-mail ou CPF, mostrar/ocultar senha, MFA, recuperação e redefinição,
  * segurança da conta (CPF, senha, MFA, sessões) e privacidade (auditoria, exportação, eliminação). */
+import { brandLockup } from "./brand.js";
 import { api, ApiError, DEMO } from "./api.js";
 import { UI4 } from "./ui4.js";
 import { onLogin, themeSwitch } from "./app.js";
@@ -15,9 +16,9 @@ export const looksCpf = v => !String(v).includes("@") && digits(v).length === 11
 export function authLayout(inner) {
   if (UI4) return `<div class="a4-panel">${inner}</div>`;
   return `<div class="auth">
-    <div class="auth__art" aria-hidden="true"><div><p class="eyebrow" style="color:#c6d3e0">Seu dinheiro gera dados.</p>
+    <div class="auth__art" aria-hidden="true"><div>${brandLockup({ tagline: true, cls: "auth__brand-art" })}<p class="eyebrow" style="color:#c6d3e0">Seu dinheiro gera dados.</p>
       <h2>Nossa inteligência mostra o que eles significam.</h2><p>Consolide, analise, simule e antecipe cenários financeiros e tributários.</p></div></div>
-    <div class="auth__form">${inner}</div></div>`;
+    <div class="auth__form"><a class="auth__brand" href="../index.html" aria-label="AURION — voltar ao site">${brandLockup()}</a>${inner}</div></div>`;
 }
 /* campo de senha com mostrar/ocultar */
 export const pwField = (id, label, auto, extra = "") => `<div class="field"><label for="${id}">${label}</label>

@@ -12,6 +12,7 @@ import { trader } from "./views_trader.js";
 import { news, notifications } from "./views_hub.js";
 import { ops } from "./views_ops.js";
 import { installView, installMenuItem, tabBar } from "./pwa.js";
+import { brandSymbol } from "./brand.js";
 
 const NAV = [
   ["dashboard", "Visão Geral", "grid"], ["financas", "Finanças", "wallet"], ["patrimonio", "Patrimônio", "wealth"], ["alocacao", "Minha Alocação", "layers"],
@@ -201,8 +202,7 @@ async function render() {
   }
 }
 
-const LOGO = `<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg-a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6aa8ff"/><stop offset="1" stop-color="#1f5fe0"/></linearGradient><linearGradient id="lg-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b9a2ff"/><stop offset="1" stop-color="#6a4cf0"/></linearGradient></defs>
-  <path d="M16 3 L29 27 H3 Z" fill="url(#lg-a)"/><path d="M16 3 L29 27 H16 Z" fill="url(#lg-b)" opacity=".85"/><path d="M16 12 L22 23 H10 Z" fill="#fff" opacity=".9"/></svg>`;
+const LOGO = brandSymbol();
 const navLink = ([k, t, ic], cls = "") => `<a class="navi ${cls}" href="#/${k}" data-nav="${k}">${icon(ic)}<span>${t}</span>${k === "alertas" ? '<span class="count" data-alert-count hidden></span>' : ""}</a>`;
 const refMonth = () => DEMO ? "Set 2026" : (() => { const s = new Date(Date.now() - 3 * 3600e3).toLocaleDateString("pt-BR", { month: "short", year: "numeric", timeZone: "UTC" }).replace(".", "").replace(" de ", " "); return s.charAt(0).toUpperCase() + s.slice(1); })();
 
@@ -218,7 +218,7 @@ function shell(admin = false) {
       <div class="gtop">
         <header class="gnav">
           <button class="icon-btn burger" data-burger aria-label="Abrir menu" data-tour="menu">${icon("menu")}</button>
-          <a class="gnav__logo" href="../index.html" title="Página inicial" data-tour="logo">${LOGO}<span>AURION</span></a>
+          <a class="gnav__logo" href="../index.html" title="AURION — página inicial" aria-label="AURION — página inicial" data-tour="logo">${LOGO}<span>AURION</span></a>
           <nav class="gnav__menu" aria-label="Navegação principal" data-tour="menu">${nav}</nav>
           <div class="gnav__right">
             <span class="chip hide-m" title="Data de referência dos cálculos">${refMonth()}</span>

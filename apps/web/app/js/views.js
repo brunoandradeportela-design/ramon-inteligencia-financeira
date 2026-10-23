@@ -1,4 +1,5 @@
 /* Telas do MVP (Dossiê §9 e §47; Plano técnico §12). Toda saída tributária é rotulada como estimativa. */
+import { brandLockup } from "./brand.js";
 import { api, DEMO, ANALYTICS_DEMO, ApiError, HAS_API } from "./api.js";
 import { connectionsReal } from "./views_openfinance.js";
 import { documentsReal } from "./views_docs.js";
@@ -29,9 +30,9 @@ const problemMsg = e => e instanceof ApiError ? (e.problem.detail || e.problem.t
 function authLayout(inner) {
   if (UI4) return `<div class="a4-panel">${inner}</div>`;
   return `<div class="auth">
-    <div class="auth__art" aria-hidden="true"><div><p class="eyebrow" style="color:#c6d3e0">Seu dinheiro gera dados.</p>
+    <div class="auth__art" aria-hidden="true"><div>${brandLockup({ tagline: true, cls: "auth__brand-art" })}<p class="eyebrow" style="color:#c6d3e0">Seu dinheiro gera dados.</p>
       <h2>Nossa inteligência mostra o que eles significam.</h2><p>Consolide, analise, simule e antecipe cenários financeiros e tributários.</p></div></div>
-    <div class="auth__form">${inner}</div></div>`;
+    <div class="auth__form"><a class="auth__brand" href="../index.html" aria-label="AURION — voltar ao site">${brandLockup()}</a>${inner}</div></div>`;
 }
 
 export async function login(root, r) {
