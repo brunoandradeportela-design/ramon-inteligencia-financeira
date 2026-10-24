@@ -237,7 +237,7 @@ export function createDash4(root, { onAccount } = {}) {
   }
   function draw(anim = false) {
     if (disposed) return;
-    root.innerHTML = `<nav class="d4-side" aria-label="Menu da demonstração"><span class="d4-logo">${brandSymbol()}AURION</span>
+    root.innerHTML = `<nav class="d4-side" aria-label="Menu da demonstração"><span class="d4-logo"><img src="../assets/brand/aurion-symbol-art.png" alt="" width="15" height="13">AURION</span>
         ${SECS.map(([k, t]) => `<button type="button" class="d4-nav" data-nav="${k}" aria-current="${st.sec === k}">${ico(k)}<span>${t}</span></button>`).join("")}
         <button type="button" class="d4-nav d4-nav--b" data-nav="configuracoes" aria-current="${st.sec === "configuracoes"}">${ico("configuracoes")}<span>Configurações</span></button></nav>
       <div class="d4-main"><div class="d4-top"><span class="d4-chip">${esc(new Date().toLocaleDateString("pt-BR", { month: "short", year: "numeric" }).replace(".", "").replace(" de ", " "))}</span>

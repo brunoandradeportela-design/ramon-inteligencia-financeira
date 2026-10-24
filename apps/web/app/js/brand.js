@@ -8,7 +8,7 @@ export const BRAND_TAGLINE = "Inteligência financeira, tributária e de mercado
 /** símbolo inline; decorativo por padrão (o nome AURION aparece em texto ao lado) */
 export function brandSymbol(cls = "brand-sym", label = "") {
   const a11y = label ? `role="img" aria-label="${label}"` : `aria-hidden="true" focusable="false"`;
-  return `<svg class="${cls}" viewBox="-15 30 1744 1552" ${a11y}><path class="brand-sym__a" fill-rule="evenodd" d="${S}"/><path class="brand-sym__b" fill-rule="evenodd" d="${C}"/></svg>`;
+  return `<img class="brand-art" src="../assets/brand/aurion-symbol-art.png" alt="" width="322" height="284" aria-hidden="true"><svg class="${cls}" viewBox="-15 30 1744 1552" ${a11y}><path class="brand-sym__a" fill-rule="evenodd" d="${S}"/><path class="brand-sym__b" fill-rule="evenodd" d="${C}"/></svg>`;
 }
 /** símbolo + nome (+ assinatura opcional), para telas de entrada e cabeçalhos institucionais */
 export function brandLockup({ tagline = false, cls = "" } = {}) {

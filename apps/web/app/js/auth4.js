@@ -38,7 +38,7 @@ export function mountShell(root) {
   root.innerHTML = `<div class="a4" id="a4">
     <div class="a4-sky" aria-hidden="true"><i class="a4-grid"></i><i class="a4-glow1"></i><i class="a4-glow2"></i></div>
     <section class="a4-world" aria-label="Ambiente financeiro de demonstração">
-      <header class="a4-brand"><a href="../index.html" class="a4-logo" data-text="AURION" aria-label="AURION — voltar ao site">${brandSymbol()}<span>AURION</span></a>
+      <header class="a4-brand"><a href="../index.html" class="a4-logo a4-logo--art" aria-label="AURION — voltar ao site"><img src="../assets/brand/aurion-symbol-art.png" alt="" width="322" height="284" class="a4-sym"><img src="../assets/brand/aurion-wordmark-art.png" alt="" width="537" height="109" class="a4-word"></a>
         <p>INTELIGÊNCIA FINANCEIRA, TRIBUTÁRIA E DE MERCADO</p></header>
       <div class="a4-tickwrap"><div class="a4-tick" role="list" aria-label="Cotações (dados atrasados ou de fechamento)"></div>
         <p class="a4-tsrc" aria-live="polite"></p></div>

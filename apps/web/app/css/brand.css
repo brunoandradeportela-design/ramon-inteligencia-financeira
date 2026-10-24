@@ -48,3 +48,17 @@
 @keyframes splash{from{transform:translateX(-100%)}to{transform:translateX(260%)}}
 @media (prefers-reduced-motion:reduce){.app-splash .bar::after{animation:none;width:100%}}
 .a4-logo::after{inset:0 0 0 68px}
+
+/* símbolo metálico (recorte da arte oficial) no tema escuro; vetor marinho/ciano no tema claro */
+.brand-art{display:none;height:28px;width:auto;flex:none}
+:root[data-theme="dark"] .brand-art{display:block}
+:root[data-theme="dark"] .brand-art+.brand-sym{display:none}
+.gnav__logo .brand-art{height:28px}
+.brand-lockup .brand-art{height:46px}
+.auth__logo-art{display:block;width:min(260px,70%);height:auto;margin-bottom:26px}
+.a4-logo--art{gap:14px}.a4-logo--art::after{display:none}
+.a4-logo--art .a4-sym{height:56px;width:auto}.a4-logo--art .a4-word{height:30px;width:auto}
+.d4-logo img{height:13px;width:auto}
+.auth__art::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(4,14,28,.94) 0%,rgba(4,14,28,.72) 48%,rgba(4,14,28,.15) 80%);pointer-events:none}
+.auth__art>div{position:relative;z-index:1}
+.auth__logo-art{width:min(230px,62%)}

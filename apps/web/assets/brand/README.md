@@ -2,10 +2,17 @@
 
 Símbolo "A" prateado com elemento interno azul-ciano, nome **AURION** em Montserrat Bold e assinatura **INTELIGÊNCIA FINANCEIRA, TRIBUTÁRIA E DE MERCADO**.
 
-Os vetores foram **recriados a partir da arte oficial enviada em 23/10/2026** (imagem rasterizada). Quando houver o arquivo vetorial oficial (AI, SVG ou PDF), ele deve substituir `aurion-symbol*.svg` e os demais arquivos devem ser gerados de novo.
+Há duas famílias de arquivos:
+
+- **Recortes da arte oficial** (`*-art.png`): o símbolo metálico, o nome AURION® e a assinatura tirados da própria arte enviada em 23/10/2026, com fundo transparente. São idênticos à referência e são usados em fundo escuro: topo e rodapé do site, Termos e Privacidade, login, abertura do app e cabeçalho no tema escuro. Também geram os ícones do app, os ícones de computador e a imagem de compartilhamento.
+- **Vetores** (`*.svg`): recriados a partir da arte, em cores planas, para fundo claro, tamanhos muito pequenos (favicon) e impressão. Os recortes têm a resolução da arte recebida (símbolo com cerca de 320 px). Com o arquivo original em alta resolução ou vetorial (AI, SVG, PDF), basta rodar de novo `tools/brand/cutout.py` e `tools/brand/make_art.py`.
 
 | Arquivo | Uso |
 |---|---|
+| `aurion-logo-art.png` | Logo oficial completa (símbolo + AURION® + assinatura), recorte da arte, fundo transparente |
+| `aurion-symbol-art.png` | Símbolo metálico, recorte da arte |
+| `aurion-wordmark-art.png` | Nome AURION® metálico, recorte da arte |
+| `aurion-tagline-art.png` | Assinatura, recorte da arte |
 | `aurion-logo-primary.svg` | Logo institucional empilhada (símbolo + AURION® + assinatura) para fundo escuro |
 | `aurion-logo-primary-dark.svg` | A mesma, para fundo claro |
 | `aurion-logo-light.svg` | Logo horizontal (símbolo + AURION) para fundo escuro |

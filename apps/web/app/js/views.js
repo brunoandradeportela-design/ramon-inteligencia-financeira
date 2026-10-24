@@ -30,7 +30,7 @@ const problemMsg = e => e instanceof ApiError ? (e.problem.detail || e.problem.t
 function authLayout(inner) {
   if (UI4) return `<div class="a4-panel">${inner}</div>`;
   return `<div class="auth">
-    <div class="auth__art" aria-hidden="true"><div>${brandLockup({ tagline: true, cls: "auth__brand-art" })}<p class="eyebrow" style="color:#c6d3e0">Seu dinheiro gera dados.</p>
+    <div class="auth__art" aria-hidden="true"><div><img class="auth__logo-art" src="../assets/brand/aurion-logo-art.png" alt="AURION — Inteligência Financeira, Tributária e de Mercado" width="537" height="501"><p class="eyebrow" style="color:#c6d3e0">Seu dinheiro gera dados.</p>
       <h2>Nossa inteligência mostra o que eles significam.</h2><p>Consolide, analise, simule e antecipe cenários financeiros e tributários.</p></div></div>
     <div class="auth__form"><a class="auth__brand" href="../index.html" aria-label="AURION — voltar ao site">${brandLockup()}</a>${inner}</div></div>`;
 }

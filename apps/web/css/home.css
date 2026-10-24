@@ -430,3 +430,11 @@ button.d-card:hover{border-color:rgba(8,206,255,.55);box-shadow:0 0 16px rgba(8,
 
 /* identidade 2026: símbolo no painel de demonstração */
 .d-logo{display:flex;align-items:center;gap:6px}.d-logo img{height:20px;width:auto;flex:none}
+
+/* logo oficial (recorte da arte): símbolo metálico + nome AURION® */
+.logo--art{gap:12px}
+.logo--art .logo__sym{height:clamp(44px,3.8vw,62px);width:auto;filter:none}
+.logo--art .logo__word{height:clamp(22px,1.9vw,32px);width:auto;display:block}
+.logo--art.logo--sm .logo__sym{height:40px}.logo--art.logo--sm .logo__word{height:21px}
+.logo--art::after{display:none}
+@media (max-width:860px){.logo--art .logo__sym{height:40px}.logo--art .logo__word{height:20px}}

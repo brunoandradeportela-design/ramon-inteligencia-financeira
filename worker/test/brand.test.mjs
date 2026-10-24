@@ -7,19 +7,20 @@ const read = p => readFileSync(new URL(p, WEB), "utf8");
 
 test("ativos da nova marca", () => {
   for (const f of ["aurion-logo-primary.svg", "aurion-logo-light.svg", "aurion-logo-dark.svg", "aurion-symbol.svg", "aurion-symbol-dark.svg", "favicon.svg", "favicon.ico",
-    "aurion-icon-512.png", "apple-touch-icon.png", "og-aurion.png", "desktop/aurion.ico", "desktop/aurion.icns", "desktop/aurion-256.png"]) assert.ok(existsSync(new URL("assets/brand/" + f, WEB)), f);
+    "aurion-icon-512.png", "aurion-symbol-art.png", "aurion-wordmark-art.png", "aurion-logo-art.png", "apple-touch-icon.png", "og-aurion.png", "desktop/aurion.ico", "desktop/aurion.icns", "desktop/aurion-256.png"]) assert.ok(existsSync(new URL("assets/brand/" + f, WEB)), f);
   assert.ok(existsSync(new URL("favicon.ico", WEB)));
   assert.match(read("assets/brand/aurion-logo-primary.svg"), /aria-label="Aurion — Inteligência Financeira, Tributária e de Mercado"/);
 });
 
 test("pontos de contato usam a marca nova", () => {
-  assert.match(read("index.html"), /assets\/brand\/aurion-symbol\.svg/);
+  assert.match(read("index.html"), /assets\/brand\/aurion-symbol-art\.png/);
+  assert.match(read("index.html"), /assets\/brand\/aurion-wordmark-art\.png/);
   assert.match(read("index.html"), /og:image" content="https:\/\/aurionfinance\.com\.br\/assets\/brand\/og-aurion\.png"/);
-  for (const p of ["termos.html", "privacidade.html"]) assert.match(read(p), /assets\/brand\/aurion-symbol\.svg/, p);
+  for (const p of ["termos.html", "privacidade.html"]) assert.match(read(p), /assets\/brand\/aurion-symbol-art\.png/, p);
   assert.match(read("app/js/app.js"), /brandSymbol\(\)/);
   assert.match(read("app/js/views.js"), /brandLockup/);
   assert.match(read("app/js/views_identity.js"), /brandLockup/);
-  assert.match(read("app/js/auth4.js"), /brandSymbol\(\)/);
+  assert.match(read("app/js/auth4.js"), /aurion-symbol-art\.png/);
   assert.match(read("app/js/auth4.js"), /TRIBUTÁRIA E DE MERCADO/);
   assert.match(read("app/index.html"), /css\/brand\.css/);
   const m = JSON.parse(read("app/manifest.webmanifest"));

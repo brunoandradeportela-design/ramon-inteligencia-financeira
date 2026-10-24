@@ -192,7 +192,7 @@ function createDash(root) {
   function draw() {
     const focusSel = document.activeElement && root.contains(document.activeElement) ? (document.activeElement.dataset.nav ? `[data-nav="${document.activeElement.dataset.nav}"]` : document.activeElement.id ? "#" + document.activeElement.id : null) : null;
     const uid = root.dataset.dash;
-    root.innerHTML = `<nav class="d-side" aria-label="Menu da demonstração"><span class="d-logo"><img src="assets/brand/aurion-symbol.svg" alt="" width="15" height="13">AURION</span>
+    root.innerHTML = `<nav class="d-side" aria-label="Menu da demonstração"><span class="d-logo"><img src="assets/brand/aurion-symbol-art.png" alt="" width="23" height="20">AURION</span>
         ${SECS.map(([k, t, ic]) => `<button class="d-nav" type="button" data-nav="${k}" aria-current="${st.sec === k}">${ico(ic)}${t}${k === "alertas" ? `<span class="cnt">${D.alertas.open}</span>` : ""}</button>`).join("")}
         <button class="d-nav d-nav--bottom" type="button" data-nav="configuracoes" aria-current="${st.sec === "configuracoes"}">${ico("gear")}Configurações</button></nav>
       <div class="d-main"><div class="d-top">

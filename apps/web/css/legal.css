@@ -16,3 +16,5 @@ a{color:var(--cy)}
 .lg th,.lg td{text-align:left;padding:8px;border-bottom:1px solid var(--ln);vertical-align:top}.lg th{color:var(--mu);font-weight:600}
 .lg-foot{text-align:center;color:var(--mu);font-size:13px;padding:0 16px 32px}
 @media print{body{background:#fff;color:#000}.lg{border:0;background:none}.lg h1,.lg h2{color:#000}.lg-top nav,.lg-foot{display:none}}
+
+.lg-logo img{height:30px;width:auto}.lg-logo .lg-word{height:17px}
