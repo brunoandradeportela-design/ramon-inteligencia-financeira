@@ -62,3 +62,6 @@
 .auth__art::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(4,14,28,.94) 0%,rgba(4,14,28,.72) 48%,rgba(4,14,28,.15) 80%);pointer-events:none}
 .auth__art>div{position:relative;z-index:1}
 .auth__logo-art{width:min(230px,62%)}
+/* logo no topo do login 4.0 no celular e tablet (o painel lateral com a marca fica oculto nessa largura) */
+.a4-mlogo{display:none}
+@media (max-width:1040px){.a4-mlogo{display:flex;align-items:center;justify-content:center;gap:10px;margin:4px auto 18px}.a4-mlogo img:first-child{height:44px;width:auto}.a4-mlogo img:last-child{height:24px;width:auto}}

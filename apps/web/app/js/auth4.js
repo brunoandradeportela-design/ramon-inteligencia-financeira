@@ -52,7 +52,7 @@ export function mountShell(root) {
       </div>
       <p class="a4-msg"><b>SEU DINHEIRO GERA DADOS.</b> <span>Nossa inteligência mostra o que eles significam.</span></p>
     </section>
-    <aside class="a4-side"><button type="button" class="a4-demo-t" aria-expanded="false" aria-controls="a4">Ver demonstração financeira</button><div id="a4-form"></div></aside>
+    <aside class="a4-side"><a class="a4-mlogo" href="../index.html" aria-label="AURION — voltar ao site"><img src="../assets/brand/aurion-symbol-art.png" alt="" width="322" height="284"><img src="../assets/brand/aurion-wordmark-art.png" alt="" width="537" height="109"></a><button type="button" class="a4-demo-t" aria-expanded="false" aria-controls="a4">Ver demonstração financeira</button><div id="a4-form"></div></aside>
   </div>`;
   const el = root.querySelector("#a4"), off = [];
   document.documentElement.classList.add("a4-on");

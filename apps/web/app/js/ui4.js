@@ -1,11 +1,10 @@
-/* Homologação da experiência de login/cadastro 4.0.
- * Ativar: /app/?ui=4#/cadastro  ·  voltar ao layout anterior: /app/?ui=classico#/entrar
- * Depois da aprovação, basta trocar o padrão abaixo para ligar a 4.0 para todos. */
+/* Login/cadastro 4.0 — aprovado e padrão em produção desde 23/10/2026.
+ * Layout anterior (contingência): /app/?ui=classico#/entrar  ·  voltar à 4.0: /app/?ui=4#/entrar */
 export const UI4 = (() => {
   try {
     const q = new URLSearchParams(location.search).get("ui");
-    if (q === "4") localStorage.setItem("aurion.ui", "4");
-    if (q === "classico") localStorage.removeItem("aurion.ui");
-    return localStorage.getItem("aurion.ui") === "4";
-  } catch { return false; }
+    if (q === "4") localStorage.removeItem("aurion.ui");
+    if (q === "classico") localStorage.setItem("aurion.ui", "classico");
+    return localStorage.getItem("aurion.ui") !== "classico";
+  } catch { return true; }
 })();

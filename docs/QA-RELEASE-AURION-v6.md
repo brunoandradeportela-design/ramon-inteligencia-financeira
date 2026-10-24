@@ -63,6 +63,9 @@ Como reproduzir:
 
 ## Riscos e pendências
 
+### Resolvidos em 23/10/2026
+- **Login e cadastro 4.0 aprovados e publicados** como padrão (homologação em `docs/LOGIN-CADASTRO-4.0.md`, seção 9). Layout anterior disponível em `/app/?ui=classico`.
+
 ### Resolvidos em 06/10/2026
 - **E-mails automáticos.** O cron do Worker envia em lotes pequenos, só para quem ativou. Usa o retrato salvo quando o cliente abriu o app; sem ele, calcula só os prazos.
 - **Feeds de notícias.** CVM e Receita passaram a ser lidas pelas pastas de ano e mês, porque o RSS da raiz só trazia itens antigos. O Banco Central entrou pelos feeds de notícias e do Copom. A escolha foi validada por uma sonda que roda no GitHub.
@@ -105,7 +108,6 @@ Como reproduzir:
   - Detalhes e testes em `docs/HOME-IMERSIVA-4.0.md`; teste automático em `site_e2e`.
 
 ### Ainda abertos
-- **Login e cadastro 4.0 aguardando aprovação.** A versão está em homologação em `/app/?ui=4#/cadastro` (relatório em `docs/LOGIN-CADASTRO-4.0.md`). A produção segue com o layout clássico até a aprovação.
 - **Cotações em tempo real.** A fonte atual é pública e atrasada, sem licença comercial; os dados aparecem sempre rotulados como atrasados ou de fechamento. Tempo real depende de contratar um provedor licenciado.
 - **Termos e Política sem identificação do controlador.** Faltam razão social, CNPJ e contato do encarregado (DPO), além da revisão jurídica.
 - **Código de barras do DARF pela API.** Depende do contrato do Integra Contador (SERPRO) e do certificado e-CNPJ; até lá, o código de barras é gerado no Sicalc com os mesmos dados.

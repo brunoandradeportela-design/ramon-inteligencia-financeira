@@ -1,5 +1,7 @@
 # AURION Financial Experience 4.0 — login e cadastro
 
+> **Situação: aprovado e em produção desde 23/10/2026.** É o login e cadastro padrão do site. Contingência: `/app/?ui=classico#/entrar` mostra o layout anterior neste navegador; `/app/?ui=4#/entrar` volta à 4.0.
+
 **Data:** 08/10/2026
 **Situação:** **em homologação.** A versão de produção continua com o login e o cadastro clássicos até a aprovação.
 
@@ -179,8 +181,18 @@
 - `worker/test/market_public.test.mjs` e `worker/test/auth4_e2e.mjs`.
 - `worker/test/fake_market.mjs`, ampliado com a simulação de mercado fechado e de falha.
 
-## 9. Para publicar em produção (após aprovação)
+## 9. Publicação em produção (feita em 23/10/2026)
 
 1. Em `apps/web/app/js/ui4.js`, trocar o padrão para a 4.0: `return localStorage.getItem("aurion.ui") !== "classico";`, e fazer `?ui=classico` gravar `"classico"`.
 2. Fazer commit e push; o GitHub Pages publica sozinho.
 3. Para voltar atrás: reverter esse commit de uma linha.
+
+
+### Homologação de 23/10/2026 (antes de publicar)
+- Botão "Começar agora" da página inicial abre o cadastro 4.0 sem parâmetro.
+- Cadastro em 2 etapas conclui e entra no painel (`#/dashboard?primeiro=1`).
+- Sair volta ao login 4.0; login entra no painel; senha errada mostra "E-mail ou senha incorretos." e não entra.
+- Recuperar acesso abre no layout 4.0.
+- `?ui=classico` mostra o layout anterior e `?ui=4` volta à 4.0.
+- Celular (390 px): login e cadastro sem rolagem lateral, com a logo oficial no topo.
+- 17 suítes ponta a ponta e 113 testes unitários aprovados; nenhum erro de JavaScript.
